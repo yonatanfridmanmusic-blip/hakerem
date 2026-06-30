@@ -20,90 +20,131 @@ type Tab = "annual" | "horim";
 const fmt = (n: number) =>
   "₪" + Math.round(n).toLocaleString("he-IL");
 
-const pctBar = (pct: number) => {
+const SOURCE_CFG = {
+  gefen:  { label: "גפן",    color: "#2D6644", bg: "#EDFBF3", textColor: "#166534" },
+  iriyah: { label: "עירייה", color: "#B5472A", bg: "#FDF1EA", textColor: "#7C3010" },
+  horim:  { label: "הורים",  color: "#8B2F6E", bg: "#F4EBF2", textColor: "#6B2356" },
+} as const;
+
+function PctBar({ pct, color }: { pct: number; color?: string }) {
   const clamped = Math.min(pct, 100);
-  const color = pct > 100 ? "#e05555" : pct > 80 ? "#F5A623" : "#34a853";
+  const barColor = pct > 100 ? "#C0392B" : pct > 80 ? "#E67E22" : (color ?? "#2D6644");
   return (
-    <div style={{ background: "#f0f0f0", borderRadius: "4px", height: "6px", width: "100%", marginTop: "4px" }}>
-      <div style={{ width: `${clamped}%`, height: "100%", borderRadius: "4px", background: color, transition: "width 0.3s" }} />
+    <div style={{ background: "#EFEFEF", borderRadius: "6px", height: "7px", width: "100%", marginTop: "5px" }}>
+      <div style={{ width: `${clamped}%`, height: "100%", borderRadius: "6px", background: barColor, transition: "width 0.4s ease" }} />
     </div>
   );
-};
+}
 
-// ─── Shared styles ─────────────────────────────────────────────────────────
+// ─── Shared table styles ────────────────────────────────────────────────────
 
 const th: React.CSSProperties = {
-  padding: "10px 16px",
+  padding: "11px 18px",
   textAlign: "right",
-  fontSize: "12px",
+  fontSize: "11.5px",
   fontWeight: 600,
-  color: "var(--hk-ink-3)",
-  borderBottom: "1px solid var(--hk-border)",
+  color: "#6B7A72",
+  borderBottom: "1px solid #EEE9E2",
   whiteSpace: "nowrap",
+  letterSpacing: "0.03em",
+  textTransform: "uppercase",
 };
 
 const td: React.CSSProperties = {
-  padding: "12px 16px",
+  padding: "13px 18px",
   textAlign: "right",
   fontSize: "13.5px",
-  color: "var(--hk-ink-1)",
-  borderBottom: "1px solid var(--hk-border)",
+  color: "#1A1A1A",
+  borderBottom: "1px solid #F4F1EC",
 };
 
-// ─── Main page ─────────────────────────────────────────────────────────────
+const tdL: React.CSSProperties = { ...td, textAlign: "left" };
+const thL: React.CSSProperties = { ...th, textAlign: "left" };
+
+// ─── Main page ──────────────────────────────────────────────────────────────
 
 function ReportsPage() {
   const [tab, setTab] = useState<Tab>("annual");
 
-  const tabItems: { key: Tab; label: string }[] = [
+  const tabs: { key: Tab; label: string }[] = [
     { key: "annual", label: "דוח שנתי" },
-    { key: "horim", label: "גבייה מהורים לפי שכבה" },
+    { key: "horim",  label: "גבייה מהורים" },
   ];
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
-        <h1 style={{ fontSize: "24px", fontWeight: 700, color: "var(--hk-ink-1)", margin: 0 }}>
-          דוחות
-        </h1>
+      {/* Hero */}
+      <div style={{
+        background: "linear-gradient(160deg, #1A3D2B 0%, #0F2419 55%, #081510 100%)",
+        borderRadius: "20px",
+        padding: "28px 32px",
+        marginBottom: "28px",
+        boxShadow: "0 8px 32px rgba(15,36,25,0.4)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+      }}>
+        <div>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "4px", letterSpacing: "0.07em", textTransform: "uppercase" }}>
+            ניתוח נתונים
+          </div>
+          <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, color: "#fff" }}>דוחות</h1>
+          <div style={{ marginTop: "6px", fontSize: "13px", color: "rgba(255,255,255,0.45)" }}>
+            סיכום שנתי · גבייה מהורים לפי שכבה
+          </div>
+        </div>
         <button
           type="button"
           onClick={() => window.print()}
           style={{
-            background: "var(--hk-green)",
+            background: "rgba(255,255,255,0.12)",
             color: "#fff",
-            border: "none",
-            borderRadius: "8px",
-            padding: "8px 18px",
+            border: "1px solid rgba(255,255,255,0.18)",
+            borderRadius: "10px",
+            padding: "10px 20px",
             fontSize: "13px",
             fontWeight: 500,
             cursor: "pointer",
             fontFamily: "Rubik, sans-serif",
+            display: "flex",
+            alignItems: "center",
+            gap: "7px",
+            backdropFilter: "blur(4px)",
           }}
         >
-          הדפסה / PDF
+          🖨️ הדפסה / PDF
         </button>
       </div>
 
       {/* Tab bar */}
-      <div style={{ display: "flex", gap: "4px", marginBottom: "28px", background: "var(--hk-bg-2)", borderRadius: "12px", padding: "4px", width: "fit-content" }}>
-        {tabItems.map((t) => (
+      <div style={{
+        display: "flex",
+        gap: "6px",
+        marginBottom: "24px",
+        background: "#E8EDE9",
+        borderRadius: "12px",
+        padding: "4px",
+        width: "fit-content",
+      }}>
+        {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
             onClick={() => setTab(t.key)}
             style={{
-              padding: "8px 20px",
-              borderRadius: "8px",
+              padding: "9px 24px",
+              borderRadius: "9px",
               border: "none",
               fontSize: "13.5px",
               fontWeight: tab === t.key ? 600 : 400,
-              background: tab === t.key ? "#fff" : "transparent",
-              color: tab === t.key ? "var(--hk-green)" : "var(--hk-ink-3)",
+              background: tab === t.key
+                ? "linear-gradient(135deg, #2D6644, #1A3D2B)"
+                : "transparent",
+              color: tab === t.key ? "#fff" : "#4A6656",
               cursor: "pointer",
               fontFamily: "Rubik, sans-serif",
-              boxShadow: tab === t.key ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
-              transition: "all 0.12s",
+              boxShadow: tab === t.key ? "0 2px 8px rgba(26,61,43,0.25)" : "none",
+              transition: "all 0.15s",
             }}
           >
             {t.label}
@@ -112,109 +153,115 @@ function ReportsPage() {
       </div>
 
       {tab === "annual" && <AnnualReport />}
-      {tab === "horim" && <HorimReport />}
+      {tab === "horim"  && <HorimReport />}
     </div>
   );
 }
 
-// ─── Annual Report ─────────────────────────────────────────────────────────
+// ─── Annual Report ──────────────────────────────────────────────────────────
 
 function AnnualReport() {
   const { data, isLoading } = useDashboardSummary();
 
-  if (isLoading) return <div style={{ color: "var(--hk-ink-3)", padding: "24px" }}>טוען...</div>;
-  if (!data?.schoolYear) return (
-    <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid var(--hk-border)", padding: "40px", textAlign: "center", color: "var(--hk-ink-3)" }}>
-      אין שנת לימודים פעילה
-    </div>
-  );
+  if (isLoading) return <Loader />;
+  if (!data?.schoolYear) return <EmptyState text="אין שנת לימודים פעילה" />;
 
   const { schoolYear, sources, totals, incomeTotals } = data;
 
   return (
     <div>
-      {/* Header card */}
-      <div style={{
-        background: "linear-gradient(135deg, #1A3D2B 0%, #22503A 100%)",
-        borderRadius: "16px",
-        padding: "28px 32px",
-        marginBottom: "20px",
-        color: "#fff",
-      }}>
-        <div style={{ fontSize: "13px", opacity: 0.6, marginBottom: "6px" }}>דוח שנתי — {schoolYear.name}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "24px" }}>
-          <div>
-            <div style={{ fontSize: "11px", opacity: 0.55, marginBottom: "4px" }}>סה״כ מתוכנן</div>
-            <div style={{ fontSize: "22px", fontWeight: 700 }}>{fmt(totals.planned)}</div>
+      {/* 4 KPI cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" }}>
+        {[
+          { label: "סה״כ מתוכנן",    value: totals.planned,          color: "#1A1A1A", sub: "תקציב שנתי" },
+          { label: "סה״כ הוצאות",    value: totals.used,             color: "#B5472A", sub: `${totals.pct}% מהתקציב` },
+          { label: "הכנסות שנרשמו",  value: incomeTotals.grand,      color: "#2D6644", sub: "כולל גבייה" },
+          { label: "יתרת תקציב",     value: totals.balance,          color: totals.balance >= 0 ? "#2D6644" : "#B5472A", sub: totals.balance >= 0 ? "עודף" : "גרעון" },
+        ].map((k) => (
+          <div key={k.label} style={{
+            background: "#fff",
+            borderRadius: "14px",
+            border: "1px solid #EEE9E2",
+            padding: "18px 20px",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+          }}>
+            <div style={{ fontSize: "11px", color: "#6B7A72", fontWeight: 500, marginBottom: "6px" }}>{k.label}</div>
+            <div style={{ fontSize: "22px", fontWeight: 700, color: k.color, marginBottom: "3px" }}>{fmt(k.value)}</div>
+            <div style={{ fontSize: "11.5px", color: "#9BA8A2" }}>{k.sub}</div>
           </div>
-          <div>
-            <div style={{ fontSize: "11px", opacity: 0.55, marginBottom: "4px" }}>סה״כ הוצאות</div>
-            <div style={{ fontSize: "22px", fontWeight: 700 }}>{fmt(totals.used)}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: "11px", opacity: 0.55, marginBottom: "4px" }}>הכנסות שנרשמו</div>
-            <div style={{ fontSize: "22px", fontWeight: 700 }}>{fmt(incomeTotals.grand)}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: "11px", opacity: 0.55, marginBottom: "4px" }}>יתרת תקציב</div>
-            <div style={{ fontSize: "22px", fontWeight: 700, color: totals.balance >= 0 ? "#7AAA8E" : "#e07070" }}>
-              {fmt(totals.balance)}
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* Per-source table */}
-      <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid var(--hk-border)", overflow: "hidden", marginBottom: "20px" }}>
+      <div style={{
+        background: "#fff",
+        borderRadius: "16px",
+        border: "1px solid #EEE9E2",
+        overflow: "hidden",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+        marginBottom: "18px",
+      }}>
+        <div style={{ padding: "18px 22px 0", borderBottom: "1px solid #F4F1EC" }}>
+          <div style={{ fontWeight: 700, fontSize: "15px", color: "#1A1A1A", marginBottom: "14px" }}>
+            פירוט לפי מקור תקציב
+          </div>
+        </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead style={{ background: "var(--hk-bg-2)" }}>
+          <thead style={{ background: "#FAFAF8" }}>
             <tr>
               <th style={th}>מקור</th>
-              <th style={{ ...th, textAlign: "left" }}>מתוכנן</th>
-              <th style={{ ...th, textAlign: "left" }}>הכנסות שנרשמו</th>
-              <th style={{ ...th, textAlign: "left" }}>הוצאות</th>
-              <th style={{ ...th, textAlign: "left" }}>יתרת תקציב</th>
-              <th style={{ ...th, textAlign: "left" }}>ניצול</th>
+              <th style={thL}>מתוכנן</th>
+              <th style={thL}>הכנסות שנרשמו</th>
+              <th style={thL}>הוצאות</th>
+              <th style={thL}>יתרה</th>
+              <th style={{ ...thL, minWidth: "140px" }}>ניצול תקציב</th>
             </tr>
           </thead>
           <tbody>
             {sources.map((s) => {
+              const cfg = SOURCE_CFG[s.source as keyof typeof SOURCE_CFG];
               const balance = s.planned - s.used;
               const pct = s.planned > 0 ? Math.round((s.used / s.planned) * 100) : 0;
               return (
-                <tr key={s.source}>
-                  <td style={{ ...td, fontWeight: 600 }}>{s.label}</td>
-                  <td style={{ ...td, textAlign: "left" }}>{fmt(s.planned)}</td>
-                  <td style={{ ...td, textAlign: "left", color: "var(--hk-green)" }}>{fmt(s.income)}</td>
-                  <td style={{ ...td, textAlign: "left" }}>{fmt(s.used)}</td>
-                  <td style={{
-                    ...td, textAlign: "left",
-                    fontWeight: 600,
-                    color: balance >= 0 ? "var(--hk-green)" : "#e05555",
-                  }}>
+                <tr key={s.source} style={{ transition: "background 0.1s" }}>
+                  <td style={td}>
+                    <span style={{
+                      background: cfg.bg,
+                      color: cfg.textColor,
+                      borderRadius: "8px",
+                      padding: "3px 10px",
+                      fontSize: "12.5px",
+                      fontWeight: 600,
+                    }}>
+                      {cfg.label}
+                    </span>
+                  </td>
+                  <td style={tdL}>{fmt(s.planned)}</td>
+                  <td style={{ ...tdL, color: "#2D6644", fontWeight: 500 }}>{fmt(s.income)}</td>
+                  <td style={tdL}>{fmt(s.used)}</td>
+                  <td style={{ ...tdL, fontWeight: 600, color: balance >= 0 ? "#2D6644" : "#B5472A" }}>
                     {fmt(balance)}
                   </td>
-                  <td style={{ ...td, textAlign: "left", minWidth: "120px" }}>
-                    <span style={{ fontSize: "12px", color: "var(--hk-ink-2)" }}>{pct}%</span>
-                    {pctBar(pct)}
+                  <td style={tdL}>
+                    <div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "2px" }}>{pct}%</div>
+                    <PctBar pct={pct} color={cfg.color} />
                   </td>
                 </tr>
               );
             })}
-            {/* Totals row */}
-            <tr style={{ background: "var(--hk-bg-2)" }}>
-              <td style={{ ...td, fontWeight: 700, color: "var(--hk-ink-1)" }}>סה״כ</td>
-              <td style={{ ...td, textAlign: "left", fontWeight: 700 }}>{fmt(totals.planned)}</td>
-              <td style={{ ...td, textAlign: "left", fontWeight: 700, color: "var(--hk-green)" }}>{fmt(incomeTotals.grand)}</td>
-              <td style={{ ...td, textAlign: "left", fontWeight: 700 }}>{fmt(totals.used)}</td>
-              <td style={{
-                ...td, textAlign: "left", fontWeight: 700,
-                color: totals.balance >= 0 ? "var(--hk-green)" : "#e05555",
-              }}>
+
+            {/* Total row */}
+            <tr style={{ background: "#F7F4EF" }}>
+              <td style={{ ...td, fontWeight: 700 }}>סה״כ</td>
+              <td style={{ ...tdL, fontWeight: 700 }}>{fmt(totals.planned)}</td>
+              <td style={{ ...tdL, fontWeight: 700, color: "#2D6644" }}>{fmt(incomeTotals.grand)}</td>
+              <td style={{ ...tdL, fontWeight: 700 }}>{fmt(totals.used)}</td>
+              <td style={{ ...tdL, fontWeight: 700, color: totals.balance >= 0 ? "#2D6644" : "#B5472A" }}>
                 {fmt(totals.balance)}
               </td>
-              <td style={{ ...td, textAlign: "left", fontWeight: 700 }}>
-                {totals.pct}%
+              <td style={tdL}>
+                <div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "2px" }}>{totals.pct}%</div>
+                <PctBar pct={totals.pct} />
               </td>
             </tr>
           </tbody>
@@ -222,134 +269,179 @@ function AnnualReport() {
       </div>
 
       {/* Income breakdown */}
-      <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid var(--hk-border)", padding: "20px 24px" }}>
-        <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--hk-ink-1)", marginBottom: "12px" }}>פירוט הכנסות</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
-          <div style={{ background: "var(--hk-bg-2)", borderRadius: "10px", padding: "14px 16px" }}>
-            <div style={{ fontSize: "11px", color: "var(--hk-ink-3)", marginBottom: "4px" }}>הכנסות ממקורות</div>
-            <div style={{ fontWeight: 700, fontSize: "18px", color: "var(--hk-ink-1)" }}>{fmt(incomeTotals.fromIncome)}</div>
-          </div>
-          <div style={{ background: "var(--hk-bg-2)", borderRadius: "10px", padding: "14px 16px" }}>
-            <div style={{ fontSize: "11px", color: "var(--hk-ink-3)", marginBottom: "4px" }}>גבייה מהורים</div>
-            <div style={{ fontWeight: 700, fontSize: "18px", color: "var(--hk-ink-1)" }}>{fmt(incomeTotals.fromParentCollections)}</div>
-          </div>
-          <div style={{ background: "rgba(52,168,83,0.08)", borderRadius: "10px", padding: "14px 16px", border: "1px solid rgba(52,168,83,0.2)" }}>
-            <div style={{ fontSize: "11px", color: "var(--hk-ink-3)", marginBottom: "4px" }}>סה״כ הכנסות</div>
-            <div style={{ fontWeight: 700, fontSize: "18px", color: "var(--hk-green)" }}>{fmt(incomeTotals.grand)}</div>
-          </div>
+      <div style={{
+        background: "#fff",
+        borderRadius: "16px",
+        border: "1px solid #EEE9E2",
+        padding: "20px 24px",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+      }}>
+        <div style={{ fontWeight: 700, fontSize: "14px", color: "#1A1A1A", marginBottom: "14px" }}>פירוט הכנסות</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px" }}>
+          {[
+            { label: "הכנסות ממקורות (גפן/עירייה)", value: incomeTotals.fromIncome, accent: false },
+            { label: "גבייה מהורים",                value: incomeTotals.fromParentCollections, accent: false },
+            { label: "סה״כ הכנסות",                 value: incomeTotals.grand, accent: true },
+          ].map((item) => (
+            <div key={item.label} style={{
+              background: item.accent ? "linear-gradient(135deg, #EDFBF3, #D4F0DF)" : "#FAFAF8",
+              borderRadius: "11px",
+              padding: "14px 18px",
+              border: item.accent ? "1px solid #C6E8D0" : "1px solid #EEE9E2",
+            }}>
+              <div style={{ fontSize: "11px", color: "#6B7A72", marginBottom: "6px", fontWeight: 500 }}>{item.label}</div>
+              <div style={{ fontWeight: 700, fontSize: "19px", color: item.accent ? "#2D6644" : "#1A1A1A" }}>
+                {fmt(item.value)}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Horim Report ──────────────────────────────────────────────────────────
+// ─── Horim Report ───────────────────────────────────────────────────────────
 
 function HorimReport() {
-  const { data: grades = [], isLoading: gradesLoading } = useGrades();
-  const { data: sections = [] } = useParentSections();
-  const { data: amounts = [] } = useGradeSectionAmounts();
-  const { data: collections = [] } = useParentCollections();
+  const { data: grades = [],      isLoading } = useGrades();
+  const { data: sections = [] }               = useParentSections();
+  const { data: amounts = [] }                = useGradeSectionAmounts();
+  const { data: collections = [] }            = useParentCollections();
 
-  if (gradesLoading) return <div style={{ color: "var(--hk-ink-3)", padding: "24px" }}>טוען...</div>;
-  if (grades.length === 0) return (
-    <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid var(--hk-border)", padding: "40px", textAlign: "center", color: "var(--hk-ink-3)" }}>
-      אין שכבות — הגדר שכבות במסך ההגדרות
-    </div>
-  );
+  if (isLoading) return <Loader />;
+  if (grades.length === 0) return <EmptyState text="אין שכבות — הגדר שכבות במסך ההגדרות" />;
 
-  // Compute per-grade totals
-  const gradeRows = grades.map((grade) => {
+  const rows = grades.map((grade) => {
     const gradeAmounts = amounts.filter((a) => a.grade_id === grade.id);
     const target = sections.reduce((sum, sec) => {
       const gsa = gradeAmounts.find((a) => a.parent_section_id === sec.id);
       return sum + computeTarget(grade, gsa);
     }, 0);
-
-    const collected = collections
-      .filter((c) => c.grade_id === grade.id)
-      .reduce((sum, c) => sum + c.amount, 0);
-
+    const collected = collections.filter((c) => c.grade_id === grade.id).reduce((s, c) => s + c.amount, 0);
     const remaining = target - collected;
     const pct = target > 0 ? Math.round((collected / target) * 100) : 0;
-
     return { grade, target, collected, remaining, pct };
   });
 
-  const totalTarget = gradeRows.reduce((s, r) => s + r.target, 0);
-  const totalCollected = gradeRows.reduce((s, r) => s + r.collected, 0);
+  const totalTarget    = rows.reduce((s, r) => s + r.target, 0);
+  const totalCollected = rows.reduce((s, r) => s + r.collected, 0);
   const totalRemaining = totalTarget - totalCollected;
-  const totalPct = totalTarget > 0 ? Math.round((totalCollected / totalTarget) * 100) : 0;
+  const totalPct       = totalTarget > 0 ? Math.round((totalCollected / totalTarget) * 100) : 0;
 
   return (
     <div>
-      {/* Summary cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "20px" }}>
+      {/* KPI cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px", marginBottom: "20px" }}>
         {[
-          { label: "יעד גבייה", value: totalTarget, color: "var(--hk-ink-1)" },
-          { label: "נגבה", value: totalCollected, color: "var(--hk-green)" },
-          { label: "טרם נגבה", value: totalRemaining, color: totalRemaining > 0 ? "#F5A623" : "var(--hk-green)" },
+          { label: "יעד גבייה",  value: totalTarget,    color: "#1A1A1A", bg: "#FAFAF8",     border: "#EEE9E2" },
+          { label: "נגבה",       value: totalCollected, color: "#2D6644", bg: "#EDFBF3",     border: "#C6E8D0" },
+          { label: "טרם נגבה",   value: totalRemaining, color: totalRemaining > 0 ? "#B5472A" : "#2D6644", bg: totalRemaining > 0 ? "#FDF1EA" : "#EDFBF3", border: totalRemaining > 0 ? "#EDCFC6" : "#C6E8D0" },
         ].map((c) => (
-          <div key={c.label} style={{ background: "#fff", borderRadius: "16px", border: "1px solid var(--hk-border)", padding: "20px 24px" }}>
-            <div style={{ fontSize: "11px", color: "var(--hk-ink-3)", marginBottom: "6px" }}>{c.label}</div>
-            <div style={{ fontWeight: 700, fontSize: "22px", color: c.color }}>{fmt(c.value)}</div>
+          <div key={c.label} style={{
+            background: c.bg,
+            borderRadius: "14px",
+            border: `1px solid ${c.border}`,
+            padding: "18px 22px",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+          }}>
+            <div style={{ fontSize: "11px", color: "#6B7A72", fontWeight: 500, marginBottom: "6px" }}>{c.label}</div>
+            <div style={{ fontSize: "24px", fontWeight: 700, color: c.color }}>{fmt(c.value)}</div>
+            {c.label === "נגבה" && (
+              <div style={{ marginTop: "8px" }}>
+                <PctBar pct={totalPct} color="#2D6644" />
+                <div style={{ fontSize: "11px", color: "#6B7A72", marginTop: "4px" }}>{totalPct}% מהיעד</div>
+              </div>
+            )}
           </div>
         ))}
       </div>
 
       {/* Per-grade table */}
-      <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid var(--hk-border)", overflow: "hidden" }}>
+      <div style={{
+        background: "#fff",
+        borderRadius: "16px",
+        border: "1px solid #EEE9E2",
+        overflow: "hidden",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+      }}>
+        <div style={{ padding: "18px 22px", borderBottom: "1px solid #F4F1EC" }}>
+          <div style={{ fontWeight: 700, fontSize: "15px", color: "#1A1A1A" }}>גבייה לפי שכבה</div>
+        </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead style={{ background: "var(--hk-bg-2)" }}>
+          <thead style={{ background: "#FAFAF8" }}>
             <tr>
               <th style={th}>שכבה</th>
-              <th style={{ ...th, textAlign: "left" }}>תלמידים</th>
-              <th style={{ ...th, textAlign: "left" }}>יעד גבייה</th>
-              <th style={{ ...th, textAlign: "left" }}>נגבה</th>
-              <th style={{ ...th, textAlign: "left" }}>נותר</th>
-              <th style={{ ...th, textAlign: "left" }}>התקדמות</th>
+              <th style={thL}>תלמידים</th>
+              <th style={thL}>יעד גבייה</th>
+              <th style={thL}>נגבה</th>
+              <th style={thL}>נותר</th>
+              <th style={{ ...thL, minWidth: "140px" }}>התקדמות</th>
             </tr>
           </thead>
           <tbody>
-            {gradeRows.map(({ grade, target, collected, remaining, pct }) => (
+            {rows.map(({ grade, target, collected, remaining, pct }) => (
               <tr key={grade.id}>
                 <td style={{ ...td, fontWeight: 600 }}>{grade.name}</td>
-                <td style={{ ...td, textAlign: "left", color: "var(--hk-ink-2)" }}>{grade.student_count}</td>
-                <td style={{ ...td, textAlign: "left" }}>{fmt(target)}</td>
-                <td style={{ ...td, textAlign: "left", color: "var(--hk-green)", fontWeight: 600 }}>{fmt(collected)}</td>
+                <td style={{ ...tdL, color: "#6B7A72" }}>{grade.student_count}</td>
+                <td style={tdL}>{fmt(target)}</td>
+                <td style={{ ...tdL, color: "#2D6644", fontWeight: 600 }}>{fmt(collected)}</td>
                 <td style={{
-                  ...td, textAlign: "left", fontWeight: 600,
-                  color: remaining > 0 ? "#F5A623" : "var(--hk-green)",
+                  ...tdL, fontWeight: 600,
+                  color: remaining <= 0 ? "#2D6644" : remaining < target * 0.2 ? "#E67E22" : "#B5472A",
                 }}>
-                  {remaining > 0 ? fmt(remaining) : "✓ הושלם"}
+                  {remaining <= 0
+                    ? <span style={{ background: "#EDFBF3", color: "#2D6644", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 600 }}>✓ הושלם</span>
+                    : fmt(remaining)}
                 </td>
-                <td style={{ ...td, textAlign: "left", minWidth: "120px" }}>
-                  <span style={{ fontSize: "12px", color: "var(--hk-ink-2)" }}>{pct}%</span>
-                  {pctBar(pct)}
+                <td style={tdL}>
+                  <div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "3px" }}>{pct}%</div>
+                  <PctBar pct={pct} color="#8B2F6E" />
                 </td>
               </tr>
             ))}
+
             {/* Totals */}
-            <tr style={{ background: "var(--hk-bg-2)" }}>
+            <tr style={{ background: "#F7F4EF" }}>
               <td style={{ ...td, fontWeight: 700 }}>סה״כ</td>
-              <td style={{ ...td, textAlign: "left", fontWeight: 700, color: "var(--hk-ink-2)" }}>
+              <td style={{ ...tdL, fontWeight: 700, color: "#6B7A72" }}>
                 {grades.reduce((s, g) => s + g.student_count, 0)}
               </td>
-              <td style={{ ...td, textAlign: "left", fontWeight: 700 }}>{fmt(totalTarget)}</td>
-              <td style={{ ...td, textAlign: "left", fontWeight: 700, color: "var(--hk-green)" }}>{fmt(totalCollected)}</td>
-              <td style={{
-                ...td, textAlign: "left", fontWeight: 700,
-                color: totalRemaining > 0 ? "#F5A623" : "var(--hk-green)",
-              }}>
+              <td style={{ ...tdL, fontWeight: 700 }}>{fmt(totalTarget)}</td>
+              <td style={{ ...tdL, fontWeight: 700, color: "#2D6644" }}>{fmt(totalCollected)}</td>
+              <td style={{ ...tdL, fontWeight: 700, color: totalRemaining <= 0 ? "#2D6644" : "#B5472A" }}>
                 {fmt(totalRemaining)}
               </td>
-              <td style={{ ...td, textAlign: "left", fontWeight: 700 }}>
-                {totalPct}%
+              <td style={tdL}>
+                <div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "3px" }}>{totalPct}%</div>
+                <PctBar pct={totalPct} color="#8B2F6E" />
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ─── Micro helpers ───────────────────────────────────────────────────────────
+
+function Loader() {
+  return <div style={{ color: "#6B7A72", padding: "32px", fontSize: "14px", textAlign: "center" }}>טוען...</div>;
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div style={{
+      background: "#fff",
+      borderRadius: "16px",
+      border: "1px solid #EEE9E2",
+      padding: "60px 24px",
+      textAlign: "center",
+      color: "#6B7A72",
+      fontSize: "14px",
+    }}>
+      {text}
     </div>
   );
 }
