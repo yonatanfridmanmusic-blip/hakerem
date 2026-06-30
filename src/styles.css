@@ -1,0 +1,118 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ═══════════════════════════════════════════════
+   הכרם — Design System Tokens
+   Palette: Evergreen × Rusty Spice × Muted Teal
+   ═══════════════════════════════════════════════ */
+
+:root {
+  /* ── Brand greens ── */
+  --hk-green-dark:    #1A3D2B;   /* Evergreen  — sidebar, hero, logo */
+  --hk-green-deep:    #0B5E52;   /* Pine Teal  — deep accent */
+  --hk-green-mid:     #2D6644;   /* Hunter Green */
+  --hk-green-sea:     #4A8C62;   /* Sea Green  — גפן progress bars */
+  --hk-green-muted:   #7AB896;   /* Muted Teal — hero text, icon accent */
+
+  /* ── Warm accent ── */
+  --hk-rust:          #B5472A;   /* Rusty Spice — עירייה, warnings */
+  --hk-rust-light:    #F5EDE9;
+  --hk-rust-border:   #E8C4B5;
+
+  /* ── Plum accent ── */
+  --hk-plum:          #8B2F6E;   /* Royal Plum — הורים */
+  --hk-plum-light:    #F4EBF2;
+  --hk-plum-border:   #D9B3CF;
+
+  /* ── Surfaces ── */
+  --hk-bg:            #F7F4EF;   /* warm off-white page */
+  --hk-card:          #FFFFFF;
+  --hk-sidebar:       #1A3D2B;
+
+  /* ── Text ── */
+  --hk-ink:           #1A1A1A;
+  --hk-ink-2:         #6B6560;
+  --hk-ink-3:         #A09890;
+
+  /* ── Borders ── */
+  --hk-border:        #E8E2D9;
+
+  /* ── Status ── */
+  --hk-success:       #166534;
+  --hk-success-bg:    #EDFBF3;
+  --hk-success-border:#A7F3C8;
+  --hk-warning:       #7C3010;
+  --hk-warning-bg:    #F5EDE9;
+  --hk-warning-border:#E8C4B5;
+  --hk-danger:        #9B1C1C;
+  --hk-danger-bg:     #FEF2F2;
+  --hk-danger-border: #FECACA;
+
+  /* ── Source colors ── */
+  --hk-gefen:         #1A3D2B;   /* Evergreen */
+  --hk-iriyah:        #B5472A;   /* Rusty Spice */
+  --hk-horim:         #8B2F6E;   /* Royal Plum */
+
+  /* ── Typography ── */
+  --font-sans: "Rubik", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+  /* ── Radii ── */
+  --hk-radius:        8px;
+  --hk-radius-card:   14px;
+  --hk-radius-lg:     16px;
+}
+
+/* ─── Reset ─── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-family: var(--font-sans);
+  background: var(--hk-bg);
+  color: var(--hk-ink);
+  direction: rtl;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body { margin: 0; }
+
+/* ─── Tailwind bridge ─── */
+@theme inline {
+  --font-sans:               var(--font-sans);
+  --color-background:        var(--hk-bg);
+  --color-foreground:        var(--hk-ink);
+  --color-card:              var(--hk-card);
+  --color-border:            var(--hk-border);
+  --color-muted-foreground:  var(--hk-ink-3);
+  --color-primary:           var(--hk-green-dark);
+  --color-primary-foreground:#FFFFFF;
+  --color-destructive:       var(--hk-danger);
+  --radius:                  var(--hk-radius);
+}
+
+/* ─── Numbers ─── */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  direction: ltr;
+  text-align: left;
+}
+
+/* ─── Focus ─── */
+*:focus-visible {
+  outline: 2px solid var(--hk-green-mid);
+  outline-offset: 2px;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--hk-border); border-radius: 99px; }
+
+/* ─── Status pills ─── */
+.status-safe    { background: var(--hk-success-bg); color: var(--hk-success); border: 1px solid var(--hk-success-border); }
+.status-caution { background: var(--hk-warning-bg); color: var(--hk-warning); border: 1px solid var(--hk-warning-border); }
+.status-risk    { background: var(--hk-danger-bg);  color: var(--hk-danger);  border: 1px solid var(--hk-danger-border); }
