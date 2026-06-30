@@ -56,35 +56,89 @@ function PctBar({ pct, color }: { pct: number; color?: string }) {
 const PRINT_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
   body { font-family:'Rubik',sans-serif; direction:rtl; color:#1A1A1A; background:white; font-size:12.5px; line-height:1.55; }
-  .page-header { background:linear-gradient(160deg,#1A3D2B 0%,#0F2419 100%); color:white; padding:26px 36px; display:flex; justify-content:space-between; align-items:flex-end; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .page-header h1 { font-size:21px; font-weight:700; margin:4px 0; }
-  .page-header .sub { font-size:11px; color:rgba(255,255,255,0.5); }
-  .page-header .meta { text-align:left; font-size:10.5px; color:rgba(255,255,255,0.45); line-height:1.7; }
-  .content { padding:26px 36px; }
-  h2 { font-size:14px; font-weight:700; color:#1A1A1A; margin-bottom:13px; border-bottom:2px solid #EEE9E2; padding-bottom:7px; }
-  .kpi-grid { display:grid; gap:12px; margin-bottom:22px; }
-  .kpi-4 { grid-template-columns:repeat(4,1fr); } .kpi-3 { grid-template-columns:repeat(3,1fr); }
-  .kpi-card { background:#FAFAF8; border:1px solid #EEE9E2; border-radius:10px; padding:13px 15px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .kpi-label { font-size:9.5px; color:#6B7A72; font-weight:500; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.04em; }
-  .kpi-value { font-size:19px; font-weight:700; } .kpi-sub { font-size:10px; color:#9BA8A2; margin-top:2px; }
-  table { width:100%; border-collapse:collapse; margin-bottom:22px; }
-  thead { background:#F7F4EF; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  th { padding:9px 13px; text-align:right; font-size:10px; font-weight:600; color:#6B7A72; border-bottom:2px solid #E8E2D9; letter-spacing:0.04em; text-transform:uppercase; white-space:nowrap; }
-  th.l { text-align:left; } td { padding:10px 13px; text-align:right; font-size:12px; border-bottom:1px solid #F4F1EC; } td.l { text-align:left; }
-  .total-row { background:#F0EDE8; -webkit-print-color-adjust:exact; print-color-adjust:exact; font-weight:700; }
-  .badge { display:inline-block; padding:2px 9px; border-radius:6px; font-size:11px; font-weight:600; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .bar-wrap { background:#E8E8E8; border-radius:4px; height:6px; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+  /* ── Action bar (screen only) ── */
+  .print-bar {
+    position:sticky; top:0; z-index:999;
+    background:#fff; border-bottom:2px solid #E8EDE9;
+    padding:12px 28px; display:flex; justify-content:space-between; align-items:center;
+  }
+  .print-bar-title { font-size:13px; font-weight:600; color:#4A6656; }
+  .print-bar-hint { font-size:11px; color:#9BA8A2; margin-top:2px; }
+  .btn-print {
+    background:#1A3D2B; color:#fff; border:none; border-radius:9px;
+    padding:10px 22px; font-family:'Rubik',sans-serif; font-size:13px; font-weight:700;
+    cursor:pointer; display:flex; align-items:center; gap:7px;
+    box-shadow:0 2px 8px rgba(26,61,43,0.3);
+  }
+  .btn-close {
+    background:#F2F5F3; color:#4A6656; border:1px solid #D0DDD4; border-radius:9px;
+    padding:10px 16px; font-family:'Rubik',sans-serif; font-size:13px; cursor:pointer; margin-right:8px;
+  }
+  @media print { .print-bar { display:none !important; } }
+
+  /* ── Page header ── */
+  .page-header {
+    background:#1A3D2B; color:white; padding:24px 36px;
+    display:flex; justify-content:space-between; align-items:flex-end;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  .page-header h1 { font-size:20px; font-weight:700; margin:4px 0; }
+  .page-header .sub { font-size:11px; color:rgba(255,255,255,0.55); }
+  .page-header .meta { text-align:left; font-size:10.5px; color:rgba(255,255,255,0.5); line-height:1.8; }
+
+  .content { padding:22px 36px; }
+  h2 { font-size:13.5px; font-weight:700; color:#1A1A1A; margin-bottom:12px; border-bottom:2px solid #EEE9E2; padding-bottom:6px; }
+
+  /* ── KPI cards — colored left border (works with or without bg-graphics) ── */
+  .kpi-grid { display:grid; gap:11px; margin-bottom:20px; }
+  .kpi-4 { grid-template-columns:repeat(4,1fr); }
+  .kpi-3 { grid-template-columns:repeat(3,1fr); }
+  .kpi-card {
+    background:#FAFAF8; border:1px solid #E4EDE7;
+    border-right:4px solid #2D6644;
+    border-radius:10px; padding:12px 15px;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  .kpi-label { font-size:9px; color:#6B7A72; font-weight:600; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.05em; }
+  .kpi-value { font-size:18px; font-weight:700; }
+  .kpi-sub { font-size:9.5px; color:#9BA8A2; margin-top:2px; }
+
+  /* ── Table ── */
+  table { width:100%; border-collapse:collapse; margin-bottom:20px; }
+  thead { background:#F5F2EC; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  th { padding:9px 13px; text-align:right; font-size:9.5px; font-weight:700; color:#5A6B62; border-bottom:2px solid #DDD8CF; letter-spacing:0.05em; text-transform:uppercase; white-space:nowrap; }
+  th.l { text-align:left; }
+  td { padding:10px 13px; text-align:right; font-size:12px; border-bottom:1px solid #F0EDE8; }
+  td.l { text-align:left; }
+  .total-row { background:#EDE9E2 !important; font-weight:700; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+  /* ── Source badge ── */
+  .badge { display:inline-block; padding:2px 9px; border-radius:5px; font-size:10.5px; font-weight:700; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+  /* ── Progress bar ── */
+  .bar-wrap { background:#E2E8E4; border-radius:4px; height:5px; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .bar-fill { height:100%; border-radius:4px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .bar-label { font-size:10.5px; color:#6B7A72; margin-bottom:3px; }
-  .income-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:14px; }
-  .income-card { background:#FAFAF8; border:1px solid #EEE9E2; border-radius:10px; padding:13px 15px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .income-card.accent { background:linear-gradient(135deg,#EDFBF3,#D4F0DF); border-color:#C6E8D0; }
-  .green{color:#2D6644;} .rust{color:#B5472A;} .plum{color:#8B2F6E;}
-  .done-badge { background:#EDFBF3; color:#2D6644; border-radius:5px; padding:2px 7px; font-size:10.5px; font-weight:600; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .divider { border:none; border-top:1px solid #EEE9E2; margin:20px 0; }
-  .footer { margin-top:28px; padding-top:10px; border-top:1px solid #EEE9E2; font-size:9.5px; color:#AAB4AE; text-align:center; }
-  @media print { @page { margin:12mm 14mm; size:A4; } body { font-size:11px; } .kpi-value { font-size:16px; } }
+  .bar-label { font-size:10px; color:#6B7A72; margin-bottom:2px; }
+
+  /* ── Income breakdown ── */
+  .income-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:11px; margin-top:12px; }
+  .income-card { background:#FAFAF8; border:1px solid #E4EDE7; border-radius:10px; padding:12px 14px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .income-card.accent { background:#EEF8F3; border-color:#B8DFCA; border-right:4px solid #2D6644; }
+
+  /* ── Utilities ── */
+  .green { color:#2D6644; } .rust { color:#B5472A; } .plum { color:#8B2F6E; }
+  .done-badge { background:#E8F7EF; color:#1D6640; border-radius:5px; padding:2px 7px; font-size:10px; font-weight:700; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .divider { border:none; border-top:1px solid #EEE9E2; margin:18px 0; }
+  .footer { margin-top:24px; padding-top:10px; border-top:1px solid #E8EDE9; font-size:9px; color:#B0BAB4; text-align:center; }
+
+  @media print {
+    @page { margin:12mm 14mm; size:A4; }
+    body { font-size:11px; }
+    .kpi-value { font-size:15px; }
+  }
 `;
 
 // ─── HTML builders ────────────────────────────────────────────────────────────
@@ -100,6 +154,13 @@ function buildAnnualHTML(data: DashboardSummary): string {
     return `<tr><td><span class="badge" style="background:${cfg.bg};color:${cfg.textColor}">${cfg.label}</span></td><td class="l">${fmt(s.planned)}</td><td class="l green" style="font-weight:600">${fmt(s.income)}</td><td class="l">${fmt(s.used)}</td><td class="l" style="font-weight:700;color:${balance >= 0 ? "#2D6644" : "#B5472A"}">${fmt(balance)}</td><td class="l" style="min-width:110px"><div class="bar-label">${pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(pct, 100)}%;background:${barColor}"></div></div></td></tr>`;
   }).join("");
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח שנתי – ${yearName}</title><style>${PRINT_CSS}</style></head><body>
+  <div class="print-bar">
+    <div><div class="print-bar-title">📋 דוח שנתי — ${yearName}</div><div class="print-bar-hint">לחץ "ייצוא PDF" כדי לשמור את הדוח</div></div>
+    <div style="display:flex;align-items:center">
+      <button class="btn-close" onclick="window.close()">✕ סגור</button>
+      <button class="btn-print" onclick="window.print()">📄 ייצוא PDF / הדפסה</button>
+    </div>
+  </div>
   <div class="page-header"><div><div class="sub">הכרם · ניהול פיננסי בית ספרי</div><h1>דוח שנתי</h1><div class="sub" style="margin-top:2px">${yearName}</div></div><div class="meta"><div>תאריך הפקה</div><div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:2px">${toDate()}</div></div></div>
   <div class="content">
     <h2>סיכום תקציבי</h2>
@@ -121,7 +182,7 @@ function buildAnnualHTML(data: DashboardSummary): string {
     </div>
     <div class="footer">הכרם — מערכת ניהול פיננסי לבתי ספר · נוצר אוטומטית ${toDate()}</div>
   </div>
-  <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),600));</script></body></html>`;
+</body></html>`;
 }
 
 function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: GradeSectionAmount[], collections: ParentCollection[], yearName: string): string {
@@ -140,6 +201,13 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
   const tP = tT > 0 ? Math.round((tC / tT) * 100) : 0;
   const tS = grades.reduce((s, g) => s + g.student_count, 0);
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>גבייה מהורים – ${yearName}</title><style>${PRINT_CSS}</style></head><body>
+  <div class="print-bar">
+    <div><div class="print-bar-title">📋 גבייה מהורים — ${yearName}</div><div class="print-bar-hint">לחץ "ייצוא PDF" כדי לשמור את הדוח</div></div>
+    <div style="display:flex;align-items:center">
+      <button class="btn-close" onclick="window.close()">✕ סגור</button>
+      <button class="btn-print" onclick="window.print()">📄 ייצוא PDF / הדפסה</button>
+    </div>
+  </div>
   <div class="page-header"><div><div class="sub">הכרם · ניהול פיננסי בית ספרי</div><h1>דוח גבייה מהורים</h1><div class="sub" style="margin-top:2px">${yearName}</div></div><div class="meta"><div>תאריך הפקה</div><div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:2px">${toDate()}</div></div></div>
   <div class="content">
     <h2>סיכום גבייה</h2>
@@ -153,7 +221,7 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
     <tbody>${rows}<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${tS}</td><td class="l">${fmt(tT)}</td><td class="l green">${fmt(tC)}</td><td class="l" style="color:${tR <= 0 ? "#2D6644" : "#B5472A"}">${fmt(tR)}</td><td class="l"><div class="bar-label">${tP}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(tP, 100)}%;background:#8B2F6E"></div></div></td></tr></tbody></table>
     <div class="footer">הכרם — מערכת ניהול פיננסי לבתי ספר · נוצר אוטומטית ${toDate()}</div>
   </div>
-  <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),600));</script></body></html>`;
+</body></html>`;
 }
 
 function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName: string): string {
@@ -164,6 +232,13 @@ function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName:
     return `<tr><td><span class="badge" style="background:${cfg.bg};color:${cfg.textColor}">${cfg.label}</span></td><td class="l green" style="font-weight:600">${fmt(s.income)}</td><td class="l">${fmt(s.expenses)}</td><td class="l" style="font-weight:700;color:${s.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(s.net)}</td></tr>`;
   }).join("");
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח תקופתי – ${periodLabel}</title><style>${PRINT_CSS}</style></head><body>
+  <div class="print-bar">
+    <div><div class="print-bar-title">📋 דוח תקופתי — ${periodLabel}</div><div class="print-bar-hint">לחץ "ייצוא PDF" כדי לשמור את הדוח</div></div>
+    <div style="display:flex;align-items:center">
+      <button class="btn-close" onclick="window.close()">✕ סגור</button>
+      <button class="btn-print" onclick="window.print()">📄 ייצוא PDF / הדפסה</button>
+    </div>
+  </div>
   <div class="page-header"><div><div class="sub">הכרם · ניהול פיננסי בית ספרי</div><h1>דוח תקופתי</h1><div class="sub" style="margin-top:2px">${periodLabel} · ${yearName}</div></div><div class="meta"><div>תאריך הפקה</div><div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:2px">${toDate()}</div></div></div>
   <div class="content">
     <h2>סיכום תקופה</h2>
@@ -178,17 +253,23 @@ function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName:
     <tbody>${sourceRows}<tr class="total-row"><td>סה"כ</td><td class="l green">${fmt(totals.totalIncome)}</td><td class="l">${fmt(totals.expenses)}</td><td class="l" style="color:${totals.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(totals.net)}</td></tr></tbody></table>
     <div class="footer">הכרם — מערכת ניהול פיננסי לבתי ספר · נוצר אוטומטית ${toDate()}</div>
   </div>
-  <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),600));</script></body></html>`;
+</body></html>`;
 }
 
 // ─── Open print window ────────────────────────────────────────────────────────
 
 function openPrint(html: string) {
-  const win = window.open("", "_blank", "width=960,height=720,menubar=yes,toolbar=yes");
-  if (!win) return;
+  // Open a clean popup — user clicks the "ייצוא PDF" button inside it to print
+  const win = window.open("", "_blank", "width=1040,height=820,menubar=no,toolbar=no,scrollbars=yes");
+  if (!win) {
+    // Popup was blocked — fall back to current-page print with a warning
+    alert("הדפדפן חסם את חלון הדוח.\nאנא אפשר חלונות קופצים לאתר זה ונסה שוב.");
+    return;
+  }
   win.document.open();
   win.document.write(html);
   win.document.close();
+  win.focus();
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
