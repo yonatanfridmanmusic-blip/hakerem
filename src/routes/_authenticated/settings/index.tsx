@@ -314,7 +314,7 @@ function GradesTab() {
   const [editVals, setEditVals]   = useState({ name: "", count: "0" });
 
   const GRADE_LETTERS = ["א", "ב", "ג", "ד", "ה", "ו", "ז", "ח"];
-  const resolvedName = customName.trim() || (selectedLetter ? `כיתה ${selectedLetter}'` : "");
+  const resolvedName = customName.trim() || (selectedLetter ? `שכבה ${selectedLetter}'` : "");
 
   const handleAdd = async () => {
     if (!resolvedName || !activeYear) return;
@@ -421,7 +421,7 @@ function GradesTab() {
               <Label>שם מותאם אישית <span style={{ color: "#AAA099", fontWeight: "400" }}>(אופציונלי)</span></Label>
               <input
                 style={{ ...inputStyle, color: customName ? "#1A1A1A" : "#AAA099" }}
-                placeholder={selectedLetter ? `כיתה ${selectedLetter}' (ברירת מחדל)` : "לדוגמה: ביניים א'"}
+                placeholder={selectedLetter ? `שכבה ${selectedLetter}' (ברירת מחדל)` : "לדוגמה: שכבת ביניים"}
                 value={customName}
                 onChange={(e) => setCustomName(e.target.value)}
               />
