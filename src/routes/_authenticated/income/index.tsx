@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
-import { Plus, X, TrendingUp, Pencil, Check, Trash2 } from "lucide-react";
+import { Plus, X, TrendingUp, Pencil, Check, Trash2, Search } from "lucide-react";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { toast } from "sonner";
 import {
@@ -443,6 +443,7 @@ function InlineCategoryCell({ inc }: { inc: Income }) {
 
 export default function IncomePage() {
   const [filter, setFilter] = useState<BudgetSource | "all">("all");
+  const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingIncome, setEditingIncome] = useState<Income | null>(null);
   const [deletingIncome, setDeletingIncome] = useState<Income | null>(null);
@@ -450,7 +451,15 @@ export default function IncomePage() {
   const { data: income, isLoading } = useIncome(filter);
   const { data: allIncome } = useIncome("all");
 
-  const total = (income ?? []).reduce((sum, e) => sum + e.amount, 0);
+  const q = search.trim().toLowerCase();
+  const visibleIncome = q
+    ? (income ?? []).filter((inc) =>
+        [inc.payer, inc.description, inc.budget_categories?.name, inc.payment_method, inc.notes]
+          .some((f) => f?.toLowerCase().includes(q))
+      )
+    : (income ?? []);
+
+  const total = visibleIncome.reduce((sum, e) => sum + e.amount, 0);
   const sourceTotals = { gefen: 0, iriyah: 0, horim: 0 };
   (allIncome ?? []).forEach((i) => { sourceTotals[i.source] += i.amount; });
   const grandTotal = Object.values(sourceTotals).reduce((a, b) => a + b, 0);
@@ -478,7 +487,9 @@ export default function IncomePage() {
           <div>
             <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>הכנסות</h1>
             <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099" }}>
-              {isLoading ? "טוען..." : `${(income ?? []).length} הכנסות · סה״כ ${fmt(total)}`}
+              {isLoading ? "טוען..." : q
+                ? `${visibleIncome.length} מתוך ${(income ?? []).length} הכנסות · ${fmt(total)}`
+                : `${(income ?? []).length} הכנסות · סה״כ ${fmt(total)}`}
             </p>
           </div>
           <button onClick={() => setShowModal(true)} style={{
@@ -524,8 +535,9 @@ export default function IncomePage() {
           </div>
         </div>
 
-        {/* Filter */}
-        <div style={{ display: "flex", gap: "8px" }}>
+        {/* Filter + Search row */}
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "8px" }}>
           {([["all", "הכל"], ["gefen", "גפן"], ["iriyah", "עירייה"], ["horim", "הורים"]] as const).map(([val, label]) => {
             const active = filter === val;
             const cfg = val !== "all" ? SOURCE_CONFIG[val] : null;
@@ -540,6 +552,32 @@ export default function IncomePage() {
               }}>{label}</button>
             );
           })}
+          </div>
+
+          {/* Search input */}
+          <div style={{ flex: 1, position: "relative" }}>
+            <Search size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#AAA099", pointerEvents: "none" }} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="חיפוש לפי משלם, תיאור, קטגוריה..."
+              style={{
+                width: "100%", padding: "7px 36px 7px 34px", boxSizing: "border-box",
+                border: "1px solid #E8E2D9", borderRadius: "99px",
+                fontSize: "13px", color: "#1A1A1A", background: "#fff",
+                outline: "none", fontFamily: "var(--font-sans)", direction: "rtl",
+              }}
+            />
+            {search && (
+              <button onClick={() => setSearch("")} style={{
+                position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)",
+                background: "none", border: "none", cursor: "pointer", padding: "2px", display: "flex", color: "#AAA099",
+              }}>
+                <X size={13} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Table */}
@@ -562,20 +600,24 @@ export default function IncomePage() {
 
           {isLoading ? (
             <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>טוען...</div>
-          ) : (income ?? []).length === 0 ? (
+          ) : visibleIncome.length === 0 ? (
             <div style={{ padding: "48px", textAlign: "center" }}>
               <TrendingUp size={24} style={{ color: "#E8E2D9", marginBottom: "12px" }} />
-              <div style={{ color: "#AAA099", fontSize: "14px" }}>אין הכנסות להצגה</div>
-              <div style={{ color: "#7A7470", fontSize: "12px", marginTop: "4px" }}>לחץ על "הוסף הכנסה" להתחלה</div>
+              <div style={{ color: "#AAA099", fontSize: "14px" }}>
+                {q ? `אין תוצאות עבור "${search}"` : "אין הכנסות להצגה"}
+              </div>
+              <div style={{ color: "#7A7470", fontSize: "12px", marginTop: "4px" }}>
+                {q ? "נסה מילת חיפוש אחרת" : "לחץ על \"הוסף הכנסה\" להתחלה"}
+              </div>
             </div>
           ) : (
-            (income ?? []).map((inc, i) => {
+            visibleIncome.map((inc, i) => {
               const cfg = SOURCE_CONFIG[inc.source];
               return (
                 <div key={inc.id} style={{
                   display: "grid", gridTemplateColumns: "110px 110px 70px 100px 1fr 1fr 90px 72px",
                   padding: "14px 20px", gap: "12px",
-                  borderBottom: i < (income ?? []).length - 1 ? "1px solid #F3EEE8" : "none",
+                  borderBottom: i < visibleIncome.length - 1 ? "1px solid #F3EEE8" : "none",
                   alignItems: "center", transition: "background 0.1s",
                 }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFAF8")}

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Plus, X, AlertTriangle, Pencil, Trash2 } from "lucide-react";
+import { Plus, X, AlertTriangle, Pencil, Trash2, Search } from "lucide-react";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { toast } from "sonner";
 import {
@@ -312,6 +312,7 @@ function DeleteConfirm({ expense, onClose }: { expense: Expense; onClose: () => 
 
 export default function ExpensesPage() {
   const [filter, setFilter] = useState<BudgetSource | "all">("all");
+  const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deletingExpense, setDeletingExpense] = useState<Expense | null>(null);
@@ -319,7 +320,15 @@ export default function ExpensesPage() {
   const { data: expenses, isLoading } = useExpenses(filter);
   const { data: allExpenses } = useExpenses("all");
 
-  const total = (expenses ?? []).reduce((sum, e) => sum + e.amount, 0);
+  const q = search.trim().toLowerCase();
+  const visibleExpenses = q
+    ? (expenses ?? []).filter((e) =>
+        [e.supplier, e.description, e.budget_categories?.name]
+          .some((f) => f?.toLowerCase().includes(q))
+      )
+    : (expenses ?? []);
+
+  const total = visibleExpenses.reduce((sum, e) => sum + e.amount, 0);
   const expTotals = { gefen: 0, iriyah: 0, horim: 0 };
   (allExpenses ?? []).forEach((e) => { expTotals[e.source] += e.amount; });
   const grandTotal = Object.values(expTotals).reduce((a, b) => a + b, 0);
@@ -347,7 +356,9 @@ export default function ExpensesPage() {
           <div>
             <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>הוצאות</h1>
             <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099" }}>
-              {isLoading ? "טוען..." : `${(expenses ?? []).length} הוצאות · סה״כ ${fmt(total)}`}
+              {isLoading ? "טוען..." : q
+                ? `${visibleExpenses.length} מתוך ${(expenses ?? []).length} הוצאות · ${fmt(total)}`
+                : `${(expenses ?? []).length} הוצאות · סה״כ ${fmt(total)}`}
             </p>
           </div>
           <button onClick={() => setShowAdd(true)} style={{
@@ -393,8 +404,10 @@ export default function ExpensesPage() {
           </div>
         </div>
 
-        {/* Filter */}
-        <div style={{ display: "flex", gap: "8px" }}>
+        {/* Filter + Search row */}
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          {/* Source chips */}
+          <div style={{ display: "flex", gap: "8px" }}>
           {([["all", "הכל"], ["gefen", "גפן"], ["iriyah", "עירייה"], ["horim", "הורים"]] as const).map(([val, label]) => {
             const active = filter === val;
             const cfg = val !== "all" ? SOURCE_CONFIG[val] : null;
@@ -409,6 +422,32 @@ export default function ExpensesPage() {
               }}>{label}</button>
             );
           })}
+          </div>
+
+          {/* Search input */}
+          <div style={{ flex: 1, position: "relative" }}>
+            <Search size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#AAA099", pointerEvents: "none" }} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="חיפוש לפי ספק, תיאור, קטגוריה..."
+              style={{
+                width: "100%", padding: "7px 36px 7px 34px", boxSizing: "border-box",
+                border: "1px solid #E8E2D9", borderRadius: "99px",
+                fontSize: "13px", color: "#1A1A1A", background: "#fff",
+                outline: "none", fontFamily: "var(--font-sans)", direction: "rtl",
+              }}
+            />
+            {search && (
+              <button onClick={() => setSearch("")} style={{
+                position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)",
+                background: "none", border: "none", cursor: "pointer", padding: "2px", display: "flex", color: "#AAA099",
+              }}>
+                <X size={13} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Table */}
@@ -429,20 +468,24 @@ export default function ExpensesPage() {
 
           {isLoading ? (
             <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>טוען...</div>
-          ) : (expenses ?? []).length === 0 ? (
+          ) : visibleExpenses.length === 0 ? (
             <div style={{ padding: "48px", textAlign: "center" }}>
               <AlertTriangle size={24} style={{ color: "#E8E2D9", marginBottom: "12px" }} />
-              <div style={{ color: "#AAA099", fontSize: "14px" }}>אין הוצאות להצגה</div>
-              <div style={{ color: "#7A7470", fontSize: "12px", marginTop: "4px" }}>לחץ על "הוסף הוצאה" להתחלה</div>
+              <div style={{ color: "#AAA099", fontSize: "14px" }}>
+                {q ? `אין תוצאות עבור "${search}"` : "אין הוצאות להצגה"}
+              </div>
+              <div style={{ color: "#7A7470", fontSize: "12px", marginTop: "4px" }}>
+                {q ? "נסה מילת חיפוש אחרת" : "לחץ על \"הוסף הוצאה\" להתחלה"}
+              </div>
             </div>
           ) : (
-            (expenses ?? []).map((e, i) => {
+            visibleExpenses.map((e, i) => {
               const cfg = SOURCE_CONFIG[e.source];
               return (
                 <div key={e.id} style={{
                   display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 1fr 72px",
                   padding: "14px 20px", gap: "12px",
-                  borderBottom: i < (expenses ?? []).length - 1 ? "1px solid #F3EEE8" : "none",
+                  borderBottom: i < visibleExpenses.length - 1 ? "1px solid #F3EEE8" : "none",
                   alignItems: "center", transition: "background 0.1s",
                 }}
                   onMouseEnter={(el) => (el.currentTarget.style.background = "#FAFAF8")}
