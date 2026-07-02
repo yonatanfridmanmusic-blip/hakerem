@@ -31,15 +31,8 @@ export const Route = createFileRoute("/_authenticated")({
 
       // 3. Check subscription expiry (super_admin is never blocked)
       if (profile?.system_role !== "super_admin") {
-        const { data: org } = await supabase
-          .from("organizations")
-          .select("plan_expires_at")
-          .eq("id", mem.organization_id)
-          .single();
-
-        if (org?.plan_expires_at && new Date(org.plan_expires_at) < new Date()) {
-          throw redirect({ to: "/expired" });
-        }
+        const { data: isExpired } = await supabase.rpc("check_my_org_expired");
+        if (isExpired) throw redirect({ to: "/expired" });
       }
     }
 

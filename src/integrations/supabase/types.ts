@@ -992,6 +992,7 @@ export type Database = {
     }
     Functions: {
       auth_is_super_admin: { Args: never; Returns: boolean }
+      check_my_org_expired: { Args: never; Returns: boolean }
       auth_org_role_for_year: {
         Args: { p_roles: string[]; p_year_id: string }
         Returns: boolean
