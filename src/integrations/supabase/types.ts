@@ -950,6 +950,10 @@ export type Database = {
         Returns: boolean
       }
       auth_user_org_ids: { Args: never; Returns: string[] }
+      create_organization: {
+        Args: { p_name: string; p_city?: string | null }
+        Returns: Json
+      }
       list_public_organizations: {
         Args: never
         Returns: {

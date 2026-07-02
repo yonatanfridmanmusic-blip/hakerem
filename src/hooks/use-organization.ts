@@ -121,30 +121,13 @@ export function useCreateOrganization() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ name, city }: { name: string; city?: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("לא מחובר");
-
-      // 1. Create the org
-      const { data: org, error: orgErr } = await supabase
-        .from("organizations")
-        .insert({ name, city: city ?? null, created_by: user.id })
-        .select("id, name")
-        .single();
-      if (orgErr) throw orgErr;
-
-      // 2. Make the creator the owner (active immediately)
-      const { error: memErr } = await supabase
-        .from("organization_members")
-        .insert({
-          organization_id: org.id,
-          user_id: user.id,
-          role: "owner",
-          status: "active",
-          joined_at: new Date().toISOString(),
-        });
-      if (memErr) throw memErr;
-
-      return org;
+      // Use RPC (SECURITY DEFINER) so it can insert 'active' owner membership
+      const { data, error } = await supabase.rpc("create_organization", {
+        p_name: name,
+        p_city: city ?? null,
+      });
+      if (error) throw error;
+      return data as { id: string; name: string };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["organization"] });

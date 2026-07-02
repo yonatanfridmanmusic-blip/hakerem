@@ -7,11 +7,18 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/onboarding")({
   ssr: false,
   beforeLoad: async () => {
+    const { redirect } = await import("@tanstack/react-router");
     const { data } = await supabase.auth.getUser();
-    if (!data.user) {
-      const { redirect } = await import("@tanstack/react-router");
-      throw redirect({ to: "/auth" });
-    }
+    if (!data.user) throw redirect({ to: "/auth" });
+
+    // If user already has an active org, skip onboarding
+    const { data: mem } = await supabase
+      .from("organization_members")
+      .select("id")
+      .eq("user_id", data.user.id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (mem) throw redirect({ to: "/dashboard" });
   },
   component: OnboardingPage,
 });
