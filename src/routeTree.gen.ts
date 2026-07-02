@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as ExpiredRouteImport } from './routes/expired'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
@@ -30,6 +31,11 @@ const AuthRoute = AuthRouteImport.update({
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExpiredRoute = ExpiredRouteImport.update({
+  id: '/expired',
+  path: '/expired',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
+  '/expired': typeof ExpiredRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/budget/': typeof AuthenticatedBudgetIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
+  '/expired': typeof ExpiredRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/budget': typeof AuthenticatedBudgetIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
+  '/expired': typeof ExpiredRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/budget/': typeof AuthenticatedBudgetIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/onboarding'
+    | '/expired'
     | '/admin/'
     | '/budget/'
     | '/dashboard/'
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/onboarding'
+    | '/expired'
     | '/admin'
     | '/budget'
     | '/dashboard'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/onboarding'
+    | '/expired'
     | '/_authenticated/admin/'
     | '/_authenticated/budget/'
     | '/_authenticated/dashboard/'
@@ -178,6 +190,7 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
   OnboardingRoute: typeof OnboardingRoute
+  ExpiredRoute: typeof ExpiredRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -194,6 +207,13 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/expired': {
+      id: '/expired'
+      path: '/expired'
+      fullPath: '/expired'
+      preLoaderRoute: typeof ExpiredRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -300,6 +320,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
   OnboardingRoute: OnboardingRoute,
+  ExpiredRoute: ExpiredRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -124,7 +124,7 @@ export function useCreateOrganization() {
       // Use RPC (SECURITY DEFINER) so it can insert 'active' owner membership
       const { data, error } = await supabase.rpc("create_organization", {
         p_name: name,
-        p_city: city ?? null,
+        p_city: city ?? undefined,
       });
       if (error) throw error;
       return data as { id: string; name: string };

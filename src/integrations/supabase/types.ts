@@ -664,6 +664,50 @@ export type Database = {
           },
         ]
       }
+      license_codes: {
+        Row: {
+          code: string
+          created_at: string | null
+          created_by: string | null
+          expires_at: string
+          id: string
+          notes: string | null
+          organization_id: string | null
+          redeemed_at: string | null
+          redeemed_by: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          created_by?: string | null
+          expires_at: string
+          id?: string
+          notes?: string | null
+          organization_id?: string | null
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          notes?: string | null
+          organization_id?: string | null
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "license_codes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_members: {
         Row: {
           created_at: string | null
@@ -713,6 +757,7 @@ export type Database = {
           id: string
           name: string
           plan: string
+          plan_expires_at: string | null
           updated_at: string | null
         }
         Insert: {
@@ -722,6 +767,7 @@ export type Database = {
           id?: string
           name: string
           plan?: string
+          plan_expires_at?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -731,6 +777,7 @@ export type Database = {
           id?: string
           name?: string
           plan?: string
+          plan_expires_at?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -951,7 +998,15 @@ export type Database = {
       }
       auth_user_org_ids: { Args: never; Returns: string[] }
       create_organization: {
-        Args: { p_name: string; p_city?: string | null }
+        Args: { p_city?: string; p_name: string }
+        Returns: Json
+      }
+      generate_license_code: {
+        Args: {
+          p_expires_at: string
+          p_notes?: string
+          p_organization_id: string
+        }
         Returns: Json
       }
       list_public_organizations: {
@@ -962,6 +1017,7 @@ export type Database = {
           name: string
         }[]
       }
+      redeem_license_code: { Args: { p_code: string }; Returns: Json }
     }
     Enums: {
       ai_action_status: "draft" | "executed" | "cancelled" | "failed"

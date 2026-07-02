@@ -1,12 +1,11 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
   ssr: false,
   beforeLoad: async () => {
-    // Super-admin only
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw redirect({ to: "/auth" });
     const { data: profile } = await supabase
@@ -26,6 +25,7 @@ interface OrgRow {
   name: string;
   city: string | null;
   plan: string;
+  plan_expires_at: string | null;
   created_at: string | null;
 }
 
@@ -53,6 +53,32 @@ interface OrgDetail {
   incomeTotal: number;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function defaultExpiryDate(): string {
+  const now = new Date();
+  const sept1NextYear = new Date(now.getFullYear() + 1, 8, 1);
+  return sept1NextYear.toISOString().split("T")[0];
+}
+
+function expiryStatus(expiresAt: string | null): {
+  label: string;
+  color: string;
+  bg: string;
+} {
+  if (!expiresAt) return { label: "ללא הגבלה", color: "#1D4ED8", bg: "#DBEAFE" };
+  const exp = new Date(expiresAt);
+  const now = new Date();
+  const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return { label: "פג תוקף", color: "#991B1B", bg: "#FEE2E2" };
+  if (diffDays <= 30) return { label: `ניסיון — ${diffDays} ימים`, color: "#92400E", bg: "#FEF3C7" };
+  return {
+    label: `עד ${exp.toLocaleDateString("he-IL", { day: "numeric", month: "short", year: "numeric" })}`,
+    color: "#166534",
+    bg: "#DCFCE7",
+  };
+}
+
 // ─── Data hooks ───────────────────────────────────────────────────────────────
 
 function useAllOrgs() {
@@ -61,7 +87,7 @@ function useAllOrgs() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("organizations")
-        .select("id, name, city, plan, created_at")
+        .select("id, name, city, plan, plan_expires_at, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
@@ -87,10 +113,7 @@ function useOrgDetail(orgId: string | null) {
           .eq("organization_id", orgId!)
           .order("start_date", { ascending: false }),
       ]);
-
       const yearIds = (yearsRes.data ?? []).map((y) => y.id);
-
-      // Financial totals
       let expenseTotal = 0;
       let incomeTotal = 0;
       if (yearIds.length > 0) {
@@ -101,7 +124,6 @@ function useOrgDetail(orgId: string | null) {
         expenseTotal = (expRes.data ?? []).reduce((s, r) => s + Number(r.amount), 0);
         incomeTotal = (incRes.data ?? []).reduce((s, r) => s + Number(r.amount), 0);
       }
-
       return {
         members: (membersRes.data ?? []) as unknown as MemberRow[],
         years: yearsRes.data ?? [],
@@ -110,6 +132,24 @@ function useOrgDetail(orgId: string | null) {
       };
     },
     staleTime: 1000 * 30,
+  });
+}
+
+function useGenerateCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orgId, expiresAt }: { orgId: string; expiresAt: string }) => {
+      const { data, error } = await supabase.rpc("generate_license_code", {
+        p_organization_id: orgId,
+        p_expires_at: new Date(expiresAt).toISOString(),
+        p_notes: undefined,
+      });
+      if (error) throw error;
+      return data as { code: string; expires_at: string };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-orgs"] });
+    },
   });
 }
 
@@ -131,6 +171,7 @@ const chip = (color: string, bg: string): React.CSSProperties => ({
   padding: "2px 10px",
   fontSize: "11.5px",
   fontWeight: 600,
+  whiteSpace: "nowrap" as const,
 });
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
@@ -138,6 +179,7 @@ const chip = (color: string, bg: string): React.CSSProperties => ({
 function AdminPage() {
   const { data: orgs = [], isLoading } = useAllOrgs();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [codeModalOrg, setCodeModalOrg] = useState<OrgRow | null>(null);
 
   const toggle = (id: string) => setExpandedId((prev) => (prev === id ? null : id));
 
@@ -184,13 +226,17 @@ function AdminPage() {
           org={org}
           expanded={expandedId === org.id}
           onToggle={() => toggle(org.id)}
+          onGenerateCode={() => setCodeModalOrg(org)}
         />
       ))}
-
       {!isLoading && orgs.length === 0 && (
         <div style={{ ...card, textAlign: "center", color: "#888", padding: "48px" }}>
           אין ארגונים רשומים עדיין
         </div>
+      )}
+
+      {codeModalOrg && (
+        <CodeModal org={codeModalOrg} onClose={() => setCodeModalOrg(null)} />
       )}
     </div>
   );
@@ -198,61 +244,83 @@ function AdminPage() {
 
 // ─── Org card ─────────────────────────────────────────────────────────────────
 
-function OrgCard({ org, expanded, onToggle }: {
+function OrgCard({
+  org,
+  expanded,
+  onToggle,
+  onGenerateCode,
+}: {
   org: OrgRow;
   expanded: boolean;
   onToggle: () => void;
+  onGenerateCode: () => void;
 }) {
   const { data: detail, isLoading } = useOrgDetail(expanded ? org.id : null);
+  const expiry = expiryStatus(org.plan_expires_at);
 
-  const activeMembers = detail?.members.filter((m) => m.status === "active").length ?? 0;
   const pendingMembers = detail?.members.filter((m) => m.status === "pending").length ?? 0;
-  const activeYear = detail?.years.find((y) => y.is_active);
 
   return (
     <div style={{ ...card, marginBottom: "12px" }}>
-      {/* Header row */}
-      <div
-        style={{ display: "flex", alignItems: "center", gap: "14px", cursor: "pointer" }}
-        onClick={onToggle}
-      >
-        {/* Org avatar */}
-        <div style={{
-          width: "44px", height: "44px", borderRadius: "12px", flexShrink: 0,
-          background: "linear-gradient(135deg, #1E293B, #0F172A)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: "18px", fontWeight: 700, color: "#fff",
-        }}>
-          {org.name[0]}
-        </div>
-
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 700, fontSize: "15.5px", color: "#111" }}>{org.name}</span>
-            {org.plan === "pro" && (
-              <span style={chip("#7C3AED", "#EDE9FE")}>PRO</span>
-            )}
+      <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+        {/* Clickable area */}
+        <div
+          style={{ display: "flex", alignItems: "center", gap: "14px", flex: 1, cursor: "pointer" }}
+          onClick={onToggle}
+        >
+          <div style={{
+            width: "44px", height: "44px", borderRadius: "12px", flexShrink: 0,
+            background: "linear-gradient(135deg, #1E293B, #0F172A)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "18px", fontWeight: 700, color: "#fff",
+          }}>
+            {org.name[0]}
           </div>
-          <div style={{ fontSize: "12.5px", color: "#6B7280", marginTop: "2px" }}>
-            {org.city ?? "ללא עיר"}
-            <span style={{ margin: "0 6px", opacity: 0.4 }}>·</span>
-            נוצר {org.created_at ? new Date(org.created_at).toLocaleDateString("he-IL") : "—"}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" as const }}>
+              <span style={{ fontWeight: 700, fontSize: "15.5px", color: "#111" }}>{org.name}</span>
+              {org.plan === "pro" && <span style={chip("#7C3AED", "#EDE9FE")}>PRO</span>}
+            </div>
+            <div style={{ fontSize: "12.5px", color: "#6B7280", marginTop: "2px" }}>
+              {org.city ?? "ללא עיר"}
+              <span style={{ margin: "0 6px", opacity: 0.4 }}>·</span>
+              נוצר {org.created_at ? new Date(org.created_at).toLocaleDateString("he-IL") : "—"}
+            </div>
           </div>
         </div>
 
-        {/* Quick badges */}
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        {/* Badges + actions */}
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
           {pendingMembers > 0 && (
             <span style={chip("#B45309", "#FEF3C7")}>
               {pendingMembers} ממתינ{pendingMembers > 1 ? "ים" : ""}
             </span>
           )}
-          <span style={chip("#166534", "#DCFCE7")}>פעיל</span>
-          <div style={{
-            transform: `rotate(${expanded ? "180deg" : "0deg"})`,
-            transition: "transform 0.2s",
-            color: "#9CA3AF",
-          }}>
+          <span style={chip(expiry.color, expiry.bg)}>{expiry.label}</span>
+
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onGenerateCode(); }}
+            style={{
+              background: "linear-gradient(135deg, #1A3D2B, #2D6644)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              padding: "6px 12px",
+              fontSize: "12px",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "Rubik, sans-serif",
+              whiteSpace: "nowrap" as const,
+            }}
+          >
+            🔑 הנפק קוד
+          </button>
+
+          <div
+            onClick={onToggle}
+            style={{ transform: `rotate(${expanded ? "180deg" : "0deg"})`, transition: "transform 0.2s", color: "#9CA3AF", cursor: "pointer" }}
+          >
             ▼
           </div>
         </div>
@@ -265,7 +333,6 @@ function OrgCard({ org, expanded, onToggle }: {
             <div style={{ color: "#9CA3AF", fontSize: "13px" }}>טוען פרטים...</div>
           ) : detail ? (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-              {/* Members */}
               <div>
                 <div style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", letterSpacing: "0.05em", marginBottom: "10px" }}>
                   חברי צוות ({detail.members.length})
@@ -276,8 +343,7 @@ function OrgCard({ org, expanded, onToggle }: {
                 {detail.members.map((m) => (
                   <div key={m.id} style={{
                     display: "flex", alignItems: "center", gap: "10px",
-                    padding: "8px 0",
-                    borderBottom: "1px solid #F8FAFC",
+                    padding: "8px 0", borderBottom: "1px solid #F8FAFC",
                   }}>
                     <div style={{
                       width: "30px", height: "30px", borderRadius: "50%", flexShrink: 0,
@@ -289,7 +355,7 @@ function OrgCard({ org, expanded, onToggle }: {
                       {(m.profiles?.full_name ?? m.profiles?.email ?? "?")[0]?.toUpperCase()}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: "13px", fontWeight: 500, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 500, color: "#111", whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" }}>
                         {m.profiles?.full_name ?? m.profiles?.email ?? "—"}
                       </div>
                       <div style={{ fontSize: "11px", color: "#9CA3AF" }}>
@@ -297,26 +363,21 @@ function OrgCard({ org, expanded, onToggle }: {
                         {m.status === "pending" && " · ממתין לאישור"}
                       </div>
                     </div>
-                    {m.status === "pending" && (
-                      <span style={chip("#B45309", "#FEF3C7")}>ממתין</span>
-                    )}
+                    {m.status === "pending" && <span style={chip("#B45309", "#FEF3C7")}>ממתין</span>}
                   </div>
                 ))}
               </div>
 
-              {/* School years + financials */}
               <div>
                 <div style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", letterSpacing: "0.05em", marginBottom: "10px" }}>
                   שנות לימודים ({detail.years.length})
                 </div>
                 {detail.years.map((y) => (
                   <div key={y.id} style={{
-                    padding: "8px 12px",
-                    borderRadius: "8px",
+                    padding: "8px 12px", borderRadius: "8px",
                     background: y.is_active ? "#F0FDF4" : "#F8FAFC",
                     border: y.is_active ? "1px solid #BBF7D0" : "1px solid #F1F5F9",
-                    marginBottom: "6px",
-                    display: "flex", alignItems: "center", gap: "8px",
+                    marginBottom: "6px", display: "flex", alignItems: "center", gap: "8px",
                   }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: "13px", fontWeight: y.is_active ? 600 : 400, color: "#111" }}>
@@ -329,8 +390,6 @@ function OrgCard({ org, expanded, onToggle }: {
                     {y.is_active && <span style={chip("#166534", "#DCFCE7")}>פעיל</span>}
                   </div>
                 ))}
-
-                {/* Financial summary */}
                 <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                   <FinStat label="סה״כ הכנסות" value={detail.incomeTotal} color="#166534" bg="#F0FDF4" />
                   <FinStat label="סה״כ הוצאות" value={detail.expenseTotal} color="#991B1B" bg="#FEF2F2" />
@@ -340,6 +399,153 @@ function OrgCard({ org, expanded, onToggle }: {
           ) : null}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Code modal ───────────────────────────────────────────────────────────────
+
+function CodeModal({ org, onClose }: { org: OrgRow; onClose: () => void }) {
+  const [expiresAt, setExpiresAt] = useState(defaultExpiryDate);
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const { mutate: generate, isPending } = useGenerateCode();
+
+  const handleGenerate = () => {
+    generate(
+      { orgId: org.id, expiresAt },
+      {
+        onSuccess: (data) => setGeneratedCode(data.code),
+        onError: (err) => alert("שגיאה: " + (err as Error).message),
+      }
+    );
+  };
+
+  const handleCopy = () => {
+    if (!generatedCode) return;
+    navigator.clipboard.writeText(generatedCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 1000, padding: "20px",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{
+        background: "#fff", borderRadius: "18px", padding: "32px 28px",
+        width: "100%", maxWidth: "400px", boxShadow: "0 24px 80px rgba(0,0,0,0.3)",
+        fontFamily: "Rubik, sans-serif", direction: "rtl",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "#111" }}>
+            הנפקת קוד הפעלה
+          </h2>
+          <button type="button" onClick={onClose}
+            style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "#9CA3AF" }}>
+            ×
+          </button>
+        </div>
+
+        <div style={{
+          background: "#F8FAFC", borderRadius: "10px", padding: "10px 14px",
+          marginBottom: "20px", fontSize: "13.5px", color: "#374151", fontWeight: 500,
+        }}>
+          🏫 {org.name}
+        </div>
+
+        {!generatedCode ? (
+          <>
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", fontSize: "12.5px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
+                תוקף הרישיון עד
+              </label>
+              <input
+                type="date"
+                value={expiresAt}
+                min={new Date().toISOString().split("T")[0]}
+                onChange={(e) => setExpiresAt(e.target.value)}
+                style={{
+                  width: "100%", padding: "10px 12px", fontSize: "14px",
+                  border: "1.5px solid #D1D5DB", borderRadius: "9px", outline: "none",
+                  fontFamily: "Rubik, sans-serif", boxSizing: "border-box" as const,
+                }}
+              />
+              <div style={{ fontSize: "11.5px", color: "#9CA3AF", marginTop: "4px" }}>
+                ברירת מחדל: 1 בספטמבר {new Date().getFullYear() + 1}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button type="button" onClick={onClose}
+                style={{
+                  flex: 1, padding: "10px", borderRadius: "9px",
+                  border: "1.5px solid #E5E7EB", background: "#fff",
+                  color: "#374151", fontSize: "14px", fontWeight: 500,
+                  cursor: "pointer", fontFamily: "Rubik, sans-serif",
+                }}>
+                ביטול
+              </button>
+              <button type="button" onClick={handleGenerate} disabled={isPending}
+                style={{
+                  flex: 2, padding: "10px", borderRadius: "9px",
+                  background: "linear-gradient(135deg, #1A3D2B, #2D6644)",
+                  color: "#fff", fontSize: "14px", fontWeight: 600,
+                  border: "none", cursor: isPending ? "not-allowed" : "pointer",
+                  opacity: isPending ? 0.7 : 1, fontFamily: "Rubik, sans-serif",
+                }}>
+                {isPending ? "מייצר…" : "🔑 צור קוד"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "13px", color: "#6B7280", marginBottom: "14px", textAlign: "right" }}>
+              ✅ הקוד נוצר והמנוי הוארך אוטומטית. שלח את הקוד ל{org.name}.
+            </div>
+            <div style={{
+              background: "#F0FDF4", border: "2px solid #86EFAC",
+              borderRadius: "14px", padding: "20px", marginBottom: "16px",
+            }}>
+              <span style={{
+                fontSize: "26px", fontFamily: "monospace", fontWeight: 700,
+                color: "#166534", letterSpacing: "0.15em",
+              }}>
+                {generatedCode}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button type="button" onClick={handleCopy}
+                style={{
+                  flex: 1, padding: "10px", borderRadius: "9px",
+                  background: copied ? "#166534" : "linear-gradient(135deg, #1A3D2B, #2D6644)",
+                  color: "#fff", fontSize: "14px", fontWeight: 600,
+                  border: "none", cursor: "pointer", fontFamily: "Rubik, sans-serif",
+                  transition: "background 0.2s",
+                }}>
+                {copied ? "✓ הועתק!" : "העתק קוד"}
+              </button>
+              <button type="button" onClick={onClose}
+                style={{
+                  flex: 1, padding: "10px", borderRadius: "9px",
+                  border: "1.5px solid #E5E7EB", background: "#fff",
+                  color: "#374151", fontSize: "14px", fontWeight: 500,
+                  cursor: "pointer", fontFamily: "Rubik, sans-serif",
+                }}>
+                סגור
+              </button>
+            </div>
+            <div style={{ fontSize: "11px", color: "#9CA3AF", marginTop: "12px" }}>
+              תוקף עד: {new Date(expiresAt).toLocaleDateString("he-IL", { day: "numeric", month: "long", year: "numeric" })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

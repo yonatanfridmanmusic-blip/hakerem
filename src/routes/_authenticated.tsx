@@ -9,16 +9,33 @@ export const Route = createFileRoute("/_authenticated")({
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) throw redirect({ to: "/auth" });
 
-    // 2. Must belong to an org (skip check when already on onboarding)
-    if (!location.pathname.startsWith("/onboarding")) {
-      const { data: mem } = await supabase
-        .from("organization_members")
-        .select("organization_id, status")
-        .eq("user_id", data.user.id)
-        .eq("status", "active")
-        .maybeSingle();
+    const skip = location.pathname.startsWith("/onboarding") || location.pathname.startsWith("/expired");
+
+    // 2. Must belong to an org (skip on onboarding / expired pages)
+    if (!skip) {
+      const [{ data: mem }, { data: profile }] = await Promise.all([
+        supabase
+          .from("organization_members")
+          .select("organization_id, status, organizations(plan_expires_at)")
+          .eq("user_id", data.user.id)
+          .eq("status", "active")
+          .maybeSingle(),
+        supabase
+          .from("profiles")
+          .select("system_role")
+          .eq("id", data.user.id)
+          .single(),
+      ]);
 
       if (!mem) throw redirect({ to: "/onboarding" });
+
+      // 3. Check subscription expiry (super_admin is never blocked)
+      if (profile?.system_role !== "super_admin") {
+        const org = mem.organizations as { plan_expires_at: string | null } | null;
+        if (org?.plan_expires_at && new Date(org.plan_expires_at) < new Date()) {
+          throw redirect({ to: "/expired" });
+        }
+      }
     }
 
     return { user: data.user };
