@@ -1,14 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Plus, X, AlertTriangle } from "lucide-react";
+import { Plus, X, AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { toast } from "sonner";
 import {
   useExpenses,
   useAddExpense,
+  useUpdateExpense,
+  useDeleteExpense,
   useBudgetCategories,
   type BudgetSource,
   type NewExpense,
+  type Expense,
 } from "@/hooks/use-expenses";
 
 export const Route = createFileRoute("/_authenticated/expenses/")({
@@ -28,199 +31,278 @@ const fmt = (n: number) =>
 
 const today = () => new Date().toISOString().split("T")[0];
 
-// ─── Add Expense Modal ────────────────────────────────────────────────────────
+// ─── Shared form styles ────────────────────────────────────────────────────────
 
-function AddExpenseModal({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState<{
-    expense_date: string;
-    amount: string;
-    source: BudgetSource;
-    budget_category_id: string;
-    supplier: string;
-    description: string;
-    bank_account: "school" | "parents";
-  }>({
-    expense_date: today(),
-    amount: "",
-    source: "gefen",
-    budget_category_id: "",
-    supplier: "",
-    description: "",
-    bank_account: "school",
-  });
+const inputStyle: React.CSSProperties = {
+  width: "100%", padding: "9px 12px",
+  border: "1px solid #E8E2D9", borderRadius: "8px",
+  fontSize: "14px", background: "#fff",
+  color: "#1A1A1A", outline: "none",
+  fontFamily: "var(--font-sans)", direction: "rtl",
+};
+const labelStyle: React.CSSProperties = {
+  fontSize: "12px", fontWeight: "500",
+  color: "#6B6560", display: "block", marginBottom: "6px",
+};
 
+// ─── Expense Form (shared between Add + Edit) ─────────────────────────────────
+
+type ExpenseFormState = {
+  expense_date: string;
+  amount: string;
+  source: BudgetSource;
+  budget_category_id: string;
+  supplier: string;
+  description: string;
+  bank_account: "school" | "parents";
+};
+
+function ExpenseForm({
+  initial,
+  onSubmit,
+  onClose,
+  isPending,
+  submitLabel,
+}: {
+  initial: ExpenseFormState;
+  onSubmit: (form: ExpenseFormState) => Promise<void>;
+  onClose: () => void;
+  isPending: boolean;
+  submitLabel: string;
+}) {
+  const [form, setForm] = useState<ExpenseFormState>(initial);
   const { data: categories } = useBudgetCategories(form.source);
-  const addExpense = useAddExpense();
-
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.amount || Number(form.amount) <= 0) {
-      toast.error("יש להזין סכום תקין");
-      return;
-    }
-    try {
-      const payload: NewExpense = {
-        expense_date: form.expense_date,
-        amount: Number(form.amount),
-        source: form.source,
-        bank_account: form.bank_account,
-        budget_category_id: form.budget_category_id || null,
-        supplier: form.supplier || null,
-        description: form.description || null,
-      };
-      await addExpense.mutateAsync(payload);
-      toast.success("ההוצאה נוספה בהצלחה");
-      onClose();
-    } catch {
-      toast.error("שגיאה בשמירת ההוצאה");
-    }
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: "100%", padding: "9px 12px",
-    border: "1px solid #E8E2D9", borderRadius: "8px",
-    fontSize: "14px", background: "#fff",
-    color: "#1A1A1A", outline: "none",
-    fontFamily: "var(--font-sans)",
-    direction: "rtl",
-  };
-  const labelStyle: React.CSSProperties = {
-    fontSize: "12px", fontWeight: "500",
-    color: "#6B6560", display: "block", marginBottom: "6px",
+    if (!form.amount || Number(form.amount) <= 0) { toast.error("יש להזין סכום תקין"); return; }
+    await onSubmit(form);
   };
 
   return (
+    <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+        <div>
+          <label style={labelStyle}>תאריך</label>
+          <input type="date" value={form.expense_date} onChange={(e) => set("expense_date", e.target.value)}
+            required style={{ ...inputStyle, direction: "ltr" }} />
+        </div>
+        <div>
+          <label style={labelStyle}>סכום (₪)</label>
+          <input type="number" value={form.amount} onChange={(e) => set("amount", e.target.value)}
+            placeholder="0" min="0" step="0.01" required style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
+        </div>
+      </div>
+
+      <div>
+        <label style={labelStyle}>מקור תקציב</label>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {(["gefen", "iriyah", "horim"] as BudgetSource[]).map((src) => {
+            const cfg = SOURCE_CONFIG[src];
+            const active = form.source === src;
+            return (
+              <button key={src} type="button"
+                onClick={() => { set("source", src); set("budget_category_id", ""); }}
+                style={{
+                  flex: 1, padding: "8px 0", borderRadius: "8px",
+                  border: `1.5px solid ${active ? cfg.color : "#E8E2D9"}`,
+                  background: active ? cfg.bg : "#fff",
+                  color: active ? cfg.textColor : "#888079",
+                  fontSize: "13px", fontWeight: active ? "600" : "400",
+                  cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
+                }}>
+                {cfg.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label style={labelStyle}>קטגוריה</label>
+        <select value={form.budget_category_id} onChange={(e) => set("budget_category_id", e.target.value)} style={inputStyle}>
+          <option value="">— ללא קטגוריה —</option>
+          {(categories ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+        <div>
+          <label style={labelStyle}>ספק</label>
+          <input type="text" value={form.supplier} onChange={(e) => set("supplier", e.target.value)}
+            placeholder="שם הספק" style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>חשבון בנק</label>
+          <select value={form.bank_account} onChange={(e) => set("bank_account", e.target.value as "school" | "parents")} style={inputStyle}>
+            <option value="school">בית ספר</option>
+            <option value="parents">הורים</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label style={labelStyle}>תיאור (אופציונלי)</label>
+        <input type="text" value={form.description} onChange={(e) => set("description", e.target.value)}
+          placeholder="פרטים נוספים" style={inputStyle} />
+      </div>
+
+      <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+        <button type="button" onClick={onClose} style={{
+          flex: 1, padding: "10px 0", border: "1px solid #E8E2D9",
+          borderRadius: "8px", background: "#fff", color: "#6B6560",
+          fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)",
+        }}>ביטול</button>
+        <button type="submit" disabled={isPending} style={{
+          flex: 2, padding: "10px 0", border: "none", borderRadius: "8px",
+          background: isPending ? "#888" : "#1A3D2B",
+          color: "#fff", fontSize: "14px", fontWeight: "500",
+          cursor: isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
+        }}>
+          {isPending ? "שומר..." : submitLabel}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ─── Modal shell ──────────────────────────────────────────────────────────────
+
+function Modal({ title, subtitle, onClose, children }: {
+  title: string; subtitle: string; onClose: () => void; children: React.ReactNode;
+}) {
+  return (
     <div style={{
-      position: "fixed", inset: 0, zIndex: 50,
-      background: "rgba(0,0,0,0.4)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: "20px",
+      position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.4)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
     }} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={{
-        background: "#fff", borderRadius: "18px",
-        width: "100%", maxWidth: "480px",
-        boxShadow: "0 24px 80px rgba(0,0,0,0.2)",
-        overflow: "hidden",
+        background: "#fff", borderRadius: "18px", width: "100%", maxWidth: "480px",
+        boxShadow: "0 24px 80px rgba(0,0,0,0.2)", overflow: "hidden",
       }}>
-        {/* Header */}
         <div style={{
-          padding: "20px 24px",
-          borderBottom: "1px solid #EAE5DE",
+          padding: "20px 24px", borderBottom: "1px solid #EAE5DE",
           display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
           <div>
-            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>הוספת הוצאה</div>
-            <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>הזן את פרטי ההוצאה</div>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>{title}</div>
+            <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>{subtitle}</div>
           </div>
-          <button onClick={onClose} style={{
-            background: "none", border: "none", cursor: "pointer",
-            padding: "6px", borderRadius: "8px", color: "#AAA099",
-            display: "flex", alignItems: "center",
-          }}>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "8px", color: "#AAA099", display: "flex" }}>
             <X size={18} />
           </button>
         </div>
+        {children}
+      </div>
+    </div>
+  );
+}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
+// ─── Add Modal ────────────────────────────────────────────────────────────────
 
-          {/* Date + Amount */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <label style={labelStyle}>תאריך</label>
-              <input type="date" value={form.expense_date} onChange={(e) => set("expense_date", e.target.value)}
-                required style={{ ...inputStyle, direction: "ltr" }} />
-            </div>
-            <div>
-              <label style={labelStyle}>סכום (₪)</label>
-              <input type="number" value={form.amount} onChange={(e) => set("amount", e.target.value)}
-                placeholder="0" min="0" step="0.01" required style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
-            </div>
-          </div>
+function AddExpenseModal({ onClose }: { onClose: () => void }) {
+  const addExpense = useAddExpense();
+  const initial: ExpenseFormState = {
+    expense_date: today(), amount: "", source: "gefen",
+    budget_category_id: "", supplier: "", description: "", bank_account: "school",
+  };
+  const handleSubmit = async (form: ExpenseFormState) => {
+    try {
+      await addExpense.mutateAsync({
+        expense_date: form.expense_date, amount: Number(form.amount),
+        source: form.source, bank_account: form.bank_account,
+        budget_category_id: form.budget_category_id || null,
+        supplier: form.supplier || null, description: form.description || null,
+      } as NewExpense);
+      toast.success("ההוצאה נוספה בהצלחה");
+      onClose();
+    } catch { toast.error("שגיאה בשמירת ההוצאה"); }
+  };
+  return (
+    <Modal title="הוספת הוצאה" subtitle="הזן את פרטי ההוצאה" onClose={onClose}>
+      <ExpenseForm initial={initial} onSubmit={handleSubmit} onClose={onClose}
+        isPending={addExpense.isPending} submitLabel="הוסף הוצאה" />
+    </Modal>
+  );
+}
 
-          {/* Source */}
-          <div>
-            <label style={labelStyle}>מקור תקציב</label>
-            <div style={{ display: "flex", gap: "8px" }}>
-              {(["gefen", "iriyah", "horim"] as BudgetSource[]).map((src) => {
-                const cfg = SOURCE_CONFIG[src];
-                const active = form.source === src;
-                return (
-                  <button key={src} type="button" onClick={() => { set("source", src); set("budget_category_id", ""); }}
-                    style={{
-                      flex: 1, padding: "8px 0",
-                      borderRadius: "8px", border: `1.5px solid ${active ? cfg.color : "#E8E2D9"}`,
-                      background: active ? cfg.bg : "#fff",
-                      color: active ? cfg.textColor : "#888079",
-                      fontSize: "13px", fontWeight: active ? "600" : "400",
-                      cursor: "pointer", fontFamily: "var(--font-sans)",
-                      transition: "all 0.12s",
-                    }}>
-                    {cfg.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+// ─── Edit Modal ───────────────────────────────────────────────────────────────
 
-          {/* Category */}
-          <div>
-            <label style={labelStyle}>קטגוריה</label>
-            <select value={form.budget_category_id} onChange={(e) => set("budget_category_id", e.target.value)}
-              style={inputStyle}>
-              <option value="">— ללא קטגוריה —</option>
-              {(categories ?? []).map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
+function EditExpenseModal({ expense, onClose }: { expense: Expense; onClose: () => void }) {
+  const updateExpense = useUpdateExpense();
+  const initial: ExpenseFormState = {
+    expense_date: expense.expense_date,
+    amount: String(expense.amount),
+    source: expense.source,
+    budget_category_id: expense.budget_category_id ?? "",
+    supplier: expense.supplier ?? "",
+    description: expense.description ?? "",
+    bank_account: expense.bank_account ?? "school",
+  };
+  const handleSubmit = async (form: ExpenseFormState) => {
+    try {
+      await updateExpense.mutateAsync({
+        id: expense.id,
+        expense_date: form.expense_date, amount: Number(form.amount),
+        source: form.source, bank_account: form.bank_account,
+        budget_category_id: form.budget_category_id || null,
+        supplier: form.supplier || null, description: form.description || null,
+      });
+      toast.success("ההוצאה עודכנה בהצלחה");
+      onClose();
+    } catch { toast.error("שגיאה בעדכון ההוצאה"); }
+  };
+  return (
+    <Modal title="עריכת הוצאה" subtitle="ערוך את פרטי ההוצאה" onClose={onClose}>
+      <ExpenseForm initial={initial} onSubmit={handleSubmit} onClose={onClose}
+        isPending={updateExpense.isPending} submitLabel="שמור שינויים" />
+    </Modal>
+  );
+}
 
-          {/* Supplier + Bank */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <label style={labelStyle}>ספק</label>
-              <input type="text" value={form.supplier} onChange={(e) => set("supplier", e.target.value)}
-                placeholder="שם הספק" style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>חשבון בנק</label>
-              <select value={form.bank_account} onChange={(e) => set("bank_account", e.target.value as "school" | "parents")}
-                style={inputStyle}>
-                <option value="school">בית ספר</option>
-                <option value="parents">הורים</option>
-              </select>
-            </div>
-          </div>
+// ─── Delete Confirmation ──────────────────────────────────────────────────────
 
-          {/* Description */}
-          <div>
-            <label style={labelStyle}>תיאור (אופציונלי)</label>
-            <input type="text" value={form.description} onChange={(e) => set("description", e.target.value)}
-              placeholder="פרטים נוספים על ההוצאה" style={inputStyle} />
-          </div>
-
-          {/* Actions */}
-          <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
-            <button type="button" onClick={onClose} style={{
-              flex: 1, padding: "10px 0",
-              border: "1px solid #E8E2D9", borderRadius: "8px",
-              background: "#fff", color: "#6B6560", fontSize: "14px",
-              cursor: "pointer", fontFamily: "var(--font-sans)",
-            }}>ביטול</button>
-            <button type="submit" disabled={addExpense.isPending} style={{
-              flex: 2, padding: "10px 0",
-              border: "none", borderRadius: "8px",
-              background: addExpense.isPending ? "#888" : "#1A3D2B",
-              color: "#fff", fontSize: "14px", fontWeight: "500",
-              cursor: addExpense.isPending ? "not-allowed" : "pointer",
-              fontFamily: "var(--font-sans)",
-            }}>
-              {addExpense.isPending ? "שומר..." : "הוסף הוצאה"}
-            </button>
-          </div>
-        </form>
+function DeleteConfirm({ expense, onClose }: { expense: Expense; onClose: () => void }) {
+  const deleteExpense = useDeleteExpense();
+  const handleDelete = async () => {
+    try {
+      await deleteExpense.mutateAsync(expense.id);
+      toast.success("ההוצאה נמחקה");
+      onClose();
+    } catch { toast.error("שגיאה במחיקה"); }
+  };
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.4)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
+    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        background: "#fff", borderRadius: "16px", width: "100%", maxWidth: "380px",
+        padding: "28px 28px 24px", boxShadow: "0 24px 80px rgba(0,0,0,0.2)",
+      }}>
+        <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: "#FEF2F2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+          <Trash2 size={20} color="#DC2626" />
+        </div>
+        <div style={{ fontSize: "17px", fontWeight: "600", color: "#1A1A1A", marginBottom: "8px" }}>מחיקת הוצאה</div>
+        <div style={{ fontSize: "14px", color: "#6B6560", lineHeight: 1.6, marginBottom: "24px" }}>
+          האם למחוק הוצאה של <strong>{fmt(expense.amount)}</strong>
+          {expense.supplier ? ` מ-${expense.supplier}` : ""}? פעולה זו אינה הפיכה.
+        </div>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px",
+            background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)",
+          }}>ביטול</button>
+          <button onClick={handleDelete} disabled={deleteExpense.isPending} style={{
+            flex: 1, padding: "10px 0", border: "none", borderRadius: "8px",
+            background: deleteExpense.isPending ? "#888" : "#DC2626",
+            color: "#fff", fontSize: "14px", fontWeight: "500",
+            cursor: deleteExpense.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
+          }}>
+            {deleteExpense.isPending ? "מוחק..." : "מחק"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -230,18 +312,18 @@ function AddExpenseModal({ onClose }: { onClose: () => void }) {
 
 export default function ExpensesPage() {
   const [filter, setFilter] = useState<BudgetSource | "all">("all");
-  const [showModal, setShowModal] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [deletingExpense, setDeletingExpense] = useState<Expense | null>(null);
+
   const { data: expenses, isLoading } = useExpenses(filter);
   const { data: allExpenses } = useExpenses("all");
 
   const total = (expenses ?? []).reduce((sum, e) => sum + e.amount, 0);
-
-  // Per-source totals for hero
   const expTotals = { gefen: 0, iriyah: 0, horim: 0 };
   (allExpenses ?? []).forEach((e) => { expTotals[e.source] += e.amount; });
   const grandTotal = Object.values(expTotals).reduce((a, b) => a + b, 0);
 
-  // Animations
   const animGrand = useCountUp(grandTotal);
   const animGefen = useCountUp(expTotals.gefen);
   const animIriyah = useCountUp(expTotals.iriyah);
@@ -254,31 +336,28 @@ export default function ExpensesPage() {
 
   return (
     <>
-      {showModal && <AddExpenseModal onClose={() => setShowModal(false)} />}
+      {showAdd && <AddExpenseModal onClose={() => setShowAdd(false)} />}
+      {editingExpense && <EditExpenseModal expense={editingExpense} onClose={() => setEditingExpense(null)} />}
+      {deletingExpense && <DeleteConfirm expense={deletingExpense} onClose={() => setDeletingExpense(null)} />}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
 
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>
-              הוצאות
-            </h1>
+            <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>הוצאות</h1>
             <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099" }}>
               {isLoading ? "טוען..." : `${(expenses ?? []).length} הוצאות · סה״כ ${fmt(total)}`}
             </p>
           </div>
-          <button onClick={() => setShowModal(true)} style={{
-            display: "flex", alignItems: "center", gap: "7px",
-            padding: "10px 18px",
+          <button onClick={() => setShowAdd(true)} style={{
+            display: "flex", alignItems: "center", gap: "7px", padding: "10px 18px",
             background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
-            border: "none", borderRadius: "10px",
-            color: "#fff", fontSize: "14px", fontWeight: "500",
-            cursor: "pointer", fontFamily: "var(--font-sans)",
-            boxShadow: "0 4px 12px rgba(26,61,43,0.3)",
+            border: "none", borderRadius: "10px", color: "#fff",
+            fontSize: "14px", fontWeight: "500", cursor: "pointer",
+            fontFamily: "var(--font-sans)", boxShadow: "0 4px 12px rgba(26,61,43,0.3)",
           }}>
-            <Plus size={16} />
-            הוסף הוצאה
+            <Plus size={16} />הוסף הוצאה
           </button>
         </div>
 
@@ -286,26 +365,16 @@ export default function ExpensesPage() {
         <div style={{
           borderRadius: "18px",
           background: "linear-gradient(160deg, #8B1A1A 0%, #6B1212 55%, #460C0C 100%)",
-          padding: "24px 28px",
-          color: "#fff",
-          position: "relative",
-          overflow: "hidden",
+          padding: "24px 28px", color: "#fff", position: "relative", overflow: "hidden",
           boxShadow: "0 8px 32px rgba(107,18,18,0.45)",
         }}>
-          {/* Decorative circles */}
           <div style={{ position: "absolute", top: "-50px", left: "-50px", width: "180px", height: "180px", borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
           <div style={{ position: "absolute", bottom: "-30px", right: "25%", width: "130px", height: "130px", borderRadius: "50%", background: "rgba(255,255,255,0.03)" }} />
-
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", zIndex: 1 }}>
-            {/* Grand total */}
             <div>
               <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)", marginBottom: "6px", letterSpacing: "0.04em" }}>סה״כ הוצאות</div>
-              <div className="num" style={{ fontSize: "38px", fontWeight: "200", letterSpacing: "-1.5px", color: "#fff", lineHeight: 1 }}>
-                {fmt(animGrand)}
-              </div>
+              <div className="num" style={{ fontSize: "38px", fontWeight: "200", letterSpacing: "-1.5px", color: "#fff", lineHeight: 1 }}>{fmt(animGrand)}</div>
             </div>
-
-            {/* Per-source breakdown */}
             <div style={{ display: "flex", gap: "28px" }}>
               {(["gefen", "iriyah", "horim"] as BudgetSource[]).map((src) => {
                 const cfg = SOURCE_CONFIG[src];
@@ -336,39 +405,28 @@ export default function ExpensesPage() {
                 background: active && cfg ? cfg.bg : active ? "#1A3D2B" : "#fff",
                 color: active && cfg ? cfg.textColor : active ? "#fff" : "#888079",
                 fontSize: "13px", fontWeight: active ? "600" : "400",
-                cursor: "pointer", fontFamily: "var(--font-sans)",
-                transition: "all 0.12s",
-              }}>
-                {label}
-              </button>
+                cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
+              }}>{label}</button>
             );
           })}
         </div>
 
         {/* Table */}
-        <div style={{
-          background: "#fff", border: "1px solid #EAE5DE",
-          borderRadius: "14px", overflow: "hidden",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
-        }}>
-          {/* Table header */}
+        <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "120px 100px 80px 1fr 1fr",
-            padding: "12px 20px",
-            borderBottom: "1px solid #EAE5DE",
+            display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 1fr 72px",
+            padding: "12px 20px", borderBottom: "1px solid #EAE5DE",
             fontSize: "11px", fontWeight: "600", color: "#AAA099",
-            letterSpacing: "0.04em", textTransform: "uppercase",
-            gap: "12px",
+            letterSpacing: "0.04em", textTransform: "uppercase", gap: "12px",
           }}>
             <span>תאריך</span>
             <span style={{ textAlign: "right" }}>סכום</span>
             <span>מקור</span>
             <span>קטגוריה</span>
             <span>ספק</span>
+            <span></span>
           </div>
 
-          {/* Rows */}
           {isLoading ? (
             <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>טוען...</div>
           ) : (expenses ?? []).length === 0 ? (
@@ -382,17 +440,15 @@ export default function ExpensesPage() {
               const cfg = SOURCE_CONFIG[e.source];
               return (
                 <div key={e.id} style={{
-                  display: "grid",
-                  gridTemplateColumns: "120px 100px 80px 1fr 1fr",
+                  display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 1fr 72px",
                   padding: "14px 20px", gap: "12px",
                   borderBottom: i < (expenses ?? []).length - 1 ? "1px solid #F3EEE8" : "none",
-                  alignItems: "center",
-                  transition: "background 0.1s",
+                  alignItems: "center", transition: "background 0.1s",
                 }}
                   onMouseEnter={(el) => (el.currentTarget.style.background = "#FAFAF8")}
                   onMouseLeave={(el) => (el.currentTarget.style.background = "transparent")}
                 >
-                  <span style={{ fontSize: "13px", color: "#6B6560" }} className="num">
+                  <span className="num" style={{ fontSize: "13px", color: "#6B6560" }}>
                     {new Date(e.expense_date).toLocaleDateString("he-IL")}
                   </span>
                   <span className="num" style={{ fontSize: "14px", fontWeight: "500", color: "#1A1A1A", textAlign: "right" }}>
@@ -402,8 +458,7 @@ export default function ExpensesPage() {
                     display: "inline-flex", alignItems: "center",
                     padding: "3px 10px", borderRadius: "99px",
                     fontSize: "11px", fontWeight: "600",
-                    background: cfg.bg, color: cfg.textColor,
-                    whiteSpace: "nowrap",
+                    background: cfg.bg, color: cfg.textColor, whiteSpace: "nowrap",
                   }}>
                     {cfg.label}
                   </span>
@@ -413,6 +468,27 @@ export default function ExpensesPage() {
                   <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {e.supplier ?? e.description ?? "—"}
                   </span>
+                  {/* Actions */}
+                  <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                    <button
+                      onClick={() => setEditingExpense(e)}
+                      title="ערוך"
+                      style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                      onMouseEnter={(el) => { el.currentTarget.style.background = "#F0F0EE"; el.currentTarget.style.color = "#1A1A1A"; }}
+                      onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => setDeletingExpense(e)}
+                      title="מחק"
+                      style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                      onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
+                      onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
               );
             })

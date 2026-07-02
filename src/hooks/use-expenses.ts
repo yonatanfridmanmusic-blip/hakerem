@@ -14,6 +14,7 @@ export interface Expense {
   activity_name: string | null;
   supplier: string | null;
   description: string | null;
+  bank_account: "school" | "parents" | null;
   budget_categories?: { name: string } | null;
 }
 
@@ -42,7 +43,7 @@ export function useExpenses(sourceFilter?: BudgetSource | "all") {
 
       let query = supabase
         .from("expenses")
-        .select("id, expense_date, amount, source, budget_category_id, activity_name, supplier, description, budget_categories(name)")
+        .select("id, expense_date, amount, source, budget_category_id, activity_name, supplier, description, bank_account, budget_categories(name)")
         .eq("school_year_id", yearId)
         .order("expense_date", { ascending: false });
 
@@ -75,6 +76,36 @@ export function useAddExpense() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useUpdateExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...fields }: Partial<NewExpense> & { id: string }) => {
+      const { error } = await supabase.from("expenses").update(fields).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+    },
+  });
+}
+
+export function useDeleteExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("expenses").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
     },
   });
 }
