@@ -46,6 +46,7 @@ function AddIncomeModal({ onClose }: { onClose: () => void }) {
     payment_method: string;
     reference_number: string;
     budget_category_id: string;
+    notes: string;
   }>({
     income_date: today(),
     amount: "",
@@ -56,6 +57,7 @@ function AddIncomeModal({ onClose }: { onClose: () => void }) {
     payment_method: "",
     reference_number: "",
     budget_category_id: "",
+    notes: "",
   });
 
   const addIncome = useAddIncome();
@@ -95,6 +97,7 @@ function AddIncomeModal({ onClose }: { onClose: () => void }) {
         payment_method: form.payment_method || null,
         reference_number: form.reference_number || null,
         budget_category_id: resolvedCategoryId,
+        notes: form.notes || null,
       };
       await addIncome.mutateAsync(payload);
       toast.success("ההכנסה נוספה בהצלחה");
@@ -247,6 +250,18 @@ function AddIncomeModal({ onClose }: { onClose: () => void }) {
             <label style={labelStyle}>תיאור (אופציונלי)</label>
             <input type="text" value={form.description} onChange={(e) => set("description", e.target.value)}
               placeholder="פרטים נוספים על ההכנסה" style={inputStyle} />
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label style={labelStyle}>הערות (אופציונלי)</label>
+            <textarea
+              value={form.notes}
+              onChange={(e) => set("notes", e.target.value)}
+              placeholder="הערות חופשיות"
+              rows={2}
+              style={{ ...inputStyle, resize: "vertical", lineHeight: "1.5" }}
+            />
           </div>
 
           {/* Actions */}

@@ -3,7 +3,6 @@ import { useState } from "react";
 import {
   useSchoolYears,
   useCreateSchoolYear,
-  useUpdateSchoolYear,
   useSetActiveYear,
 } from "@/hooks/use-school-years";
 import { useGrades, useAddGrade, useUpdateGrade, useDeleteGrade } from "@/hooks/use-grades";
@@ -122,7 +121,7 @@ function SettingsPage() {
         <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.45)", marginBottom: "4px", letterSpacing: "0.06em" }}>ניהול מערכת</div>
         <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, color: "#fff" }}>הגדרות</h1>
         <div style={{ marginTop: "8px", fontSize: "13px", color: "rgba(255,255,255,0.5)" }}>
-          שנות לימודים · שכבות · קטגוריות תקציב
+          שנות לימודים · שכבות · קטגוריות תקציב · צוות
         </div>
       </div>
 

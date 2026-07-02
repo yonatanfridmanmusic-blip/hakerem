@@ -1,8 +1,9 @@
 import { getActiveYearId } from "@/lib/active-year";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { BudgetSource } from "@/types/budget";
 
-export type BudgetSource = "gefen" | "iriyah" | "horim";
+export type { BudgetSource };
 
 export interface BudgetCategory {
   id: string;
