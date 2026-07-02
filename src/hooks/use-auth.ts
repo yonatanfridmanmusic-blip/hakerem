@@ -8,6 +8,7 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,19 +19,21 @@ export function useAuth() {
           setUser(null);
           setRole(null);
           setFullName(null);
+          setIsSuperAdmin(false);
           setLoading(false);
         }
         return;
       }
       const [{ data: roles }, { data: profile }] = await Promise.all([
         supabase.from("user_roles").select("role").eq("user_id", u.id),
-        supabase.from("profiles").select("full_name").eq("id", u.id).maybeSingle(),
+        supabase.from("profiles").select("full_name, system_role").eq("id", u.id).maybeSingle(),
       ]);
       if (!mounted) return;
       setUser(u);
       const isAdmin = roles?.some((r) => r.role === "admin");
       setRole(isAdmin ? "admin" : roles && roles.length > 0 ? "secretary" : null);
       setFullName(profile?.full_name ?? u.email ?? null);
+      setIsSuperAdmin(profile?.system_role === "super_admin");
       setLoading(false);
     };
 
@@ -46,5 +49,5 @@ export function useAuth() {
     };
   }, []);
 
-  return { user, role, fullName, loading, isAdmin: role === "admin" };
+  return { user, role, fullName, loading, isAdmin: role === "admin", isSuperAdmin };
 }

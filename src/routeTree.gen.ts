@@ -20,6 +20,7 @@ import { Route as AuthenticatedHorimIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedExpensesIndexRouteImport } from './routes/_authenticated/expenses/index'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedBudgetIndexRouteImport } from './routes/_authenticated/budget/index'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin/index'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -81,11 +82,18 @@ const AuthenticatedBudgetIndexRoute =
     path: '/budget/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedAdminIndexRoute =
+  AuthenticatedAdminIndexRouteImport.update({
+    id: '/admin/',
+    path: '/admin/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
+  '/admin/': typeof AuthenticatedAdminIndexRoute
   '/budget/': typeof AuthenticatedBudgetIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/expenses/': typeof AuthenticatedExpensesIndexRoute
@@ -98,6 +106,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
+  '/admin': typeof AuthenticatedAdminIndexRoute
   '/budget': typeof AuthenticatedBudgetIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/expenses': typeof AuthenticatedExpensesIndexRoute
@@ -112,6 +121,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
+  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/budget/': typeof AuthenticatedBudgetIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/expenses/': typeof AuthenticatedExpensesIndexRoute
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/onboarding'
+    | '/admin/'
     | '/budget/'
     | '/dashboard/'
     | '/expenses/'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/onboarding'
+    | '/admin'
     | '/budget'
     | '/dashboard'
     | '/expenses'
@@ -151,6 +163,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/onboarding'
+    | '/_authenticated/admin/'
     | '/_authenticated/budget/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/expenses/'
@@ -246,10 +259,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBudgetIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/admin/': {
+      id: '/_authenticated/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
   AuthenticatedBudgetIndexRoute: typeof AuthenticatedBudgetIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedExpensesIndexRoute: typeof AuthenticatedExpensesIndexRoute
@@ -260,6 +281,7 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   AuthenticatedBudgetIndexRoute: AuthenticatedBudgetIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   AuthenticatedExpensesIndexRoute: AuthenticatedExpensesIndexRoute,

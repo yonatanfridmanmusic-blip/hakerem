@@ -9,6 +9,7 @@ import {
   FileText,
   Settings,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -40,7 +41,7 @@ function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { fullName, isAdmin } = useAuth();
+  const { fullName, isAdmin, isSuperAdmin } = useAuth();
   const initial = (fullName ?? "?").trim().charAt(0).toUpperCase();
 
   const isActive = (href: string) =>
@@ -157,6 +158,26 @@ function AppSidebar() {
         flexDirection: "column",
         gap: "2px",
       }}>
+        {isSuperAdmin && (
+          <Link
+            to="/admin"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              padding: "8px 10px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              color: isActive("/admin") ? "#fff" : "rgba(255,255,255,0.45)",
+              background: isActive("/admin") ? "rgba(255,255,255,0.1)" : "transparent",
+              textDecoration: "none",
+              marginBottom: "2px",
+            }}
+          >
+            <ShieldCheck size={14} style={{ color: isActive("/admin") ? "#7AAA8E" : "rgba(255,255,255,0.3)" }} />
+            בתי ספר
+          </Link>
+        )}
         {isAdmin && (
           <Link
             to="/settings"
