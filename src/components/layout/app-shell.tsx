@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useOrganization } from "@/hooks/use-organization";
 import { useQueryClient } from "@tanstack/react-query";
 
 const NAV_ITEMS = [
@@ -41,7 +42,10 @@ function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { fullName, isAdmin, isSuperAdmin } = useAuth();
+  const { fullName, isSuperAdmin } = useAuth();
+  const { data: membership } = useOrganization();
+  const orgRole = membership?.role;
+  const canManageSettings = orgRole === "owner" || orgRole === "admin";
   const initial = (fullName ?? "?").trim().charAt(0).toUpperCase();
 
   const isActive = (href: string) =>
@@ -178,7 +182,7 @@ function AppSidebar() {
             בתי ספר
           </Link>
         )}
-        {isAdmin && (
+        {canManageSettings && (
           <Link
             to="/settings"
             style={{

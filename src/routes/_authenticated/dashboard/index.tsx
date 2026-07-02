@@ -212,6 +212,8 @@ function SkeletonCard() {
 function WelcomeSetup() {
   const { data: membership } = useOrganization();
   const orgName = membership?.organization?.name ?? "בית הספר שלך";
+  const orgRole = membership?.role;
+  const canManage = orgRole === "owner" || orgRole === "admin";
   const [firstName, setFirstName] = useState<string>("");
 
   useEffect(() => {
@@ -234,8 +236,10 @@ function WelcomeSetup() {
     {
       num: 2, done: false,
       title: "הגדרת שנת לימודים",
-      desc: "צרי שנת לימודים פעילה — השלב הכי חשוב",
-      cta: { label: "צור שנת לימודים", to: "/settings" as const },
+      desc: canManage
+        ? "צרי שנת לימודים פעילה — השלב הכי חשוב"
+        : "המנהל צריך ליצור שנת לימודים פעילה",
+      cta: canManage ? { label: "צור שנת לימודים", to: "/settings" as const } : null,
     },
     {
       num: 3, done: false,
