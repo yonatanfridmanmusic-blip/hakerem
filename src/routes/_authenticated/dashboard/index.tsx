@@ -1,7 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowDownLeft, Users } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useDashboardSummary, type SourceSummary } from "@/hooks/use-dashboard-summary";
+import { useOrganization } from "@/hooks/use-organization";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/dashboard/")({
   component: DashboardPage,
@@ -204,6 +207,229 @@ function SkeletonCard() {
   );
 }
 
+// ─── Welcome Setup (shown when no active school year) ─────────────────────────
+
+function WelcomeSetup() {
+  const { data: membership } = useOrganization();
+  const orgName = membership?.organization?.name ?? "בית הספר שלך";
+  const [firstName, setFirstName] = useState<string>("");
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const fullName = data.user?.user_metadata?.full_name as string | undefined;
+      const name = (fullName ?? "").split(" ")[0] || "";
+      setFirstName(name);
+    });
+  }, []);
+
+  const greeting = firstName ? `ברוכים הבאים, ${firstName}!` : "ברוכים הבאים להכרם!";
+
+  const STEPS = [
+    {
+      num: 1, done: true,
+      title: "יצירת חשבון בית הספר",
+      desc: `הארגון "${orgName}" נוצר בהצלחה`,
+      cta: null,
+    },
+    {
+      num: 2, done: false,
+      title: "הגדרת שנת לימודים",
+      desc: "צרי שנת לימודים פעילה — השלב הכי חשוב",
+      cta: { label: "צור שנת לימודים", to: "/settings" as const },
+    },
+    {
+      num: 3, done: false,
+      title: "הגדרת קטגוריות תקציב",
+      desc: "הגדרי קטגוריות לגפן, עירייה והורים",
+      cta: null,
+    },
+    {
+      num: 4, done: false,
+      title: "הזנת נתונים ראשונים",
+      desc: "הוסיפי הכנסה או הוצאה ראשונה — הכל יחל לזוז",
+      cta: null,
+    },
+  ];
+
+  const FEATURES = [
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2D6644" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
+        </svg>
+      ),
+      label: "לוח בקרה",
+      desc: "מבט כולל על כל הכסף",
+    },
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B5472A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>
+      ),
+      label: "הוצאות",
+      desc: "מעקב לפי ספק וקטגוריה",
+    },
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2D6644" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
+        </svg>
+      ),
+      label: "הכנסות",
+      desc: "גפן, עירייה, הורים",
+    },
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B2F6E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+        </svg>
+      ),
+      label: "דוחות",
+      desc: "PDF מוכן להגשה",
+    },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+
+      {/* ── Hero banner ── */}
+      <div style={{
+        background: "linear-gradient(135deg, #2D6644 0%, #1A3D2B 55%, #0D2118 100%)",
+        borderRadius: "20px", padding: "36px 40px",
+        color: "#fff", position: "relative", overflow: "hidden",
+        boxShadow: "0 16px 56px rgba(13,33,24,0.4)",
+      }}>
+        {/* Background blobs */}
+        <div style={{ position: "absolute", top: "-60px", left: "-60px", width: "220px", height: "220px", borderRadius: "50%", background: "rgba(255,255,255,0.04)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", bottom: "-40px", right: "10%", width: "160px", height: "160px", borderRadius: "50%", background: "rgba(255,255,255,0.03)", pointerEvents: "none" }} />
+
+        <div style={{ position: "relative", zIndex: 1 }}>
+          {/* Logo */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px" }}>
+            <div style={{ width: "36px", height: "36px", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,255,255,0.15)" }}>
+              <svg width="20" height="20" viewBox="0 0 36 36" fill="none">
+                <line x1="18" y1="4" x2="18" y2="9" stroke="#7AAA8E" strokeWidth="1.8" strokeLinecap="round"/>
+                <circle cx="12" cy="14" r="5.5" fill="#7AAA8E"/><circle cx="24" cy="14" r="5.5" fill="#5AA674"/><circle cx="18" cy="23" r="5.5" fill="#4A8C62"/>
+              </svg>
+            </div>
+            <span style={{ fontSize: "14px", fontWeight: "500", color: "rgba(255,255,255,0.7)", letterSpacing: "0.02em" }}>הכרם — ניהול פיננסי</span>
+          </div>
+
+          <h1 style={{ fontSize: "32px", fontWeight: "300", color: "#fff", letterSpacing: "-1px", margin: "0 0 8px", lineHeight: 1.2 }}>
+            {greeting}
+          </h1>
+          <p style={{ fontSize: "15px", color: "rgba(255,255,255,0.65)", margin: "0 0 28px", lineHeight: 1.65, maxWidth: "480px" }}>
+            עוד כמה שלבים קצרים ולוח הבקרה שלך יהיה חי עם כל הנתונים.
+            בואי נגדיר את הסביבה שלך — זה לוקח פחות מ-2 דקות.
+          </p>
+
+          {/* Progress bar */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ height: "5px", flex: 1, background: "rgba(255,255,255,0.12)", borderRadius: "99px", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: "25%", background: "linear-gradient(90deg, #7EE8A6, #4DC483)", borderRadius: "99px", transition: "width 0.8s" }} />
+            </div>
+            <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap" }}>שלב 1 מתוך 4</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Setup checklist ── */}
+      <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "16px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #F3EEE8" }}>
+          <div style={{ fontSize: "15px", fontWeight: "500", color: "#1A1A1A" }}>מדריך התחלה מהירה</div>
+          <div style={{ fontSize: "13px", color: "#AAA099", marginTop: "3px" }}>עקבי אחרי השלבים לפי הסדר</div>
+        </div>
+
+        {STEPS.map((step, idx) => {
+          const isActive = !step.done && (idx === 0 || STEPS[idx - 1].done);
+          const isUpcoming = !step.done && !isActive;
+          return (
+            <div key={step.num} style={{
+              display: "flex", alignItems: "flex-start", gap: "16px",
+              padding: "18px 24px",
+              borderBottom: idx < STEPS.length - 1 ? "1px solid #F8F4F0" : "none",
+              background: isActive ? "linear-gradient(90deg, #F4FAF6 0%, #fff 60%)" : "#fff",
+              transition: "background 0.2s",
+            }}>
+              {/* Step indicator */}
+              <div style={{ flexShrink: 0, marginTop: "1px" }}>
+                {step.done ? (
+                  <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "#2D6644", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                ) : isActive ? (
+                  <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "linear-gradient(135deg, #2D6644, #1A3D2B)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(45,102,68,0.4)" }}>
+                    <span style={{ fontSize: "12px", fontWeight: "600", color: "#fff" }}>{step.num}</span>
+                  </div>
+                ) : (
+                  <div style={{ width: "28px", height: "28px", borderRadius: "50%", border: "1.5px solid #E8E2D9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ fontSize: "12px", color: "#C0BAB4" }}>{step.num}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Content */}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "14.5px", fontWeight: step.done ? "400" : isActive ? "500" : "400", color: step.done ? "#AAA099" : isUpcoming ? "#C0BAB4" : "#1A1A1A", textDecoration: step.done ? "line-through" : "none", marginBottom: "3px" }}>
+                  {step.title}
+                </div>
+                <div style={{ fontSize: "12.5px", color: step.done ? "#C0BAB4" : isUpcoming ? "#D4CFC9" : "#6B6560", lineHeight: 1.5 }}>
+                  {step.desc}
+                </div>
+                {isActive && step.cta && (
+                  <Link to={step.cta.to} style={{ display: "inline-flex", alignItems: "center", gap: "7px", marginTop: "12px", padding: "9px 18px", background: "linear-gradient(135deg, #2D6644, #1A3D2B)", color: "#fff", borderRadius: "9px", fontSize: "13.5px", fontWeight: "500", textDecoration: "none", fontFamily: "var(--font-sans)", boxShadow: "0 3px 12px rgba(26,61,43,0.3)" }}>
+                    {step.cta.label}
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M5 10L9 7 5 4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" transform="rotate(180 7 7)"/>
+                    </svg>
+                  </Link>
+                )}
+              </div>
+
+              {/* Status badge */}
+              <div style={{ flexShrink: 0, marginTop: "3px" }}>
+                {step.done && <span style={{ fontSize: "11px", color: "#2D6644", fontWeight: "600", background: "#EDFBF3", padding: "3px 9px", borderRadius: "99px" }}>הושלם</span>}
+                {isActive && <span style={{ fontSize: "11px", color: "#1A3D2B", fontWeight: "600", background: "#D5F0E0", padding: "3px 9px", borderRadius: "99px" }}>עכשיו</span>}
+                {isUpcoming && <span style={{ fontSize: "11px", color: "#C0BAB4", background: "#F5F2EE", padding: "3px 9px", borderRadius: "99px" }}>בקרוב</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── What you'll get ── */}
+      <div>
+        <div style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "12px" }}>
+          מה תקבלי אחרי ההגדרה
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "12px" }}>
+          {FEATURES.map((f) => (
+            <div key={f.label} style={{
+              background: "#fff", border: "1px solid #EAE5DE",
+              borderRadius: "12px", padding: "16px 18px",
+              display: "flex", alignItems: "center", gap: "12px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+            }}>
+              <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "#F5F5F2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {f.icon}
+              </div>
+              <div>
+                <div style={{ fontSize: "13.5px", fontWeight: "500", color: "#1A1A1A", marginBottom: "2px" }}>{f.label}</div>
+                <div style={{ fontSize: "11.5px", color: "#AAA099" }}>{f.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -221,31 +447,9 @@ export default function DashboardPage() {
   const animFromIncome     = useCountUp(incomeTotals.fromIncome);
   const animFromParentColl = useCountUp(incomeTotals.fromParentCollections);
 
-  // No active school year — show clear notice instead of all-zeros
+  // No active school year → full setup walkthrough
   if (!isLoading && !error && data && !data.schoolYear) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>לוח בקרה</h1>
-          <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099" }}>לא נמצאה שנת לימודים פעילה</p>
-        </div>
-        <div style={{
-          background: "linear-gradient(135deg, #FEF9EC 0%, #FDF3D5 100%)",
-          border: "1px solid #F0D98F", borderRadius: "16px",
-          padding: "32px 36px", display: "flex", alignItems: "center", gap: "20px",
-        }}>
-          <div style={{ fontSize: "32px" }}>📅</div>
-          <div>
-            <div style={{ fontSize: "16px", fontWeight: "500", color: "#92400E", marginBottom: "6px" }}>
-              אין שנת לימודים פעילה
-            </div>
-            <div style={{ fontSize: "13px", color: "#B45309", lineHeight: 1.6 }}>
-              יש להגדיר שנת לימודים פעילה בהגדרות המערכת לפני שניתן לצפות בנתונים.
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <WelcomeSetup />;
   }
 
   return (
