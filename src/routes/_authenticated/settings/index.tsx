@@ -12,12 +12,20 @@ import {
   useBudgetPlan,
   type BudgetSource,
 } from "@/hooks/use-budget-plan";
+import {
+  useOrganization,
+  useOrgMembers,
+  useUpdateMemberStatus,
+  useRemoveMember,
+  type OrgRole,
+  type MemberStatus,
+} from "@/hooks/use-organization";
 
 export const Route = createFileRoute("/_authenticated/settings/")({
   component: SettingsPage,
 });
 
-type Tab = "years" | "grades" | "categories";
+type Tab = "years" | "grades" | "categories" | "team";
 
 // ─── Source config (matches rest of app) ──────────────────────────────────
 
@@ -98,6 +106,7 @@ function SettingsPage() {
     { key: "years",      label: "שנות לימודים" },
     { key: "grades",     label: "שכבות וכיתות" },
     { key: "categories", label: "קטגוריות תקציב" },
+    { key: "team",       label: "צוות" },
   ];
 
   return (
@@ -156,6 +165,7 @@ function SettingsPage() {
       {tab === "years"      && <YearsTab />}
       {tab === "grades"     && <GradesTab />}
       {tab === "categories" && <CategoriesTab />}
+      {tab === "team"       && <TeamTab />}
     </div>
   );
 }
@@ -494,6 +504,240 @@ function CategoryList({ source, color, bg, textColor }: { source: BudgetSource; 
           + הוסף קטגוריה
         </button>
       )}
+    </div>
+  );
+}
+
+// ─── Team tab ───────────────────────────────────────────────────────────────
+
+const ROLE_LABEL: Record<OrgRole, string> = {
+  owner:  "מנהל ראשי",
+  admin:  "מנהל",
+  viewer: "צופה",
+};
+
+const STATUS_LABEL: Record<MemberStatus, string> = {
+  active:   "פעיל",
+  pending:  "ממתין לאישור",
+  rejected: "נדחה",
+};
+
+function TeamTab() {
+  const { data: membership } = useOrganization();
+  const { data: members = [], isLoading } = useOrgMembers();
+  const updateStatus = useUpdateMemberStatus();
+  const removeMember = useRemoveMember();
+
+  const isOwner = membership?.role === "owner";
+
+  if (isLoading) return <Loader />;
+
+  const pending = members.filter((m) => m.status === "pending");
+  const active  = members.filter((m) => m.status === "active");
+  const rejected = members.filter((m) => m.status === "rejected");
+
+  return (
+    <div>
+      {/* Org info strip */}
+      {membership?.organization && (
+        <div style={{
+          ...card,
+          background: "linear-gradient(to left, #EDFBF3, #fff)",
+          borderRight: "4px solid #2D6644",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+        }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "11px", color: "var(--hk-ink-3)", marginBottom: "2px" }}>ארגון</div>
+            <div style={{ fontWeight: 700, fontSize: "16px", color: "var(--hk-ink-1)" }}>
+              {membership.organization.name}
+            </div>
+            {membership.organization.city && (
+              <div style={{ fontSize: "12.5px", color: "var(--hk-ink-3)", marginTop: "2px" }}>
+                {membership.organization.city}
+              </div>
+            )}
+          </div>
+          <div style={{
+            background: "#2D6644",
+            color: "#fff",
+            borderRadius: "20px",
+            padding: "4px 14px",
+            fontSize: "12px",
+            fontWeight: 600,
+          }}>
+            {ROLE_LABEL[membership.role]}
+          </div>
+        </div>
+      )}
+
+      {/* Pending requests */}
+      {isOwner && pending.length > 0 && (
+        <div style={{ marginBottom: "24px" }}>
+          <SectionTitle>
+            <span style={{ background: "#B5472A", color: "#fff", borderRadius: "50%", width: "20px", height: "20px", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, marginLeft: "6px" }}>
+              {pending.length}
+            </span>
+            בקשות הצטרפות
+          </SectionTitle>
+          {pending.map((m) => (
+            <div key={m.id} style={{
+              ...card,
+              borderRight: "4px solid #F59E0B",
+              background: "linear-gradient(to left, #FFFBEB, #fff)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <Avatar name={m.profiles?.full_name ?? m.profiles?.email ?? "?"} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: "14.5px", color: "var(--hk-ink-1)" }}>
+                    {m.profiles?.full_name ?? "—"}
+                  </div>
+                  <div style={{ fontSize: "12.5px", color: "var(--hk-ink-3)", marginTop: "2px" }}>
+                    {m.profiles?.email}
+                  </div>
+                </div>
+                <Row>
+                  <button
+                    type="button"
+                    style={btnPrimary}
+                    disabled={updateStatus.isPending}
+                    onClick={() => updateStatus.mutate({ memberId: m.id, status: "active", role: "admin" })}
+                  >
+                    אשר
+                  </button>
+                  <button
+                    type="button"
+                    style={btnDanger}
+                    disabled={updateStatus.isPending}
+                    onClick={() => updateStatus.mutate({ memberId: m.id, status: "rejected" })}
+                  >
+                    דחה
+                  </button>
+                </Row>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Active members */}
+      <SectionTitle>חברי הצוות ({active.length})</SectionTitle>
+      {active.length === 0 && (
+        <div style={{ ...card, textAlign: "center", color: "var(--hk-ink-3)", padding: "36px 24px" }}>
+          אין חברי צוות עדיין
+        </div>
+      )}
+      {active.map((m) => (
+        <div key={m.id} style={card}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <Avatar name={m.profiles?.full_name ?? m.profiles?.email ?? "?"} />
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontWeight: 600, fontSize: "14.5px", color: "var(--hk-ink-1)" }}>
+                  {m.profiles?.full_name ?? "—"}
+                </span>
+                <RoleBadge role={m.role as OrgRole} />
+              </div>
+              <div style={{ fontSize: "12.5px", color: "var(--hk-ink-3)", marginTop: "2px" }}>
+                {m.profiles?.email}
+              </div>
+              {m.joined_at && (
+                <div style={{ fontSize: "11.5px", color: "var(--hk-ink-3)", marginTop: "2px" }}>
+                  הצטרף: {new Date(m.joined_at).toLocaleDateString("he-IL")}
+                </div>
+              )}
+            </div>
+            {isOwner && m.role !== "owner" && (
+              <button
+                type="button"
+                style={btnDanger}
+                onClick={() => removeMember.mutate(m.id)}
+                disabled={removeMember.isPending}
+              >
+                הסר
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {/* Rejected (collapsed, owner only) */}
+      {isOwner && rejected.length > 0 && (
+        <div style={{ marginTop: "20px" }}>
+          <SectionTitle>נדחו ({rejected.length})</SectionTitle>
+          {rejected.map((m) => (
+            <div key={m.id} style={{ ...card, opacity: 0.6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <Avatar name={m.profiles?.full_name ?? "?"} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--hk-ink-1)" }}>{m.profiles?.full_name ?? "—"}</div>
+                  <div style={{ fontSize: "12px", color: "var(--hk-ink-3)" }}>{m.profiles?.email}</div>
+                </div>
+                <button
+                  type="button"
+                  style={{ ...btnOutline, fontSize: "12px", padding: "6px 12px" }}
+                  onClick={() => updateStatus.mutate({ memberId: m.id, status: "active", role: "admin" })}
+                >
+                  אשר בכל זאת
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Avatar({ name }: { name: string }) {
+  const initials = name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+  return (
+    <div style={{
+      width: "38px", height: "38px",
+      borderRadius: "50%",
+      background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
+      color: "#fff",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: "14px", fontWeight: 700,
+      flexShrink: 0,
+    }}>
+      {initials || "?"}
+    </div>
+  );
+}
+
+function RoleBadge({ role }: { role: OrgRole }) {
+  const colors: Record<OrgRole, { bg: string; color: string }> = {
+    owner:  { bg: "#1A3D2B", color: "#fff" },
+    admin:  { bg: "#EDFBF3", color: "#2D6644" },
+    viewer: { bg: "#f5f5f5", color: "#888" },
+  };
+  const c = colors[role];
+  return (
+    <span style={{
+      background: c.bg, color: c.color,
+      borderRadius: "12px", padding: "2px 10px",
+      fontSize: "11px", fontWeight: 600,
+    }}>
+      {ROLE_LABEL[role]}
+    </span>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      fontSize: "13px", fontWeight: 600, color: "var(--hk-ink-2)",
+      marginBottom: "10px", display: "flex", alignItems: "center",
+    }}>
+      {children}
     </div>
   );
 }
