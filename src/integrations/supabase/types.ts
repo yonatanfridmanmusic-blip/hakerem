@@ -664,6 +664,77 @@ export type Database = {
           },
         ]
       }
+      organization_members: {
+        Row: {
+          created_at: string | null
+          id: string
+          invited_by: string | null
+          joined_at: string | null
+          organization_id: string
+          role: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          invited_by?: string | null
+          joined_at?: string | null
+          organization_id: string
+          role?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          invited_by?: string | null
+          joined_at?: string | null
+          organization_id?: string
+          role?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_members_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          city: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          name: string
+          plan: string
+          updated_at: string | null
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          name: string
+          plan?: string
+          updated_at?: string | null
+        }
+        Update: {
+          city?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          name?: string
+          plan?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       parent_collections: {
         Row: {
           amount: number
@@ -779,6 +850,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          system_role: string
           updated_at: string
         }
         Insert: {
@@ -786,6 +858,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          system_role?: string
           updated_at?: string
         }
         Update: {
@@ -793,6 +866,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          system_role?: string
           updated_at?: string
         }
         Relationships: []
@@ -806,6 +880,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          organization_id: string | null
           start_date: string
           updated_at: string
         }
@@ -817,6 +892,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          organization_id?: string | null
           start_date: string
           updated_at?: string
         }
@@ -828,10 +904,19 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          organization_id?: string | null
           start_date?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "school_years_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -859,7 +944,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      auth_is_super_admin: { Args: never; Returns: boolean }
+      auth_org_role_for_year: {
+        Args: { p_roles: string[]; p_year_id: string }
+        Returns: boolean
+      }
+      auth_user_org_ids: { Args: never; Returns: string[] }
+      list_public_organizations: {
+        Args: never
+        Returns: {
+          city: string
+          id: string
+          name: string
+        }[]
+      }
     }
     Enums: {
       ai_action_status: "draft" | "executed" | "cancelled" | "failed"

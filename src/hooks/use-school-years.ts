@@ -39,10 +39,23 @@ export function useCreateSchoolYear() {
       collection_percentage: number;
     }) => {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("לא מחובר");
+
+      // Resolve the user's active organization
+      const { data: mem } = await supabase
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (!mem?.organization_id) throw new Error("לא שויכת לארגון. צור ארגון תחילה.");
+
       const { error } = await supabase.from("school_years").insert({
         ...payload,
         is_active: false,
-        created_by: user?.id,
+        created_by: user.id,
+        organization_id: mem.organization_id,
       });
       if (error) throw error;
     },
