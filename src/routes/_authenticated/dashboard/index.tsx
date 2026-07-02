@@ -1,10 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowDownLeft, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDashboardSummary, type SourceSummary } from "@/hooks/use-dashboard-summary";
 import { useOrganization } from "@/hooks/use-organization";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { supabase } from "@/integrations/supabase/client";
+import { useCreateSchoolYear } from "@/hooks/use-school-years";
+import { useAddGrade, useGrades } from "@/hooks/use-grades";
+import { useAddBudgetCategory, type BudgetSource } from "@/hooks/use-budget-plan";
 
 export const Route = createFileRoute("/_authenticated/dashboard/")({
   component: DashboardPage,
@@ -207,229 +210,407 @@ function SkeletonCard() {
   );
 }
 
-// ─── Welcome Setup (shown when no active school year) ─────────────────────────
+// ─── Setup Wizard ─────────────────────────────────────────────────────────────
 
-function WelcomeSetup() {
+const GRADE_LETTERS = ["א","ב","ג","ד","ה","ו","ז","ח"];
+
+const CAT_SUGGESTIONS: Record<BudgetSource, string[]> = {
+  gefen:  ["ציוד משרדי","ספרי לימוד","ציוד ניקיון","חשמל ומים","תחזוקה","תקשורת"],
+  iriyah: ["שכר עובדים","שיפוצים","ריהוט","ציוד טכנולוגי","נסיעות"],
+  horim:  ["פעילויות חינוכיות","טיולים","הצגות ואירועים","ציוד ספורט","ימי כיף"],
+};
+
+const SRC_CFG = {
+  gefen:  { label: "גפן",    color: "#2D6644", light: "#EDFBF3", grad: "linear-gradient(135deg,#2D6644,#1A3D2B)" },
+  iriyah: { label: "עירייה", color: "#B5472A", light: "#FDF1EA", grad: "linear-gradient(135deg,#B5472A,#7C2E18)" },
+  horim:  { label: "הורים",  color: "#8B2F6E", light: "#F4EBF2", grad: "linear-gradient(135deg,#8B2F6E,#4A1A38)" },
+} as const;
+
+function SmartDefaults() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const hebrewMap: Record<number,string> = { 2024:'תשפ"ה', 2025:'תשפ"ו', 2026:'תשפ"ז', 2027:'תשפ"ח', 2028:'תשפ"ט' };
+  return {
+    name: `${hebrewMap[y] ?? y} ${y}-${y+1}`,
+    start: `${y}-09-01`,
+    end: `${y+1}-06-30`,
+  };
+}
+
+function SetupWizard({ onComplete }: { onComplete: () => void }) {
   const { data: membership } = useOrganization();
-  const orgName = membership?.organization?.name ?? "בית הספר שלך";
-  const orgRole = membership?.role;
-  const canManage = orgRole === "owner" || orgRole === "admin";
+  const orgName = membership?.organization?.name ?? "בית הספר";
   const [firstName, setFirstName] = useState<string>("");
+
+  // ── Wizard state ──────────────────────────────────────────────────────────
+  const [step, setStep] = useState<0 | 1 | 2 | 3>(0); // 0=year 1=grades 2=categories 3=done
+  const [yearId, setYearId]     = useState<string>("");
+  const [createdYearName, setCreatedYearName] = useState("");
+
+  // Step 0 — school year form
+  const defs = SmartDefaults();
+  const [yName, setYName]   = useState(defs.name);
+  const [yStart, setYStart] = useState(defs.start);
+  const [yEnd, setYEnd]     = useState(defs.end);
+  const [yPct, setYPct]     = useState("85");
+  const createYear = useCreateSchoolYear();
+
+  // Step 1 — grades
+  const [selLetter, setSelLetter] = useState("");
+  const [gradeCount, setGradeCount] = useState("0");
+  const addGrade = useAddGrade();
+  const { data: grades = [] } = useGrades(yearId || undefined);
+
+  // Step 2 — categories
+  const [catSrc, setCatSrc] = useState<BudgetSource>("gefen");
+  const [catCustom, setCatCustom] = useState("");
+  const addCategory = useAddBudgetCategory();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      const fullName = data.user?.user_metadata?.full_name as string | undefined;
-      const name = (fullName ?? "").split(" ")[0] || "";
-      setFirstName(name);
+      const full = data.user?.user_metadata?.full_name as string | undefined;
+      setFirstName((full ?? "").split(" ")[0] || "");
     });
   }, []);
 
-  const greeting = firstName ? `ברוכים הבאים, ${firstName}!` : "ברוכים הבאים להכרם!";
+  // ── Step handlers ─────────────────────────────────────────────────────────
 
-  const STEPS = [
-    {
-      num: 1, done: true,
-      title: "יצירת חשבון בית הספר",
-      desc: `הארגון "${orgName}" נוצר בהצלחה`,
-      cta: null,
-    },
-    {
-      num: 2, done: false,
-      title: "הגדרת שנת לימודים",
-      desc: canManage
-        ? "צרי שנת לימודים פעילה — השלב הכי חשוב"
-        : "המנהל צריך ליצור שנת לימודים פעילה",
-      cta: canManage ? { label: "צור שנת לימודים", to: "/settings" as const } : null,
-    },
-    {
-      num: 3, done: false,
-      title: "הגדרת קטגוריות תקציב",
-      desc: "הגדרי קטגוריות לגפן, עירייה והורים",
-      cta: null,
-    },
-    {
-      num: 4, done: false,
-      title: "הזנת נתונים ראשונים",
-      desc: "הוסיפי הכנסה או הוצאה ראשונה — הכל יחל לזוז",
-      cta: null,
-    },
-  ];
+  const handleCreateYear = async () => {
+    if (!yName || !yStart || !yEnd) return;
+    const id = await createYear.mutateAsync({
+      name: yName, start_date: yStart, end_date: yEnd,
+      collection_percentage: Number(yPct),
+    });
+    setYearId(id);
+    setCreatedYearName(yName);
+    setStep(1);
+  };
 
-  const FEATURES = [
-    {
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2D6644" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-          <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
-        </svg>
-      ),
-      label: "לוח בקרה",
-      desc: "מבט כולל על כל הכסף",
-    },
-    {
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B5472A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-        </svg>
-      ),
-      label: "הוצאות",
-      desc: "מעקב לפי ספק וקטגוריה",
-    },
-    {
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2D6644" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
-        </svg>
-      ),
-      label: "הכנסות",
-      desc: "גפן, עירייה, הורים",
-    },
-    {
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B2F6E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-        </svg>
-      ),
-      label: "דוחות",
-      desc: "PDF מוכן להגשה",
-    },
-  ];
+  const handleAddGrade = async () => {
+    if (!selLetter || !yearId) return;
+    await addGrade.mutateAsync({
+      name: `שכבה ${selLetter}'`,
+      student_count: Number(gradeCount),
+      yearId,
+    });
+    setSelLetter("");
+    setGradeCount("0");
+  };
+
+  const handleAddCatSuggestion = async (name: string) => {
+    await addCategory.mutateAsync({ name, source: catSrc, plannedAmount: 0 });
+  };
+
+  const handleAddCustomCat = async () => {
+    if (!catCustom.trim()) return;
+    await addCategory.mutateAsync({ name: catCustom.trim(), source: catSrc, plannedAmount: 0 });
+    setCatCustom("");
+  };
+
+  // ── Shared UI pieces ──────────────────────────────────────────────────────
+
+  const STEP_LABELS = ["שנת לימודים","שכבות","קטגוריות","סיום"];
+  const progress = [0,1,2,3].indexOf(step);
+  const pct = ((progress) / 3) * 100;
+
+  const inputSt: React.CSSProperties = {
+    width: "100%", padding: "10px 13px", border: "1.5px solid #E8E2D9",
+    borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif",
+    background: "#FAFAF8", color: "#1A1A1A", outline: "none", boxSizing: "border-box",
+  };
+
+  const greeting = firstName ? `ברוכים הבאים, ${firstName}!` : "ברוכים הבאים!";
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+    <div style={{ maxWidth: "680px", margin: "0 auto" }}>
 
-      {/* ── Hero banner ── */}
+      {/* ── Header card ── */}
       <div style={{
         background: "linear-gradient(135deg, #2D6644 0%, #1A3D2B 55%, #0D2118 100%)",
-        borderRadius: "20px", padding: "36px 40px",
+        borderRadius: "20px 20px 0 0", padding: "28px 36px 24px",
         color: "#fff", position: "relative", overflow: "hidden",
-        boxShadow: "0 16px 56px rgba(13,33,24,0.4)",
       }}>
-        {/* Background blobs */}
-        <div style={{ position: "absolute", top: "-60px", left: "-60px", width: "220px", height: "220px", borderRadius: "50%", background: "rgba(255,255,255,0.04)", pointerEvents: "none" }} />
-        <div style={{ position: "absolute", bottom: "-40px", right: "10%", width: "160px", height: "160px", borderRadius: "50%", background: "rgba(255,255,255,0.03)", pointerEvents: "none" }} />
-
+        <div style={{ position: "absolute", top: "-40px", left: "-40px", width: "180px", height: "180px", borderRadius: "50%", background: "rgba(255,255,255,0.04)", pointerEvents: "none" }} />
         <div style={{ position: "relative", zIndex: 1 }}>
-          {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px" }}>
-            <div style={{ width: "36px", height: "36px", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,255,255,0.15)" }}>
-              <svg width="20" height="20" viewBox="0 0 36 36" fill="none">
+          {/* Logo row */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
+            <div style={{ width: "30px", height: "30px", background: "rgba(255,255,255,0.12)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="17" height="17" viewBox="0 0 36 36" fill="none">
                 <line x1="18" y1="4" x2="18" y2="9" stroke="#7AAA8E" strokeWidth="1.8" strokeLinecap="round"/>
                 <circle cx="12" cy="14" r="5.5" fill="#7AAA8E"/><circle cx="24" cy="14" r="5.5" fill="#5AA674"/><circle cx="18" cy="23" r="5.5" fill="#4A8C62"/>
               </svg>
             </div>
-            <span style={{ fontSize: "14px", fontWeight: "500", color: "rgba(255,255,255,0.7)", letterSpacing: "0.02em" }}>הכרם — ניהול פיננסי</span>
+            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)" }}>הכרם · {orgName}</span>
           </div>
 
-          <h1 style={{ fontSize: "32px", fontWeight: "300", color: "#fff", letterSpacing: "-1px", margin: "0 0 8px", lineHeight: 1.2 }}>
-            {greeting}
-          </h1>
-          <p style={{ fontSize: "15px", color: "rgba(255,255,255,0.65)", margin: "0 0 28px", lineHeight: 1.65, maxWidth: "480px" }}>
-            עוד כמה שלבים קצרים ולוח הבקרה שלך יהיה חי עם כל הנתונים.
-            בואי נגדיר את הסביבה שלך — זה לוקח פחות מ-2 דקות.
-          </p>
+          <div style={{ fontSize: "24px", fontWeight: "300", letterSpacing: "-0.6px", marginBottom: "4px" }}>
+            {step === 3 ? "הכל מוכן!" : greeting}
+          </div>
+          <div style={{ fontSize: "13.5px", color: "rgba(255,255,255,0.6)" }}>
+            {step === 0 && "נגדיר את שנת הלימודים שלך יחד — שלב שלב"}
+            {step === 1 && `✓ שנת הלימודים "${createdYearName}" נוצרה ואופעלה! עכשיו נוסיף שכבות.`}
+            {step === 2 && `✓ השכבות הוגדרו! עכשיו נגדיר קטגוריות תקציב.`}
+            {step === 3 && "לוח הבקרה שלך מוכן ועובד. בואי נתחיל!"}
+          </div>
 
           {/* Progress bar */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ height: "5px", flex: 1, background: "rgba(255,255,255,0.12)", borderRadius: "99px", overflow: "hidden" }}>
-              <div style={{ height: "100%", width: "25%", background: "linear-gradient(90deg, #7EE8A6, #4DC483)", borderRadius: "99px", transition: "width 0.8s" }} />
+          <div style={{ marginTop: "20px" }}>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+              {STEP_LABELS.map((label, i) => (
+                <div key={label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
+                  <div style={{
+                    width: "28px", height: "28px", borderRadius: "50%",
+                    background: i < progress ? "#4DC483" : i === progress ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.15)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "all 0.4s",
+                    boxShadow: i === progress ? "0 0 0 3px rgba(255,255,255,0.25)" : "none",
+                  }}>
+                    {i < progress ? (
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#1A3D2B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    ) : (
+                      <span style={{ fontSize: "11px", fontWeight: "600", color: i === progress ? "#1A3D2B" : "rgba(255,255,255,0.5)" }}>{i + 1}</span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: "10px", color: i <= progress ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.35)", whiteSpace: "nowrap" }}>{label}</span>
+                </div>
+              ))}
             </div>
-            <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap" }}>שלב 1 מתוך 4</span>
+            <div style={{ height: "3px", background: "rgba(255,255,255,0.1)", borderRadius: "99px", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${pct}%`, background: "linear-gradient(90deg,#7EE8A6,#4DC483)", borderRadius: "99px", transition: "width 0.6s ease" }} />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Setup checklist ── */}
-      <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "16px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
-        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #F3EEE8" }}>
-          <div style={{ fontSize: "15px", fontWeight: "500", color: "#1A1A1A" }}>מדריך התחלה מהירה</div>
-          <div style={{ fontSize: "13px", color: "#AAA099", marginTop: "3px" }}>עקבי אחרי השלבים לפי הסדר</div>
-        </div>
+      {/* ── Step body card ── */}
+      <div style={{
+        background: "#fff", border: "1px solid #E8E2D9", borderTop: "none",
+        borderRadius: "0 0 20px 20px", padding: "32px 36px",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.08)",
+      }}>
 
-        {STEPS.map((step, idx) => {
-          const isActive = !step.done && (idx === 0 || STEPS[idx - 1].done);
-          const isUpcoming = !step.done && !isActive;
-          return (
-            <div key={step.num} style={{
-              display: "flex", alignItems: "flex-start", gap: "16px",
-              padding: "18px 24px",
-              borderBottom: idx < STEPS.length - 1 ? "1px solid #F8F4F0" : "none",
-              background: isActive ? "linear-gradient(90deg, #F4FAF6 0%, #fff 60%)" : "#fff",
-              transition: "background 0.2s",
-            }}>
-              {/* Step indicator */}
-              <div style={{ flexShrink: 0, marginTop: "1px" }}>
-                {step.done ? (
-                  <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "#2D6644", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                ) : isActive ? (
-                  <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "linear-gradient(135deg, #2D6644, #1A3D2B)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(45,102,68,0.4)" }}>
-                    <span style={{ fontSize: "12px", fontWeight: "600", color: "#fff" }}>{step.num}</span>
-                  </div>
-                ) : (
-                  <div style={{ width: "28px", height: "28px", borderRadius: "50%", border: "1.5px solid #E8E2D9", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span style={{ fontSize: "12px", color: "#C0BAB4" }}>{step.num}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Content */}
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "14.5px", fontWeight: step.done ? "400" : isActive ? "500" : "400", color: step.done ? "#AAA099" : isUpcoming ? "#C0BAB4" : "#1A1A1A", textDecoration: step.done ? "line-through" : "none", marginBottom: "3px" }}>
-                  {step.title}
-                </div>
-                <div style={{ fontSize: "12.5px", color: step.done ? "#C0BAB4" : isUpcoming ? "#D4CFC9" : "#6B6560", lineHeight: 1.5 }}>
-                  {step.desc}
-                </div>
-                {isActive && step.cta && (
-                  <Link to={step.cta.to} style={{ display: "inline-flex", alignItems: "center", gap: "7px", marginTop: "12px", padding: "9px 18px", background: "linear-gradient(135deg, #2D6644, #1A3D2B)", color: "#fff", borderRadius: "9px", fontSize: "13.5px", fontWeight: "500", textDecoration: "none", fontFamily: "var(--font-sans)", boxShadow: "0 3px 12px rgba(26,61,43,0.3)" }}>
-                    {step.cta.label}
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <path d="M5 10L9 7 5 4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" transform="rotate(180 7 7)"/>
-                    </svg>
-                  </Link>
-                )}
-              </div>
-
-              {/* Status badge */}
-              <div style={{ flexShrink: 0, marginTop: "3px" }}>
-                {step.done && <span style={{ fontSize: "11px", color: "#2D6644", fontWeight: "600", background: "#EDFBF3", padding: "3px 9px", borderRadius: "99px" }}>הושלם</span>}
-                {isActive && <span style={{ fontSize: "11px", color: "#1A3D2B", fontWeight: "600", background: "#D5F0E0", padding: "3px 9px", borderRadius: "99px" }}>עכשיו</span>}
-                {isUpcoming && <span style={{ fontSize: "11px", color: "#C0BAB4", background: "#F5F2EE", padding: "3px 9px", borderRadius: "99px" }}>בקרוב</span>}
-              </div>
+        {/* ── STEP 0: Create school year ── */}
+        {step === 0 && (
+          <div>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>יצירת שנת הלימודים</div>
+            <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "24px", lineHeight: 1.6 }}>
+              נתחיל מהבסיס — מה שם שנת הלימודים שתרצי להגדיר?
             </div>
-          );
-        })}
-      </div>
 
-      {/* ── What you'll get ── */}
-      <div>
-        <div style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "12px" }}>
-          מה תקבלי אחרי ההגדרה
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "12px" }}>
-          {FEATURES.map((f) => (
-            <div key={f.label} style={{
-              background: "#fff", border: "1px solid #EAE5DE",
-              borderRadius: "12px", padding: "16px 18px",
-              display: "flex", alignItems: "center", gap: "12px",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-            }}>
-              <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "#F5F5F2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                {f.icon}
-              </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               <div>
-                <div style={{ fontSize: "13.5px", fontWeight: "500", color: "#1A1A1A", marginBottom: "2px" }}>{f.label}</div>
-                <div style={{ fontSize: "11.5px", color: "#AAA099" }}>{f.desc}</div>
+                <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>שם שנת הלימודים</label>
+                <input style={inputSt} value={yName} onChange={e => setYName(e.target.value)} placeholder='לדוגמה: תשפ"ח 2027-2028' />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך התחלה</label>
+                  <input style={inputSt} type="date" value={yStart} onChange={e => setYStart(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך סיום</label>
+                  <input style={inputSt} type="date" value={yEnd} onChange={e => setYEnd(e.target.value)} />
+                </div>
+              </div>
+              <div style={{ maxWidth: "200px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>יעד גביית הורים (%)</label>
+                <input style={inputSt} type="number" min="0" max="100" value={yPct} onChange={e => setYPct(e.target.value)} />
               </div>
             </div>
-          ))}
-        </div>
-      </div>
 
+            <button
+              type="button"
+              onClick={handleCreateYear}
+              disabled={createYear.isPending || !yName || !yStart || !yEnd}
+              style={{
+                marginTop: "28px", width: "100%", padding: "14px 0",
+                background: (!yName || !yStart || !yEnd) ? "#E8E2D9" : "linear-gradient(135deg,#2D6644,#1A3D2B)",
+                color: (!yName || !yStart || !yEnd) ? "#AAA099" : "#fff",
+                border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500",
+                fontFamily: "Rubik, sans-serif", cursor: (!yName || !yStart || !yEnd) ? "not-allowed" : "pointer",
+                boxShadow: (!yName || !yStart || !yEnd) ? "none" : "0 4px 16px rgba(26,61,43,0.3)",
+                transition: "all 0.2s",
+              }}
+            >
+              {createYear.isPending ? "יוצר שנה..." : "צור שנת לימודים ←"}
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP 1: Add grades ── */}
+        {step === 1 && (
+          <div>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>הגדרת שכבות</div>
+            <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "24px", lineHeight: 1.6 }}>
+              בחרי שכבה, הזיני מספר תלמידים ולחצי "הוסף". אפשר להוסיף כמה שתרצי.
+            </div>
+
+            {/* Grade chips */}
+            <div style={{ marginBottom: "16px" }}>
+              <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>בחר שכבה</div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {GRADE_LETTERS.filter(l => !grades.some(g => g.name === `שכבה ${l}'`)).map(letter => (
+                  <button key={letter} type="button"
+                    onClick={() => setSelLetter(selLetter === letter ? "" : letter)}
+                    style={{
+                      width: "46px", height: "46px", borderRadius: "12px",
+                      border: selLetter === letter ? "none" : "1.5px solid #E8E2D9",
+                      background: selLetter === letter ? "linear-gradient(135deg,#2D6644,#1A3D2B)" : "#FAFAF8",
+                      color: selLetter === letter ? "#fff" : "#4A6656",
+                      fontSize: "17px", fontFamily: "Rubik, sans-serif",
+                      cursor: "pointer", fontWeight: selLetter === letter ? "500" : "400",
+                      boxShadow: selLetter === letter ? "0 3px 10px rgba(26,61,43,0.3)" : "none",
+                      transition: "all 0.12s",
+                    }}>{letter}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Count + add */}
+            {selLetter && (
+              <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", marginBottom: "20px" }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>
+                    שכבה {selLetter}' — מספר תלמידים
+                  </label>
+                  <input style={inputSt} type="number" min="0" value={gradeCount} onChange={e => setGradeCount(e.target.value)} autoFocus />
+                </div>
+                <button type="button" onClick={handleAddGrade} disabled={addGrade.isPending}
+                  style={{ padding: "10px 22px", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer", fontWeight: "500", whiteSpace: "nowrap" }}>
+                  {addGrade.isPending ? "..." : "הוסף שכבה"}
+                </button>
+              </div>
+            )}
+
+            {/* Added grades list */}
+            {grades.length > 0 && (
+              <div style={{ marginBottom: "20px" }}>
+                <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>שכבות שנוספו ({grades.length})</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {grades.map(g => (
+                    <div key={g.id} style={{ display: "flex", alignItems: "center", gap: "6px", background: "#EDFBF3", border: "1px solid #B6E8C4", borderRadius: "8px", padding: "5px 12px" }}>
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#2D6644" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      <span style={{ fontSize: "13px", color: "#1A3D2B", fontWeight: "500" }}>{g.name}</span>
+                      <span style={{ fontSize: "11.5px", color: "#4A8C62" }}>{g.student_count} תלמידים</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "28px" }}>
+              <button type="button" onClick={() => setStep(2)} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
+                המשך לקטגוריות ←
+              </button>
+              {grades.length === 0 && (
+                <button type="button" onClick={() => setStep(2)} style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                  דלג
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 2: Categories ── */}
+        {step === 2 && (
+          <div>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>קטגוריות תקציב</div>
+            <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "20px", lineHeight: 1.6 }}>
+              לחצי על הצעות מהירות להוסיף קטגוריות נפוצות, או הקלידי שם מותאם.
+            </div>
+
+            {/* Source tabs */}
+            <div style={{ display: "flex", gap: "6px", marginBottom: "20px", background: "#F3EEE8", borderRadius: "10px", padding: "4px" }}>
+              {(["gefen","iriyah","horim"] as BudgetSource[]).map(src => {
+                const c = SRC_CFG[src];
+                const active = catSrc === src;
+                return (
+                  <button key={src} type="button" onClick={() => setCatSrc(src)}
+                    style={{ flex: 1, padding: "8px 0", borderRadius: "8px", border: "none", fontSize: "13.5px", fontWeight: active ? "500" : "400", background: active ? c.grad : "transparent", color: active ? "#fff" : c.color, cursor: "pointer", fontFamily: "Rubik, sans-serif", transition: "all 0.15s", boxShadow: active ? "0 2px 8px rgba(0,0,0,0.2)" : "none" }}>
+                    {c.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Quick suggestions */}
+            <div style={{ marginBottom: "16px" }}>
+              <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>הצעות מהירות</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
+                {CAT_SUGGESTIONS[catSrc].map(name => (
+                  <button key={name} type="button" onClick={() => handleAddCatSuggestion(name)}
+                    style={{ padding: "6px 13px", background: SRC_CFG[catSrc].light, color: SRC_CFG[catSrc].color, border: `1px solid ${SRC_CFG[catSrc].color}30`, borderRadius: "8px", fontSize: "12.5px", fontFamily: "Rubik, sans-serif", cursor: "pointer", fontWeight: "400", transition: "all 0.1s" }}>
+                    + {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom cat input */}
+            <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+              <input style={{ ...inputSt, flex: 1 }} value={catCustom} onChange={e => setCatCustom(e.target.value)} placeholder="קטגוריה מותאמת אישית..."
+                onKeyDown={e => { if (e.key === "Enter") handleAddCustomCat(); }} />
+              <button type="button" onClick={handleAddCustomCat} disabled={!catCustom.trim()}
+                style={{ padding: "10px 18px", background: catCustom.trim() ? SRC_CFG[catSrc].grad : "#E8E2D9", color: catCustom.trim() ? "#fff" : "#AAA099", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: catCustom.trim() ? "pointer" : "not-allowed", fontWeight: "500" }}>
+                הוסף
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "28px" }}>
+              <button type="button" onClick={() => setStep(3)} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
+                סיים הגדרה ←
+              </button>
+              <button type="button" onClick={() => setStep(3)} style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                דלג
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 3: Done ── */}
+        {step === 3 && (
+          <div style={{ textAlign: "center", padding: "16px 0" }}>
+            {/* Big check */}
+            <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "linear-gradient(135deg,#EDFBF3,#C6E8D0)", border: "2px solid #B6E8C4", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <path d="M5 16l8 8 14-14" stroke="#2D6644" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+
+            <div style={{ fontSize: "20px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>
+              {createdYearName} מוכנה!
+            </div>
+            <div style={{ fontSize: "14px", color: "#6B6560", marginBottom: "28px", lineHeight: 1.6 }}>
+              לוח הבקרה שלך פעיל ומוכן לעבודה.<br/>עכשיו ניתן להתחיל להזין הכנסות והוצאות.
+            </div>
+
+            {/* Summary */}
+            <div style={{ background: "#F8F5F1", borderRadius: "12px", padding: "16px 20px", marginBottom: "28px", textAlign: "right" }}>
+              <div style={{ fontSize: "12px", fontWeight: "500", color: "#AAA099", marginBottom: "10px", letterSpacing: "0.05em" }}>מה הוגדר</div>
+              {[
+                { label: `שנת לימודים: ${createdYearName}`, done: true },
+                { label: `${grades.length} שכבות הוגדרו`, done: grades.length > 0 },
+                { label: "קטגוריות תקציב — ניתן להוסיף בהגדרות", done: true },
+              ].map((item, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "5px 0" }}>
+                  <div style={{ width: "18px", height: "18px", borderRadius: "50%", background: item.done ? "#EDFBF3" : "#F5F0EA", border: `1px solid ${item.done ? "#B6E8C4" : "#E8E2D9"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {item.done && <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#2D6644" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                  <span style={{ fontSize: "13px", color: "#1A1A1A" }}>{item.label}</span>
+                </div>
+              ))}
+            </div>
+
+            <button type="button" onClick={onComplete}
+              style={{ width: "100%", padding: "15px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15.5px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 6px 20px rgba(26,61,43,0.35)" }}>
+              כניסה ללוח הבקרה →
+            </button>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
@@ -438,6 +619,16 @@ function WelcomeSetup() {
 
 export default function DashboardPage() {
   const { data, isLoading, error } = useDashboardSummary();
+
+  // Track whether this session started without a school year
+  const wizardTriggered = useRef<boolean | null>(null);
+  const [wizardDone, setWizardDone] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && data !== undefined && wizardTriggered.current === null) {
+      wizardTriggered.current = !data.schoolYear;
+    }
+  }, [isLoading, data]);
 
   const totals = data?.totals ?? { planned: 0, used: 0, balance: 0, pct: 0 };
   const incomeTotals = data?.incomeTotals ?? { fromIncome: 0, fromParentCollections: 0, grand: 0 };
@@ -451,9 +642,9 @@ export default function DashboardPage() {
   const animFromIncome     = useCountUp(incomeTotals.fromIncome);
   const animFromParentColl = useCountUp(incomeTotals.fromParentCollections);
 
-  // No active school year → full setup walkthrough
-  if (!isLoading && !error && data && !data.schoolYear) {
-    return <WelcomeSetup />;
+  // Show wizard if session started without a school year and wizard not completed
+  if (wizardTriggered.current === true && !wizardDone) {
+    return <SetupWizard onComplete={() => setWizardDone(true)} />;
   }
 
   return (

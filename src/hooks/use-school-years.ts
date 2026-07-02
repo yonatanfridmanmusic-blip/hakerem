@@ -61,13 +61,18 @@ export function useCreateSchoolYear() {
 
       const shouldActivate = !activeYears || activeYears.length === 0;
 
-      const { error } = await supabase.from("school_years").insert({
-        ...payload,
-        is_active: shouldActivate,
-        created_by: user.id,
-        organization_id: mem.organization_id,
-      });
+      const { data: newYear, error } = await supabase
+        .from("school_years")
+        .insert({
+          ...payload,
+          is_active: shouldActivate,
+          created_by: user.id,
+          organization_id: mem.organization_id,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+      return newYear?.id as string;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["school-years"] });
