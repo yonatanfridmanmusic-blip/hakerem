@@ -150,10 +150,29 @@ export function useRequestJoinOrg() {
         .insert({
           organization_id: organizationId,
           user_id: user.id,
-          role: "admin",
+          role: "viewer",
           status: "pending",
         });
       if (error) throw error;
+
+      // Best-effort: notify org owner via Edge Function (fire-and-forget)
+      try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, email")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        await supabase.functions.invoke("notify-join-request", {
+          body: {
+            organization_id: organizationId,
+            requester_name: profile?.full_name ?? null,
+            requester_email: profile?.email ?? user.email ?? null,
+          },
+        });
+      } catch {
+        // Email failure must never block the join request
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["organization"] });

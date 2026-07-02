@@ -92,10 +92,22 @@ export function useSetActiveYear() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (yearId: string) => {
-      // Deactivate all years first
+      // Resolve current user's org — needed for explicit org-scoped deactivation
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("לא מחובר");
+      const { data: mem } = await supabase
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!mem?.organization_id) throw new Error("לא שויכת לארגון");
+
+      // Deactivate all OTHER years in this org (explicit org filter — never touches other orgs)
       const { error: e1 } = await supabase
         .from("school_years")
         .update({ is_active: false })
+        .eq("organization_id", mem.organization_id)
         .neq("id", yearId);
       if (e1) throw e1;
 
