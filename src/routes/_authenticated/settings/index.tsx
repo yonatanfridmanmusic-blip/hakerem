@@ -191,8 +191,36 @@ function YearsTab() {
 
   if (isLoading) return <Loader />;
 
+  const hasNoActiveYear = years.length > 0 && !years.some((y) => y.is_active);
+
   return (
     <div>
+      {/* Banner: years exist but none active */}
+      {hasNoActiveYear && (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: "14px",
+          background: "linear-gradient(135deg, #FFF8E6 0%, #FFFDF5 100%)",
+          border: "1.5px solid #F5C842",
+          borderRadius: "14px", padding: "18px 20px", marginBottom: "18px",
+          boxShadow: "0 2px 12px rgba(245,200,66,0.15)",
+        }}>
+          <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#FEF3C7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: "14px", fontWeight: "500", color: "#92400E", marginBottom: "4px" }}>
+              שנת הלימודים לא פעילה
+            </div>
+            <div style={{ fontSize: "13px", color: "#B45309", lineHeight: 1.55 }}>
+              יצרת שנת לימודים אך היא אינה פעילה עדיין. לחצי על <strong>הגדר כפעיל</strong> כדי שהדשבורד יתחיל לעבוד.
+            </div>
+          </div>
+        </div>
+      )}
+
       {years.map((y) => (
         <div key={y.id} style={{
           ...card,
@@ -279,15 +307,19 @@ function GradesTab() {
   const deleteGrade = useDeleteGrade();
 
   const [showForm, setShowForm]   = useState(false);
-  const [gradeName, setGradeName] = useState("");
+  const [selectedLetter, setSelectedLetter] = useState<string>("");
+  const [customName, setCustomName] = useState("");
   const [count, setCount]         = useState("0");
   const [editId, setEditId]       = useState<string | null>(null);
   const [editVals, setEditVals]   = useState({ name: "", count: "0" });
 
+  const GRADE_LETTERS = ["א", "ב", "ג", "ד", "ה", "ו", "ז", "ח"];
+  const resolvedName = customName.trim() || (selectedLetter ? `כיתה ${selectedLetter}'` : "");
+
   const handleAdd = async () => {
-    if (!gradeName || !activeYear) return;
-    await addGrade.mutateAsync({ name: gradeName, student_count: Number(count), yearId: activeYear.id });
-    setGradeName(""); setCount("0"); setShowForm(false);
+    if (!resolvedName || !activeYear) return;
+    await addGrade.mutateAsync({ name: resolvedName, student_count: Number(count), yearId: activeYear.id });
+    setSelectedLetter(""); setCustomName(""); setCount("0"); setShowForm(false);
   };
 
   if (!activeYear) return (
@@ -350,22 +382,68 @@ function GradesTab() {
 
       {showForm ? (
         <div style={{ ...card, border: "1.5px solid #2D6644", boxShadow: "0 0 0 3px rgba(45,102,68,0.08)" }}>
-          <div style={{ fontWeight: 700, fontSize: "15px", color: "var(--hk-ink-1)", marginBottom: "14px" }}>➕ שכבה חדשה</div>
-          <div style={{ display: "flex", gap: "12px", marginBottom: "14px" }}>
+          <div style={{ fontWeight: "500", fontSize: "15px", color: "#1A1A1A", marginBottom: "16px" }}>שכבה חדשה</div>
+
+          {/* Grade letter chips */}
+          <Label>בחר שכבה</Label>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px", marginTop: "6px" }}>
+            {GRADE_LETTERS.map((letter) => {
+              const active = selectedLetter === letter;
+              return (
+                <button
+                  key={letter}
+                  type="button"
+                  onClick={() => { setSelectedLetter(active ? "" : letter); setCustomName(""); }}
+                  style={{
+                    width: "44px", height: "44px",
+                    borderRadius: "10px",
+                    border: active ? "none" : "1.5px solid #E2E8E4",
+                    background: active ? "linear-gradient(135deg, #2D6644, #1A3D2B)" : "#fff",
+                    color: active ? "#fff" : "#4A6656",
+                    fontSize: "16px",
+                    fontWeight: active ? "600" : "400",
+                    fontFamily: "Rubik, sans-serif",
+                    cursor: "pointer",
+                    boxShadow: active ? "0 3px 10px rgba(26,61,43,0.3)" : "0 1px 3px rgba(0,0,0,0.06)",
+                    transition: "all 0.12s",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  {letter}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Preview + optional custom name */}
+          <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
             <div style={{ flex: 1 }}>
-              <Label>שם שכבה</Label>
-              <input style={inputStyle} placeholder="לדוגמה: כיתה א׳" value={gradeName} onChange={(e) => setGradeName(e.target.value)} />
+              <Label>שם מותאם אישית <span style={{ color: "#AAA099", fontWeight: "400" }}>(אופציונלי)</span></Label>
+              <input
+                style={{ ...inputStyle, color: customName ? "#1A1A1A" : "#AAA099" }}
+                placeholder={selectedLetter ? `כיתה ${selectedLetter}' (ברירת מחדל)` : "לדוגמה: ביניים א'"}
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+              />
             </div>
             <div style={{ width: "150px" }}>
               <Label>מספר תלמידים</Label>
               <input style={inputStyle} type="number" min="0" value={count} onChange={(e) => setCount(e.target.value)} />
             </div>
           </div>
+
+          {/* Preview of final name */}
+          {resolvedName && (
+            <div style={{ fontSize: "12.5px", color: "#2D6644", background: "#EDFBF3", border: "1px solid #C6E8D0", borderRadius: "8px", padding: "7px 12px", marginBottom: "14px" }}>
+              תישמר בתור: <strong>{resolvedName}</strong>
+            </div>
+          )}
+
           <Row>
-            <button type="button" style={btnPrimary} onClick={handleAdd} disabled={addGrade.isPending}>
+            <button type="button" style={{ ...btnPrimary, opacity: !resolvedName ? 0.5 : 1 }} onClick={handleAdd} disabled={addGrade.isPending || !resolvedName}>
               {addGrade.isPending ? "מוסיף..." : "הוסף שכבה"}
             </button>
-            <button type="button" style={btnOutline} onClick={() => setShowForm(false)}>ביטול</button>
+            <button type="button" style={btnOutline} onClick={() => { setShowForm(false); setSelectedLetter(""); setCustomName(""); setCount("0"); }}>ביטול</button>
           </Row>
         </div>
       ) : (

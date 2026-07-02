@@ -51,9 +51,19 @@ export function useCreateSchoolYear() {
 
       if (!mem?.organization_id) throw new Error("לא שויכת לארגון. צור ארגון תחילה.");
 
+      // Auto-activate if there's no currently active year in this org
+      const { data: activeYears } = await supabase
+        .from("school_years")
+        .select("id")
+        .eq("organization_id", mem.organization_id)
+        .eq("is_active", true)
+        .limit(1);
+
+      const shouldActivate = !activeYears || activeYears.length === 0;
+
       const { error } = await supabase.from("school_years").insert({
         ...payload,
-        is_active: false,
+        is_active: shouldActivate,
         created_by: user.id,
         organization_id: mem.organization_id,
       });
@@ -61,6 +71,7 @@ export function useCreateSchoolYear() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["school-years"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }
