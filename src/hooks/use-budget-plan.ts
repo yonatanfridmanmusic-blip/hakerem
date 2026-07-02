@@ -18,23 +18,25 @@ export interface BudgetPlanData {
   totalSourceUsed: number; // ALL expenses for source, including uncategorized
 }
 
-// ─── Active year ──────────────────────────────────────────────────────────────
-
-
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
-export function useBudgetPlan(source: BudgetSource) {
+/**
+ * Fetch budget plan for a given source.
+ * Pass `targetYearId` to view/plan a specific year without switching the active year.
+ * If omitted, falls back to the active year.
+ */
+export function useBudgetPlan(source: BudgetSource, targetYearId?: string | null) {
   return useQuery<BudgetPlanData>({
-    queryKey: ["budget-plan", source],
+    queryKey: ["budget-plan", source, targetYearId ?? "active"],
     queryFn: async () => {
-      const yearId = await getActiveYearId();
-      if (!yearId) return { categories: [], totalSourceUsed: 0 };
+      const yid = targetYearId ?? (await getActiveYearId());
+      if (!yid) return { categories: [], totalSourceUsed: 0 };
 
       // Fetch categories for this source
       const { data: cats, error: catErr } = await supabase
         .from("budget_categories")
         .select("id, name, source, planned_amount, order_index")
-        .eq("school_year_id", yearId)
+        .eq("school_year_id", yid)
         .eq("source", source)
         .order("order_index");
 
@@ -44,7 +46,7 @@ export function useBudgetPlan(source: BudgetSource) {
       const { data: exps, error: expErr } = await supabase
         .from("expenses")
         .select("budget_category_id, amount")
-        .eq("school_year_id", yearId)
+        .eq("school_year_id", yid)
         .eq("source", source);
 
       if (expErr) throw expErr;
@@ -103,19 +105,21 @@ export function useAddBudgetCategory() {
       name,
       source,
       plannedAmount,
+      targetYearId,
     }: {
       name: string;
       source: BudgetSource;
       plannedAmount: number;
+      targetYearId?: string | null;
     }) => {
-      const yearId = await getActiveYearId();
-      if (!yearId) throw new Error("אין שנת לימודים פעילה");
+      const yid = targetYearId ?? (await getActiveYearId());
+      if (!yid) throw new Error("אין שנת לימודים פעילה");
 
       // Get max order_index for this source
       const { data: existing } = await supabase
         .from("budget_categories")
         .select("order_index")
-        .eq("school_year_id", yearId)
+        .eq("school_year_id", yid)
         .eq("source", source)
         .order("order_index", { ascending: false })
         .limit(1)
@@ -123,13 +127,17 @@ export function useAddBudgetCategory() {
 
       const nextOrder = (existing?.order_index ?? 0) + 1;
 
-      const { data: inserted, error } = await supabase.from("budget_categories").insert({
-        name,
-        source,
-        planned_amount: plannedAmount,
-        school_year_id: yearId,
-        order_index: nextOrder,
-      }).select("id").single();
+      const { data: inserted, error } = await supabase
+        .from("budget_categories")
+        .insert({
+          name,
+          source,
+          planned_amount: plannedAmount,
+          school_year_id: yid,
+          order_index: nextOrder,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
       return inserted as { id: string };
     },
@@ -137,6 +145,49 @@ export function useAddBudgetCategory() {
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
       queryClient.invalidateQueries({ queryKey: ["budget-categories"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+// ─── Copy categories from one year to another ─────────────────────────────────
+
+export function useCopyBudgetCategories() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      fromYearId,
+      toYearId,
+    }: {
+      fromYearId: string;
+      toYearId: string;
+    }) => {
+      // Fetch all categories from source year
+      const { data: sourceCats, error: fetchErr } = await supabase
+        .from("budget_categories")
+        .select("name, source, planned_amount, order_index")
+        .eq("school_year_id", fromYearId)
+        .order("order_index");
+
+      if (fetchErr) throw fetchErr;
+      if (!sourceCats || sourceCats.length === 0) throw new Error("אין קטגוריות להעתקה");
+
+      // Insert them into the target year
+      const rows = sourceCats.map((c) => ({
+        name: c.name,
+        source: c.source,
+        planned_amount: c.planned_amount,
+        order_index: c.order_index,
+        school_year_id: toYearId,
+      }));
+
+      const { error: insertErr } = await supabase.from("budget_categories").insert(rows);
+      if (insertErr) throw insertErr;
+
+      return sourceCats.length;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-categories"] });
     },
   });
 }
