@@ -264,6 +264,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
   // Step 2 — categories
   const [catSrc, setCatSrc] = useState<BudgetSource>("gefen");
   const [catCustom, setCatCustom] = useState("");
+  const [addedCatNames, setAddedCatNames] = useState<Record<BudgetSource, string[]>>({ gefen: [], iriyah: [], horim: [] });
   const addCategory = useAddBudgetCategory();
 
   useEffect(() => {
@@ -298,12 +299,16 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
   };
 
   const handleAddCatSuggestion = async (name: string) => {
+    if (addedCatNames[catSrc].includes(name)) return;
     await addCategory.mutateAsync({ name, source: catSrc, plannedAmount: 0 });
+    setAddedCatNames(prev => ({ ...prev, [catSrc]: [...prev[catSrc], name] }));
   };
 
   const handleAddCustomCat = async () => {
     if (!catCustom.trim()) return;
-    await addCategory.mutateAsync({ name: catCustom.trim(), source: catSrc, plannedAmount: 0 });
+    const name = catCustom.trim();
+    await addCategory.mutateAsync({ name, source: catSrc, plannedAmount: 0 });
+    setAddedCatNames(prev => ({ ...prev, [catSrc]: [...prev[catSrc], name] }));
     setCatCustom("");
   };
 
@@ -539,13 +544,60 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
             <div style={{ marginBottom: "16px" }}>
               <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>הצעות מהירות</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
-                {CAT_SUGGESTIONS[catSrc].map(name => (
-                  <button key={name} type="button" onClick={() => handleAddCatSuggestion(name)}
-                    style={{ padding: "6px 13px", background: SRC_CFG[catSrc].light, color: SRC_CFG[catSrc].color, border: `1px solid ${SRC_CFG[catSrc].color}30`, borderRadius: "8px", fontSize: "12.5px", fontFamily: "Rubik, sans-serif", cursor: "pointer", fontWeight: "400", transition: "all 0.1s" }}>
-                    + {name}
-                  </button>
-                ))}
+                {CAT_SUGGESTIONS[catSrc].map(name => {
+                  const added = addedCatNames[catSrc].includes(name);
+                  return (
+                    <button key={name} type="button"
+                      onClick={() => handleAddCatSuggestion(name)}
+                      disabled={added || addCategory.isPending}
+                      style={{
+                        padding: "6px 13px",
+                        background: added ? "#EDFBF3" : SRC_CFG[catSrc].light,
+                        color: added ? "#2D6644" : SRC_CFG[catSrc].color,
+                        border: added ? "1.5px solid #B6E8C4" : `1px solid ${SRC_CFG[catSrc].color}30`,
+                        borderRadius: "8px", fontSize: "12.5px", fontFamily: "Rubik, sans-serif",
+                        cursor: added ? "default" : "pointer",
+                        fontWeight: added ? "500" : "400",
+                        transition: "all 0.15s",
+                        display: "inline-flex", alignItems: "center", gap: "5px",
+                        opacity: addCategory.isPending && !added ? 0.6 : 1,
+                      }}>
+                      {added ? (
+                        <>
+                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 6l3 3 5-5" stroke="#2D6644" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          {name}
+                        </>
+                      ) : `+ ${name}`}
+                    </button>
+                  );
+                })}
               </div>
+
+              {/* Added categories list */}
+              {addedCatNames[catSrc].length > 0 && (
+                <div style={{ marginTop: "14px" }}>
+                  <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>
+                    נוספו לקטגוריות {SRC_CFG[catSrc].label} ({addedCatNames[catSrc].length})
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
+                    {addedCatNames[catSrc].map(name => (
+                      <div key={name} style={{
+                        display: "inline-flex", alignItems: "center", gap: "5px",
+                        background: SRC_CFG[catSrc].light,
+                        border: `1px solid ${SRC_CFG[catSrc].color}30`,
+                        borderRadius: "8px", padding: "5px 12px",
+                      }}>
+                        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                          <path d="M2 6l3 3 5-5" stroke={SRC_CFG[catSrc].color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        <span style={{ fontSize: "12.5px", color: SRC_CFG[catSrc].color, fontWeight: "500" }}>{name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Custom cat input */}
@@ -591,8 +643,8 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
               <div style={{ fontSize: "12px", fontWeight: "500", color: "#AAA099", marginBottom: "10px", letterSpacing: "0.05em" }}>מה הוגדר</div>
               {[
                 { label: `שנת לימודים: ${createdYearName}`, done: true },
-                { label: `${grades.length} שכבות הוגדרו`, done: grades.length > 0 },
-                { label: "קטגוריות תקציב — ניתן להוסיף בהגדרות", done: true },
+                { label: grades.length > 0 ? `${grades.length} שכבות הוגדרו` : "שכבות — ניתן להוסיף בהגדרות", done: grades.length > 0 },
+                { label: (() => { const total = Object.values(addedCatNames).reduce((s,a) => s + a.length, 0); return total > 0 ? `${total} קטגוריות תקציב נוספו` : "קטגוריות — ניתן להוסיף בהגדרות"; })(), done: Object.values(addedCatNames).some(a => a.length > 0) },
               ].map((item, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "5px 0" }}>
                   <div style={{ width: "18px", height: "18px", borderRadius: "50%", background: item.done ? "#EDFBF3" : "#F5F0EA", border: `1px solid ${item.done ? "#B6E8C4" : "#E8E2D9"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
