@@ -10,8 +10,6 @@ export const Route = createFileRoute("/onboarding")({
     const { redirect } = await import("@tanstack/react-router");
     const { data } = await supabase.auth.getUser();
     if (!data.user) throw redirect({ to: "/auth" });
-
-    // If user already has an active org, skip onboarding
     const { data: mem } = await supabase
       .from("organization_members")
       .select("id")
@@ -23,73 +21,146 @@ export const Route = createFileRoute("/onboarding")({
   component: OnboardingPage,
 });
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type Step = "choose" | "create-org" | "join-org" | "pending";
 
-// ─── Logo ─────────────────────────────────────────────────────────────────────
+const f = "Rubik, sans-serif";
 
-const Logo = () => (
-  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "40px", justifyContent: "center" }}>
-    <div style={{
-      width: "44px", height: "44px",
-      background: "linear-gradient(145deg, #2D6644, #1A3D2B)",
-      borderRadius: "12px",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      boxShadow: "0 2px 12px rgba(26,61,43,0.3)",
-    }}>
-      <svg width="24" height="24" viewBox="0 0 36 36" fill="none">
-        <line x1="18" y1="4" x2="18" y2="9" stroke="#7AAA8E" strokeWidth="1.8" strokeLinecap="round"/>
-        <path d="M18 6.5 Q22 4.5 25 6" fill="none" stroke="rgba(122,170,142,0.6)" strokeWidth="1.4" strokeLinecap="round"/>
-        <circle cx="12" cy="14" r="5.5" fill="#7AAA8E"/><circle cx="10.2" cy="12.2" r="1.6" fill="rgba(255,255,255,0.25)"/>
-        <circle cx="24" cy="14" r="5.5" fill="#5AA674"/><circle cx="22.2" cy="12.2" r="1.6" fill="rgba(255,255,255,0.2)"/>
-        <circle cx="18" cy="23" r="5.5" fill="#4A8C62"/><circle cx="16.2" cy="21.2" r="1.6" fill="rgba(255,255,255,0.2)"/>
-      </svg>
-    </div>
-    <span style={{ fontSize: "22px", fontWeight: "700", color: "#1A3D2B", letterSpacing: "-0.4px" }}>הכרם</span>
-  </div>
-);
+// ─── Shared tokens ────────────────────────────────────────────────────────────
 
-// ─── Shared styles ────────────────────────────────────────────────────────────
+const INK   = "#1A1A1A";
+const INK2  = "#6B6560";
+const INK3  = "#AAA099";
+const GREEN = "#2D6644";
+const DARK  = "#1A3D2B";
+const BORDER = "#E8E2D9";
 
 const inputStyle: React.CSSProperties = {
   width: "100%", padding: "10px 14px",
-  border: "1.5px solid #D4DDD6", borderRadius: "9px",
-  fontSize: "14px", background: "#fff", color: "#1A1A1A",
-  outline: "none", fontFamily: "Rubik, sans-serif",
-  boxSizing: "border-box",
+  border: `1.5px solid ${BORDER}`, borderRadius: "9px",
+  fontSize: "14px", background: "#fff", color: INK,
+  outline: "none", fontFamily: f, boxSizing: "border-box",
+  transition: "border-color 0.15s",
 };
 
 const btnPrimary: React.CSSProperties = {
   width: "100%", padding: "12px 0",
-  background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
-  color: "#fff", border: "none", borderRadius: "9px",
-  fontSize: "15px", fontWeight: "600",
-  fontFamily: "Rubik, sans-serif", cursor: "pointer",
-  boxShadow: "0 3px 12px rgba(26,61,43,0.3)",
+  background: `linear-gradient(135deg, ${GREEN}, ${DARK})`,
+  color: "#fff", border: "none", borderRadius: "10px",
+  fontSize: "15px", fontWeight: "500",
+  fontFamily: f, cursor: "pointer",
+  boxShadow: "0 4px 16px rgba(26,61,43,0.3)",
+  transition: "opacity 0.15s",
 };
+
+// ─── Logo mark ────────────────────────────────────────────────────────────────
+
+function LogoMark({ size = 44 }: { size?: number }) {
+  return (
+    <div style={{
+      width: `${size}px`, height: `${size}px`,
+      background: `linear-gradient(145deg, ${GREEN}, ${DARK})`,
+      borderRadius: `${Math.round(size * 0.27)}px`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      boxShadow: "0 2px 14px rgba(26,61,43,0.28)", flexShrink: 0,
+    }}>
+      <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 36 36" fill="none">
+        <line x1="18" y1="4" x2="18" y2="9" stroke="#7AAA8E" strokeWidth="1.8" strokeLinecap="round"/>
+        <path d="M18 6.5 Q22 4.5 25 6" fill="none" stroke="rgba(122,170,142,0.6)" strokeWidth="1.4" strokeLinecap="round"/>
+        <circle cx="12" cy="14" r="5.5" fill="#7AAA8E"/>
+        <circle cx="10.2" cy="12.2" r="1.6" fill="rgba(255,255,255,0.25)"/>
+        <circle cx="24" cy="14" r="5.5" fill="#5AA674"/>
+        <circle cx="22.2" cy="12.2" r="1.6" fill="rgba(255,255,255,0.2)"/>
+        <circle cx="18" cy="23" r="5.5" fill="#4A8C62"/>
+        <circle cx="16.2" cy="21.2" r="1.6" fill="rgba(255,255,255,0.2)"/>
+      </svg>
+    </div>
+  );
+}
+
+function LogoRow() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "36px", justifyContent: "center" }}>
+      <LogoMark size={40} />
+      <span style={{ fontSize: "20px", fontWeight: "500", color: INK, letterSpacing: "-0.3px" }}>הכרם</span>
+    </div>
+  );
+}
+
+// ─── Icons ────────────────────────────────────────────────────────────────────
+
+function IconSchool({ color = "#2D6644" }: { color?: string }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 21h18M3 10l9-7 9 7M5 21V10M19 21V10M9 21v-6h6v6"/>
+    </svg>
+  );
+}
+
+function IconTeam({ color = "#2D6644" }: { color?: string }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="7" r="3"/><circle cx="16" cy="8" r="2.5"/>
+      <path d="M3 20c0-3.314 2.686-6 6-6s6 2.686 6 6"/>
+      <path d="M18 14c1.657 0 3 1.343 3 3v3"/>
+    </svg>
+  );
+}
+
+function IconMail({ color = "#2D6644" }: { color?: string }) {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="3"/>
+      <path d="M2 7l10 7 10-7"/>
+    </svg>
+  );
+}
+
+function IconCheck({ color = "#2D6644" }: { color?: string }) {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M7 12.5l3.5 3.5 6.5-7"/>
+    </svg>
+  );
+}
+
+function IconMapPin({ color = "#AAA099" }: { color?: string }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2C8.686 2 6 4.686 6 8c0 5 6 13 6 13s6-8 6-13c0-3.314-2.686-6-6-6z"/><circle cx="12" cy="8" r="2"/>
+    </svg>
+  );
+}
+
+function IconArrow({ color = INK3 }: { color?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M6 12l4-4-4-4" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
 
 // ─── Step: Choose ─────────────────────────────────────────────────────────────
 
 function ChooseStep({ onChoose }: { onChoose: (step: Step) => void }) {
   return (
     <div>
-      <h2 style={{ fontSize: "20px", fontWeight: "600", color: "#1A1A1A", margin: "0 0 8px", textAlign: "center" }}>
-        ברוכים הבאים להכרם!
+      <h2 style={{ fontSize: "19px", fontWeight: "500", color: INK, margin: "0 0 6px", textAlign: "center" }}>
+        ברוכים הבאים להכרם
       </h2>
-      <p style={{ fontSize: "14px", color: "#6B6560", margin: "0 0 32px", textAlign: "center", lineHeight: 1.6 }}>
-        כיצד תרצה להתחיל?
+      <p style={{ fontSize: "13.5px", color: INK2, margin: "0 0 28px", textAlign: "center", lineHeight: 1.65 }}>
+        כיצד תרצה/י להתחיל?
       </p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
         <ChoiceCard
-          emoji="🏫"
+          icon={<IconSchool />}
           title="אני מנהל/ת בית ספר"
           subtitle="אצור חשבון חדש לבית הספר שלי"
           onClick={() => onChoose("create-org")}
         />
         <ChoiceCard
-          emoji="👥"
+          icon={<IconTeam />}
           title="אני חבר/ת צוות"
           subtitle="אצטרף לבית ספר קיים במערכת"
           onClick={() => onChoose("join-org")}
@@ -99,8 +170,8 @@ function ChooseStep({ onChoose }: { onChoose: (step: Step) => void }) {
   );
 }
 
-function ChoiceCard({ emoji, title, subtitle, onClick }: {
-  emoji: string; title: string; subtitle: string; onClick: () => void;
+function ChoiceCard({ icon, title, subtitle, onClick }: {
+  icon: React.ReactNode; title: string; subtitle: string; onClick: () => void;
 }) {
   const [hover, setHover] = useState(false);
   return (
@@ -109,23 +180,28 @@ function ChoiceCard({ emoji, title, subtitle, onClick }: {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        display: "flex", alignItems: "center", gap: "16px",
-        padding: "18px 20px", background: hover ? "#F0F7F3" : "#fff",
-        border: hover ? "1.5px solid #2D6644" : "1.5px solid #E2EAE5",
+        display: "flex", alignItems: "center", gap: "14px",
+        padding: "16px 18px",
+        background: hover ? "#F4FAF6" : "#fff",
+        border: `1.5px solid ${hover ? GREEN : BORDER}`,
         borderRadius: "12px", cursor: "pointer",
-        fontFamily: "Rubik, sans-serif", textAlign: "right",
-        transition: "all 0.15s",
-        width: "100%",
+        fontFamily: f, textAlign: "right",
+        transition: "all 0.15s", width: "100%",
       }}
     >
-      <span style={{ fontSize: "28px", flexShrink: 0 }}>{emoji}</span>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: "15px", fontWeight: "600", color: "#1A1A1A", marginBottom: "3px" }}>{title}</div>
-        <div style={{ fontSize: "12.5px", color: "#6B6560" }}>{subtitle}</div>
+      <div style={{
+        width: "42px", height: "42px", borderRadius: "10px", flexShrink: 0,
+        background: hover ? "#EDFBF3" : "#F5F5F2",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "background 0.15s",
+      }}>
+        {icon}
       </div>
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ transform: "rotate(180deg)", flexShrink: 0 }}>
-        <path d="M10 12L6 8l4-4" stroke="#AAA099" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: "14.5px", fontWeight: "500", color: INK, marginBottom: "2px" }}>{title}</div>
+        <div style={{ fontSize: "12.5px", color: INK2 }}>{subtitle}</div>
+      </div>
+      <IconArrow color={hover ? GREEN : INK3} />
     </button>
   );
 }
@@ -152,41 +228,43 @@ function CreateOrgStep({ onBack }: { onBack: () => void }) {
   return (
     <div>
       <BackBtn onClick={onBack} />
-      <h2 style={{ fontSize: "19px", fontWeight: "600", color: "#1A1A1A", margin: "0 0 6px" }}>
+      <h2 style={{ fontSize: "18px", fontWeight: "500", color: INK, margin: "0 0 6px" }}>
         הגדרת בית הספר
       </h2>
-      <p style={{ fontSize: "13px", color: "#6B6560", margin: "0 0 28px", lineHeight: 1.6 }}>
+      <p style={{ fontSize: "13px", color: INK2, margin: "0 0 24px", lineHeight: 1.65 }}>
         פרטים אלו יופיעו בכל הדוחות והמסמכים שלך.
       </p>
 
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        <Field label="שם בית הספר *">
-          <input
-            style={inputStyle}
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder='לדוגמה: בית ספר כרמים'
-            required
-          />
+      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <Field label="שם בית הספר">
+          <input style={inputStyle} value={name} onChange={e => setName(e.target.value)}
+            placeholder="לדוגמה: בית ספר כרמים" required />
         </Field>
-        <Field label="עיר">
-          <input
-            style={inputStyle}
-            value={city}
-            onChange={e => setCity(e.target.value)}
-            placeholder='לדוגמה: תל אביב'
-          />
+        <Field label="עיר (אופציונלי)">
+          <input style={inputStyle} value={city} onChange={e => setCity(e.target.value)}
+            placeholder="לדוגמה: תל אביב" />
         </Field>
 
         <div style={{
-          background: "#EDFBF3", border: "1px solid #B6DFC4",
+          background: "#EDFBF3", border: "1px solid #C6E8D4",
           borderRadius: "9px", padding: "12px 16px",
-          fontSize: "13px", color: "#166534", lineHeight: 1.6,
+          fontSize: "12.5px", color: "#166534", lineHeight: 1.65,
+          display: "flex", gap: "10px", alignItems: "flex-start",
         }}>
-          לאחר יצירת בית הספר תוכלי להזמין את המזכירה ושאר הצוות מתוך ההגדרות.
+          <div style={{ marginTop: "1px", flexShrink: 0 }}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="7" stroke="#2D6644" strokeWidth="1.4"/>
+              <path d="M8 7v4" stroke="#2D6644" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="8" cy="5.5" r="0.7" fill="#2D6644"/>
+            </svg>
+          </div>
+          לאחר יצירת בית הספר תוכלי להזמין את שאר הצוות מתוך ההגדרות.
         </div>
 
-        <button type="submit" disabled={createOrg.isPending} style={btnPrimary}>
+        <button type="submit" disabled={createOrg.isPending} style={{
+          ...btnPrimary, opacity: createOrg.isPending ? 0.7 : 1,
+          cursor: createOrg.isPending ? "not-allowed" : "pointer",
+        }}>
           {createOrg.isPending ? "יוצר..." : "יצירת בית הספר וכניסה"}
         </button>
       </form>
@@ -208,7 +286,6 @@ function JoinOrgStep({ onBack, onSuccess }: { onBack: () => void; onSuccess: () 
       onSuccess();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "שגיאה";
-      // If already requested
       if (msg.includes("duplicate") || msg.includes("unique")) {
         toast.info("כבר שלחת בקשה לבית ספר זה");
         onSuccess();
@@ -221,57 +298,72 @@ function JoinOrgStep({ onBack, onSuccess }: { onBack: () => void; onSuccess: () 
   return (
     <div>
       <BackBtn onClick={onBack} />
-      <h2 style={{ fontSize: "19px", fontWeight: "600", color: "#1A1A1A", margin: "0 0 6px" }}>
+      <h2 style={{ fontSize: "18px", fontWeight: "500", color: INK, margin: "0 0 6px" }}>
         הצטרפות לבית ספר
       </h2>
-      <p style={{ fontSize: "13px", color: "#6B6560", margin: "0 0 20px" }}>
-        בחר את בית הספר שלך. מנהל/ת בית הספר תאשר את הצטרפותך.
+      <p style={{ fontSize: "13px", color: INK2, margin: "0 0 18px", lineHeight: 1.65 }}>
+        בחר/י את בית הספר שלך — מנהל/ת בית הספר תאשר את הבקשה.
       </p>
 
       {isLoading ? (
-        <div style={{ textAlign: "center", padding: "24px", color: "#AAA099", fontSize: "14px" }}>טוען...</div>
+        <div style={{ textAlign: "center", padding: "32px", color: INK3, fontSize: "14px" }}>טוען...</div>
       ) : orgs.length === 0 ? (
         <div style={{
-          background: "#FFF8E1", border: "1px solid #F5D87A",
-          borderRadius: "9px", padding: "16px", fontSize: "13.5px", color: "#78600A",
+          background: "#FFFBEB", border: "1px solid #E9D67A",
+          borderRadius: "10px", padding: "14px 16px",
+          fontSize: "13px", color: "#78600A", lineHeight: 1.65,
         }}>
-          לא נמצאו בתי ספר רשומים במערכת. בקש ממנהלת בית הספר שלך להירשם תחילה.
+          לא נמצאו בתי ספר רשומים. בקש ממנהלת בית הספר שלך להירשם תחילה.
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
-          {orgs.map(org => (
-            <button
-              key={org.id}
-              onClick={() => setSelected(org.id)}
-              style={{
-                display: "flex", alignItems: "center", gap: "12px",
-                padding: "14px 16px", textAlign: "right", width: "100%",
-                background: selected === org.id ? "#EDFBF3" : "#fff",
-                border: selected === org.id ? "1.5px solid #2D6644" : "1.5px solid #E2EAE5",
-                borderRadius: "10px", cursor: "pointer",
-                fontFamily: "Rubik, sans-serif", transition: "all 0.12s",
-              }}
-            >
-              <div style={{
-                width: "34px", height: "34px", borderRadius: "8px",
-                background: selected === org.id ? "#2D6644" : "#E8F0EA",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "15px", flexShrink: 0,
-              }}>
-                🏫
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "14px", fontWeight: "600", color: "#1A1A1A" }}>{org.name}</div>
-                {org.city && <div style={{ fontSize: "12px", color: "#6B6560", marginTop: "2px" }}>{org.city}</div>}
-              </div>
-              {selected === org.id && (
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                  <circle cx="9" cy="9" r="9" fill="#2D6644"/>
-                  <path d="M5.5 9l2.5 2.5 4.5-4.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-            </button>
-          ))}
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "18px", maxHeight: "260px", overflowY: "auto" }}>
+          {orgs.map(org => {
+            const active = selected === org.id;
+            return (
+              <button
+                key={org.id}
+                onClick={() => setSelected(org.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: "12px",
+                  padding: "13px 14px", textAlign: "right", width: "100%",
+                  background: active ? "#F4FAF6" : "#fff",
+                  border: `1.5px solid ${active ? GREEN : BORDER}`,
+                  borderRadius: "10px", cursor: "pointer",
+                  fontFamily: f, transition: "all 0.12s",
+                }}
+              >
+                <div style={{
+                  width: "36px", height: "36px", borderRadius: "9px", flexShrink: 0,
+                  background: active ? "#EDFBF3" : "#F5F5F2",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "background 0.12s",
+                }}>
+                  <IconSchool color={active ? GREEN : INK3} />
+                </div>
+                <div style={{ flex: 1, textAlign: "right" }}>
+                  <div style={{ fontSize: "14px", fontWeight: "500", color: INK }}>{org.name}</div>
+                  {org.city && (
+                    <div style={{ fontSize: "12px", color: INK3, marginTop: "2px", display: "flex", alignItems: "center", gap: "3px" }}>
+                      <IconMapPin /> {org.city}
+                    </div>
+                  )}
+                </div>
+                <div style={{
+                  width: "20px", height: "20px", borderRadius: "50%", flexShrink: 0,
+                  border: `2px solid ${active ? GREEN : BORDER}`,
+                  background: active ? GREEN : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.12s",
+                }}>
+                  {active && (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M2 5l2.5 2.5 3.5-4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -281,11 +373,11 @@ function JoinOrgStep({ onBack, onSuccess }: { onBack: () => void; onSuccess: () 
           disabled={!selected || requestJoin.isPending}
           style={{
             ...btnPrimary,
-            opacity: !selected ? 0.5 : 1,
+            opacity: !selected ? 0.45 : 1,
             cursor: !selected ? "not-allowed" : "pointer",
           }}
         >
-          {requestJoin.isPending ? "שולח בקשה..." : "שליחת בקשת הצטרפות"}
+          {requestJoin.isPending ? "שולח..." : "שליחת בקשת הצטרפות"}
         </button>
       )}
     </div>
@@ -296,27 +388,41 @@ function JoinOrgStep({ onBack, onSuccess }: { onBack: () => void; onSuccess: () 
 
 function PendingStep() {
   return (
-    <div style={{ textAlign: "center", padding: "12px 0" }}>
-      <div style={{ fontSize: "52px", marginBottom: "16px" }}>✉️</div>
-      <h2 style={{ fontSize: "19px", fontWeight: "600", color: "#1A1A1A", margin: "0 0 12px" }}>
+    <div style={{ textAlign: "center", padding: "8px 0" }}>
+      <div style={{
+        width: "64px", height: "64px", borderRadius: "50%",
+        background: "#EDFBF3", border: `1.5px solid #B6E8C4`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        margin: "0 auto 20px",
+      }}>
+        <IconMail color={GREEN} />
+      </div>
+
+      <h2 style={{ fontSize: "18px", fontWeight: "500", color: INK, margin: "0 0 10px" }}>
         הבקשה נשלחה!
       </h2>
-      <p style={{ fontSize: "14px", color: "#6B6560", lineHeight: 1.7, margin: "0 0 24px" }}>
-        הבקשה נשלחה למנהל/ת בית הספר לאישור.
+      <p style={{ fontSize: "13.5px", color: INK2, lineHeight: 1.7, margin: "0 0 22px" }}>
+        הבקשה הועברה למנהל/ת בית הספר לאישור.<br/>
         ברגע שתאושר — תוכל/י להיכנס ולהתחיל לעבוד.
       </p>
       <div style={{
-        background: "#EDFBF3", border: "1px solid #B6DFC4",
-        borderRadius: "10px", padding: "14px 18px",
-        fontSize: "13.5px", color: "#166534", lineHeight: 1.6,
+        background: "#F8F5F0", border: `1px solid ${BORDER}`,
+        borderRadius: "10px", padding: "13px 16px",
+        fontSize: "13px", color: INK2, lineHeight: 1.65,
+        display: "flex", gap: "10px", alignItems: "center",
       }}>
-        ניתן לסגור את הדפדפן ולחזור מאוחר יותר.
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+          <circle cx="8" cy="8" r="7" stroke={INK3} strokeWidth="1.4"/>
+          <path d="M8 7v4" stroke={INK3} strokeWidth="1.5" strokeLinecap="round"/>
+          <circle cx="8" cy="5.5" r="0.7" fill={INK3}/>
+        </svg>
+        <span>ניתן לסגור את הדפדפן ולחזור מאוחר יותר.</span>
       </div>
     </div>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Page shell ───────────────────────────────────────────────────────────────
 
 function OnboardingPage() {
   const [step, setStep] = useState<Step>("choose");
@@ -325,16 +431,16 @@ function OnboardingPage() {
     <div style={{
       minHeight: "100vh", display: "flex",
       alignItems: "center", justifyContent: "center",
-      background: "linear-gradient(160deg, #F0F7F3 0%, #F7F4EF 100%)",
-      fontFamily: "Rubik, sans-serif", padding: "24px",
+      background: "linear-gradient(150deg, #F3EEE8 0%, #FAFAF7 60%, #EEF4F0 100%)",
+      fontFamily: f, padding: "24px",
     }}>
       <div style={{
-        background: "#fff", border: "1px solid #E2EAE5",
-        borderRadius: "18px", padding: "40px 36px",
+        background: "#fff", border: `1px solid ${BORDER}`,
+        borderRadius: "20px", padding: "40px 36px",
         width: "100%", maxWidth: "420px",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.07)",
+        boxShadow: "0 8px 40px rgba(0,0,0,0.08)",
       }}>
-        <Logo />
+        <LogoRow />
 
         {step === "choose"     && <ChooseStep onChoose={setStep} />}
         {step === "create-org" && <CreateOrgStep onBack={() => setStep("choose")} />}
@@ -350,7 +456,7 @@ function OnboardingPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label style={{ fontSize: "12px", fontWeight: "500", color: "#4A6656", display: "block", marginBottom: "6px" }}>
+      <label style={{ fontSize: "12px", fontWeight: "500", color: INK2, display: "block", marginBottom: "6px" }}>
         {label}
       </label>
       {children}
@@ -361,13 +467,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function BackBtn({ onClick }: { onClick: () => void }) {
   return (
     <button onClick={onClick} style={{
-      display: "flex", alignItems: "center", gap: "6px",
+      display: "flex", alignItems: "center", gap: "5px",
       background: "none", border: "none", cursor: "pointer",
-      fontSize: "13px", color: "#6B6560", padding: "0 0 20px",
-      fontFamily: "Rubik, sans-serif",
-    }}>
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M6 12l4-4-4-4" stroke="#6B6560" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      fontSize: "13px", color: INK3, padding: "0 0 18px",
+      fontFamily: f, transition: "color 0.12s",
+    }}
+      onMouseEnter={e => (e.currentTarget.style.color = INK2)}
+      onMouseLeave={e => (e.currentTarget.style.color = INK3)}
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M5 11l4-4-4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
       חזרה
     </button>

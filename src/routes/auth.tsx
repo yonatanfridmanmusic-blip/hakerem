@@ -112,7 +112,7 @@ function AuthPage() {
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "32px" }}>
           {LOGO}
-          <span style={{ fontSize: "20px", fontWeight: "600", color: "var(--hk-ink)", letterSpacing: "-0.3px" }}>הכרם</span>
+          <span style={{ fontSize: "20px", fontWeight: "500", color: "#1A1A1A", letterSpacing: "-0.3px" }}>הכרם</span>
         </div>
 
         {mode === "login" ? (
