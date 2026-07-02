@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowDownLeft, Users } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useDashboardSummary, type SourceSummary } from "@/hooks/use-dashboard-summary";
 import { useOrganization } from "@/hooks/use-organization";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
@@ -621,14 +621,14 @@ export default function DashboardPage() {
   const { data, isLoading, error } = useDashboardSummary();
 
   // Track whether this session started without a school year
-  const wizardTriggered = useRef<boolean | null>(null);
+  const [wizardTriggered, setWizardTriggered] = useState<boolean | null>(null);
   const [wizardDone, setWizardDone] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && data !== undefined && wizardTriggered.current === null) {
-      wizardTriggered.current = !data.schoolYear;
+    if (!isLoading && data !== undefined && wizardTriggered === null) {
+      setWizardTriggered(!data.schoolYear);
     }
-  }, [isLoading, data]);
+  }, [isLoading, data, wizardTriggered]);
 
   const totals = data?.totals ?? { planned: 0, used: 0, balance: 0, pct: 0 };
   const incomeTotals = data?.incomeTotals ?? { fromIncome: 0, fromParentCollections: 0, grand: 0 };
@@ -643,7 +643,7 @@ export default function DashboardPage() {
   const animFromParentColl = useCountUp(incomeTotals.fromParentCollections);
 
   // Show wizard if session started without a school year and wizard not completed
-  if (wizardTriggered.current === true && !wizardDone) {
+  if (wizardTriggered === true && !wizardDone) {
     return <SetupWizard onComplete={() => setWizardDone(true)} />;
   }
 
