@@ -708,6 +708,35 @@ export type Database = {
           },
         ]
       }
+      org_ai_settings: {
+        Row: {
+          claude_api_key: string | null
+          created_at: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          claude_api_key?: string | null
+          created_at?: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          claude_api_key?: string | null
+          created_at?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_org"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_budget_sources: {
         Row: {
           bg_color: string
