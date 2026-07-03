@@ -745,8 +745,11 @@ export function AiChatPanel() {
     const msg = (text ?? input).trim();
     if (!msg || send.isPending) return;
     setInput("");
-    // Reset textarea height
-    if (inputRef.current) inputRef.current.style.height = "auto";
+    // Reset textarea height and keep focus
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+      inputRef.current.focus();
+    }
     // Show message immediately (optimistic)
     setOptimisticMsg(msg);
     send.mutate(
