@@ -41,6 +41,9 @@ export function useOrganization() {
   return useQuery<OrgMembership | null>({
     queryKey: ["organization"],
     queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return null;
+
       const { data, error } = await supabase
         .from("organization_members")
         .select(`
@@ -49,6 +52,7 @@ export function useOrganization() {
           joined_at,
           organizations (id, name, city, plan, created_at)
         `)
+        .eq("user_id", session.user.id)
         .eq("status", "active")
         .maybeSingle();
 
