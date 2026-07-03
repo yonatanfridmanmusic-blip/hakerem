@@ -186,7 +186,9 @@ function YearsTab() {
   const [pct, setPct]           = useState("85");
 
   const handleCreate = async () => {
-    if (!name || !startDate || !endDate) return;
+    if (!name.trim()) { alert("נא להזין שם לשנת הלימודים"); return; }
+    if (!startDate || !endDate) { alert("נא להזין תאריכי התחלה וסיום"); return; }
+    if (endDate <= startDate) { alert("תאריך הסיום חייב להיות אחרי תאריך ההתחלה"); return; }
     await createYear.mutateAsync({ name, start_date: startDate, end_date: endDate, collection_percentage: Number(pct) });
     setName(""); setStart(""); setEnd(""); setPct("85");
     setShowForm(false);
@@ -398,7 +400,7 @@ function GradesTab() {
               </div>
               <Row>
                 <button type="button" style={btnOutline} onClick={() => { setEditId(g.id); setEditVals({ name: g.name, count: String(g.student_count) }); }}>ערוך</button>
-                <button type="button" style={btnDanger} onClick={() => deleteGrade.mutate(g.id)}>מחק</button>
+                <button type="button" style={btnDanger} onClick={() => { if (window.confirm(`למחוק את שכבה "${g.name}"? פעולה זו תמחק גם את כל הכיתות ונתוני הגבייה של שכבה זו.`)) deleteGrade.mutate(g.id); }}>מחק</button>
               </Row>
             </div>
           )}
@@ -701,11 +703,27 @@ function TeamTab() {
                   </div>
                 </div>
                 <Row>
+                  <select
+                    id={`role-${m.id}`}
+                    defaultValue="viewer"
+                    style={{
+                      padding: "6px 10px", borderRadius: "8px",
+                      border: "1.5px solid #E8E2D9", fontSize: "13px",
+                      color: "#1A1A1A", background: "#fff",
+                      fontFamily: "inherit", cursor: "pointer",
+                    }}
+                  >
+                    <option value="viewer">צופה</option>
+                    <option value="admin">מנהל</option>
+                  </select>
                   <button
                     type="button"
                     style={btnPrimary}
                     disabled={updateStatus.isPending}
-                    onClick={() => updateStatus.mutate({ memberId: m.id, status: "active", role: "admin" })}
+                    onClick={() => {
+                      const sel = document.getElementById(`role-${m.id}`) as HTMLSelectElement;
+                      updateStatus.mutate({ memberId: m.id, status: "active", role: (sel?.value as "viewer" | "admin") ?? "viewer" });
+                    }}
                   >
                     אשר
                   </button>

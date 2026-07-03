@@ -507,6 +507,14 @@ export default function HorimPage() {
   const animPct       = useAnimatedPct(hasTarget ? Math.min(grandPct, 100) : 0);
 
   const openAddCollection = (gradeId?: string) => {
+    if (grades.length === 0) {
+      alert("יש להגדיר שכבות לימוד תחילה בדף ההגדרות → שכבות וכיתות");
+      return;
+    }
+    if (sections.length === 0) {
+      alert("יש להגדיר סעיפי גבייה תחילה — לחץ על כפתור 'סעיפים'");
+      return;
+    }
     setPreGradeId(gradeId);
     setShowModal(true);
   };

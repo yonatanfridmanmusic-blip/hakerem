@@ -631,8 +631,8 @@ function SourceTab({
   const animBalance = useCountUp(Math.max(0, totalPlanned - totalUsed));
   const animPct = useAnimatedPct(totalPct);
 
-  // Check if this source tab is empty — for showing the copy banner (only once, on gefen tab)
-  const isEmpty = !isLoading && categories.length === 0 && srcCfg.key === "gefen";
+  // Check if this source tab is empty — show copy banner on any tab with no categories
+  const isEmpty = !isLoading && categories.length === 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>

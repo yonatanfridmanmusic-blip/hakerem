@@ -138,7 +138,7 @@ function ExpiredPage() {
               תקופת הניסיון הסתיימה
             </h1>
             <p style={{ color: INK2, fontSize: "13.5px", margin: "0 0 28px", lineHeight: 1.65 }}>
-              כדי להמשיך להשתמש בהכרם, הכנס/י את קוד ההפעלה שקיבלת מיונתן.
+              כדי להמשיך להשתמש בהכרם, הכנס/י את קוד ההפעלה שקיבלת מצוות הכרם.
             </p>
 
             <form onSubmit={handleRedeem}>

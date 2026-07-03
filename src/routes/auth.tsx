@@ -128,10 +128,12 @@ function AuthPage() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false); // show "check email" screen
 
   const f = "var(--font-sans, 'Rubik', sans-serif)";
 
@@ -162,6 +164,8 @@ function AuthPage() {
   const signUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) { toast.error("נא להזין שם מלא"); return; }
+    if (password.length < 6) { toast.error("הסיסמה חייבת להכיל לפחות 6 תווים"); return; }
+    if (password !== confirmPassword) { toast.error("הסיסמאות אינן תואמות"); return; }
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -175,8 +179,16 @@ function AuthPage() {
     }
     if (data.user) {
       await supabase.from("profiles").upsert({ id: data.user.id, full_name: fullName.trim(), email });
-      toast.success("החשבון נוצר! עוברים לחיבור בית הספר...");
-      window.location.href = "/onboarding";
+      if (!data.session) {
+        // Email confirmation required — show "check your email" screen
+        setEmailSent(true);
+        setLoading(false);
+      } else {
+        // Email confirmation disabled — go straight to onboarding
+        window.location.href = "/onboarding";
+      }
+    } else {
+      setLoading(false);
     }
   };
 
@@ -191,6 +203,60 @@ function AuthPage() {
     transition: "border-color 0.15s, background 0.15s",
     boxShadow: focusedField === field ? "0 0 0 3px rgba(45,102,68,0.08)" : "none",
   });
+
+  // ── "Check your email" screen ─────────────────────────────────────────
+  if (emailSent) {
+    return (
+      <div style={{
+        minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+        fontFamily: f, direction: "rtl", background: "#F8F5F1",
+      }}>
+        <div style={{
+          background: "#fff", borderRadius: "20px", padding: "48px 40px",
+          maxWidth: "440px", width: "100%", margin: "0 20px",
+          boxShadow: "0 4px 40px rgba(0,0,0,0.08)",
+          textAlign: "center",
+        }}>
+          <div style={{
+            width: "64px", height: "64px", borderRadius: "50%",
+            background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            margin: "0 auto 24px",
+          }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+              <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <h1 style={{ fontSize: "22px", fontWeight: "500", color: "#1A1A1A", margin: "0 0 12px" }}>
+            בדוק את תיבת המייל שלך
+          </h1>
+          <p style={{ fontSize: "14px", color: "#6B6560", lineHeight: 1.7, margin: "0 0 8px" }}>
+            שלחנו קישור אישור לכתובת:
+          </p>
+          <p style={{ fontSize: "15px", fontWeight: "500", color: "#2D6644", margin: "0 0 24px", direction: "ltr" }}>
+            {email}
+          </p>
+          <p style={{ fontSize: "13px", color: "#AAA099", lineHeight: 1.6, margin: "0 0 28px" }}>
+            לחץ על הקישור במייל כדי לאשר את חשבונך ולהמשיך.
+            אם לא קיבלת מייל, בדוק את תיקיית הספאם.
+          </p>
+          <button
+            type="button"
+            onClick={() => { setEmailSent(false); setMode("login"); }}
+            style={{
+              padding: "11px 28px",
+              background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
+              color: "#fff", border: "none", borderRadius: "10px",
+              fontSize: "14px", fontWeight: "500", cursor: "pointer",
+              fontFamily: f,
+            }}
+          >
+            חזרה לכניסה
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -358,6 +424,22 @@ function AuthPage() {
                     style={inputStyle("password")}
                     onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField(null)}
                   />
+                </Field>
+                <Field label="אימות סיסמה">
+                  <input
+                    type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required dir="ltr"
+                    placeholder="הקלד/י את הסיסמה שוב"
+                    style={{
+                      ...inputStyle("confirmPassword"),
+                      borderColor: confirmPassword && confirmPassword !== password ? "#E84040" : (focusedField === "confirmPassword" ? "#2D6644" : "#E8E2D9"),
+                    }}
+                    onFocus={() => setFocusedField("confirmPassword")} onBlur={() => setFocusedField(null)}
+                  />
+                  {confirmPassword && confirmPassword !== password && (
+                    <p style={{ fontSize: "11px", color: "#E84040", margin: "5px 0 0", paddingRight: "2px" }}>
+                      הסיסמאות אינן תואמות
+                    </p>
+                  )}
                 </Field>
                 <SubmitBtn loading={loading} label="יצירת חשבון" />
               </form>
