@@ -305,8 +305,8 @@ export default function LandingPage() {
           color: "#1A1A1A", letterSpacing: "-2px", lineHeight: 1.1,
           margin: "0 0 20px",
         }}>
-          כל הכסף של בית הספר שלך<br />
-          <span style={{ color: "#2D6644", fontWeight: "500" }}>במקום אחד.</span>
+          שלושה תקציבים. מסך אחד.<br />
+          <span style={{ color: "#2D6644", fontWeight: "500" }}>שקט.</span>
         </h1>
 
         <p style={{
