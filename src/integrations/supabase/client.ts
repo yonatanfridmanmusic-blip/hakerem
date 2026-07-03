@@ -23,7 +23,7 @@ function createSupabaseClient() {
       storage: typeof window !== 'undefined' ? localStorage : undefined,
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      detectSessionInUrl: false, // handled manually in index.tsx to avoid race conditions
       flowType: 'pkce',
     }
   });
