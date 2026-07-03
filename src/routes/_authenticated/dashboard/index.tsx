@@ -369,7 +369,9 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   const addBudgetSource = useAddBudgetSource();
 
   // Step 2 — categories
-  const [catSrc, setCatSrc] = useState<string>("gefen");
+  const [catSrc, setCatSrc] = useState<string>("");
+  // Effective source: use selected if valid, else first org source
+  const effectiveCatSrc = catSrc && orgSources.some(s => s.slug === catSrc) ? catSrc : (orgSources[0]?.slug ?? "gefen");
   const [catCustom, setCatCustom] = useState("");
   type AddedCat = { id: string; name: string; amount: number };
   const [addedCats, setAddedCats] = useState<Record<string, AddedCat[]>>({});
@@ -427,19 +429,19 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   };
 
   const handleAddCatSuggestion = async (name: string) => {
-    if ((addedCats[catSrc] ?? []).some(c => c.name === name)) return;
-    const result = await addCategory.mutateAsync({ name, source: catSrc, plannedAmount: 0 });
+    if ((addedCats[effectiveCatSrc] ?? []).some(c => c.name === name)) return;
+    const result = await addCategory.mutateAsync({ name, source: effectiveCatSrc, plannedAmount: 0 });
     if (result?.id) {
-      setAddedCats(prev => ({ ...prev, [catSrc]: [...(prev[catSrc] ?? []), { id: result.id, name, amount: 0 }] }));
+      setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: [...(prev[effectiveCatSrc] ?? []), { id: result.id, name, amount: 0 }] }));
     }
   };
 
   const handleAddCustomCat = async () => {
     if (!catCustom.trim()) return;
     const name = catCustom.trim();
-    const result = await addCategory.mutateAsync({ name, source: catSrc, plannedAmount: 0 });
+    const result = await addCategory.mutateAsync({ name, source: effectiveCatSrc, plannedAmount: 0 });
     if (result?.id) {
-      setAddedCats(prev => ({ ...prev, [catSrc]: [...(prev[catSrc] ?? []), { id: result.id, name, amount: 0 }] }));
+      setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: [...(prev[effectiveCatSrc] ?? []), { id: result.id, name, amount: 0 }] }));
     }
     setCatCustom("");
   };
@@ -830,7 +832,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
             <div style={{ display: "flex", gap: "6px", marginBottom: "20px", background: "#F3EEE8", borderRadius: "10px", padding: "4px", flexWrap: "wrap" }}>
               {orgSources.map(src => {
                 const c = wizardStyle(src);
-                const active = catSrc === src.slug;
+                const active = effectiveCatSrc === src.slug;
                 return (
                   <button key={src.slug} type="button" onClick={() => setCatSrc(src.slug)}
                     style={{ flex: 1, minWidth: "72px", padding: "8px 0", borderRadius: "8px", border: "none", fontSize: "13.5px", fontWeight: active ? "500" : "400", background: active ? c.grad : "transparent", color: active ? "#fff" : c.color, cursor: "pointer", fontFamily: "Rubik, sans-serif", transition: "all 0.15s", boxShadow: active ? "0 2px 8px rgba(0,0,0,0.2)" : "none" }}>
@@ -873,10 +875,10 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
 
             {/* Quick suggestions */}
             {(() => {
-              const activeSrc = orgSources.find(s => s.slug === catSrc) ?? orgSources[0];
-              const c = activeSrc ? wizardStyle(activeSrc) : { label: catSrc, color: "#6B6560", light: "#F5F5F2", grad: "#aaa" };
-              const suggestions = CAT_SUGGESTIONS[catSrc] ?? [];
-              const cats = addedCats[catSrc] ?? [];
+              const activeSrc = orgSources.find(s => s.slug === effectiveCatSrc) ?? orgSources[0];
+              const c = activeSrc ? wizardStyle(activeSrc) : { label: effectiveCatSrc, color: "#6B6560", light: "#F5F5F2", grad: "#aaa" };
+              const suggestions = CAT_SUGGESTIONS[effectiveCatSrc] ?? [];
+              const cats = addedCats[effectiveCatSrc] ?? [];
               return (
                 <div style={{ marginBottom: "16px" }}>
                   {suggestions.length > 0 && (
@@ -927,7 +929,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                             <InlineAmountEdit catId={cat.id} current={cat.amount} color={c.color}
                               onSave={async (n) => {
                                 await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
-                                setAddedCats(prev => ({ ...prev, [catSrc]: (prev[catSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
                               }} />
                           </div>
                         ))}
@@ -940,7 +942,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
 
             {/* Custom cat input */}
             {(() => {
-              const activeSrc = orgSources.find(s => s.slug === catSrc) ?? orgSources[0];
+              const activeSrc = orgSources.find(s => s.slug === effectiveCatSrc) ?? orgSources[0];
               const c = activeSrc ? wizardStyle(activeSrc) : { grad: "#aaa" };
               return (
                 <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
