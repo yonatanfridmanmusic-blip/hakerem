@@ -1080,7 +1080,7 @@ export function AiChatPanel() {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="שאל שאלה או בקש פעולה..."
-                  disabled={send.isPending}
+                  readOnly={send.isPending}
                   rows={1}
                   style={{
                     flex: 1,
