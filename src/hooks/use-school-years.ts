@@ -15,9 +15,23 @@ export function useSchoolYears() {
   return useQuery<SchoolYear[]>({
     queryKey: ["school-years"],
     queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return [];
+
+      // Explicit org filter — super_admin RLS policy sees all orgs otherwise
+      const { data: mem } = await supabase
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", session.user.id)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (!mem?.organization_id) return [];
+
       const { data, error } = await supabase
         .from("school_years")
         .select("id, name, start_date, end_date, is_active, collection_percentage, created_at")
+        .eq("organization_id", mem.organization_id)
         .order("start_date", { ascending: false });
       if (error) throw error;
       return (data ?? []).map((y) => ({
