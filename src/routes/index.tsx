@@ -233,12 +233,21 @@ export default function LandingPage() {
   const f = "var(--font-sans, 'Rubik', sans-serif)";
 
   // Handle Supabase OAuth callback — Supabase redirects here with ?code=...
+  // detectSessionInUrl:true auto-exchanges the code; we just wait for the session.
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get("code");
     if (!code) return;
-    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-      if (!error) window.location.href = "/dashboard";
+
+    // onAuthStateChange fires immediately with current session if already set,
+    // or fires when detectSessionInUrl finishes the exchange.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        subscription.unsubscribe();
+        window.location.href = "/dashboard";
+      }
     });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   return (
