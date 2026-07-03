@@ -455,6 +455,137 @@ function GradeRow({
   );
 }
 
+// ─── Quick-set banner (no amounts defined yet) ────────────────────────────────
+
+function QuickSetBanner({
+  grades,
+  sections,
+  gsaMap,
+}: {
+  grades: Grade[];
+  sections: ParentSection[];
+  gsaMap: Map<string, { amount_per_student: number; existing_id?: string }>;
+}) {
+  const [amount, setAmount] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const upsert = useUpsertGradeSectionAmount();
+
+  if (dismissed) return null;
+
+  const handleSetAll = async () => {
+    const n = Number(amount);
+    if (isNaN(n) || n <= 0) { toast.error("יש להזין סכום תקין"); return; }
+    setSaving(true);
+    try {
+      // Set amount for all grade × section combinations
+      for (const grade of grades) {
+        for (const section of sections) {
+          const key = `${grade.id}:${section.id}`;
+          const existing = gsaMap.get(key);
+          await upsert.mutateAsync({
+            gradeId: grade.id,
+            sectionId: section.id,
+            amountPerStudent: n,
+            existingId: existing?.existing_id,
+          });
+        }
+      }
+      toast.success(`סכום גבייה של ₪${n.toLocaleString("he-IL")} הוגדר לכל השכבות`);
+      setDismissed(true);
+    } catch {
+      toast.error("שגיאה בשמירת הסכום");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #FEF3FF 0%, #F9E6FF 100%)",
+      border: "1.5px solid #E4A8F0",
+      borderRadius: "14px",
+      padding: "16px 20px",
+      display: "flex",
+      alignItems: "center",
+      gap: "14px",
+      flexWrap: "wrap",
+    }}>
+      {/* Icon */}
+      <div style={{
+        width: "38px", height: "38px", borderRadius: "10px", flexShrink: 0,
+        background: "linear-gradient(135deg, #B04A90, #8B2F6E)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <Users size={18} color="#fff" />
+      </div>
+
+      {/* Text */}
+      <div style={{ flex: 1, minWidth: "180px" }}>
+        <div style={{ fontSize: "14px", fontWeight: "500", color: "#6B1C58", marginBottom: "2px" }}>
+          טרם הגדרת סכום גבייה
+        </div>
+        <div style={{ fontSize: "12.5px", color: "#A055A0" }}>
+          הגדר/י סכום גבייה לתלמיד/ה כדי לחשב יעד גבייה לשכבות
+        </div>
+      </div>
+
+      {/* Quick input */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+        <div style={{ position: "relative" }}>
+          <span style={{
+            position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)",
+            fontSize: "13px", color: "#8B2F6E", fontWeight: "500", pointerEvents: "none",
+          }}>₪</span>
+          <input
+            type="number"
+            min="0"
+            step="10"
+            placeholder="0"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleSetAll(); }}
+            style={{
+              width: "100px", paddingRight: "26px", paddingLeft: "10px", paddingTop: "9px", paddingBottom: "9px",
+              border: "1.5px solid #D880C0", borderRadius: "9px",
+              fontSize: "14px", fontFamily: "Rubik, sans-serif",
+              background: "#fff", color: "#1A1A1A",
+              outline: "none", direction: "ltr", textAlign: "right",
+            }}
+          />
+        </div>
+        <button
+          onClick={handleSetAll}
+          disabled={saving || !amount}
+          style={{
+            padding: "9px 16px",
+            background: !amount ? "#E8E2D9" : "linear-gradient(135deg, #B04A90, #8B2F6E)",
+            color: !amount ? "#AAA099" : "#fff",
+            border: "none", borderRadius: "9px",
+            fontSize: "13.5px", fontWeight: "500",
+            cursor: !amount || saving ? "not-allowed" : "pointer",
+            fontFamily: "Rubik, sans-serif",
+            whiteSpace: "nowrap",
+            boxShadow: amount ? "0 3px 10px rgba(139,47,110,0.3)" : "none",
+          }}
+        >
+          {saving ? "שומר..." : `הגדר/י לכל ${grades.length} השכבות`}
+        </button>
+        <button
+          onClick={() => setDismissed(true)}
+          style={{
+            padding: "8px", border: "none", background: "none",
+            cursor: "pointer", color: "#C080C0",
+            display: "flex", alignItems: "center",
+          }}
+          title="סגור"
+        >
+          <X size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HorimPage() {
@@ -593,6 +724,11 @@ export default function HorimPage() {
             </button>
           </div>
         </div>
+
+        {/* Banner: no amounts set yet */}
+        {!isLoading && grades.length > 0 && sections.length > 0 && !hasTarget && (
+          <QuickSetBanner grades={grades} sections={sections} gsaMap={gsaMap} />
+        )}
 
         {/* Summary hero */}
         <div style={{

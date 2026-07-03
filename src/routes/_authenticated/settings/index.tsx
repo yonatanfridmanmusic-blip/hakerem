@@ -20,12 +20,19 @@ import {
   type OrgRole,
   type MemberStatus,
 } from "@/hooks/use-organization";
+import {
+  useOrgBudgetSources,
+  useAddBudgetSource,
+  useUpdateBudgetSource,
+  useDeleteBudgetSource,
+} from "@/hooks/use-budget-sources";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/settings/")({
   component: SettingsPage,
 });
 
-type Tab = "years" | "grades" | "categories" | "team";
+type Tab = "years" | "grades" | "categories" | "sources" | "team";
 
 // ─── Source config (matches rest of app) ──────────────────────────────────
 
@@ -106,6 +113,7 @@ function SettingsPage() {
     { key: "years",      label: "שנות לימודים" },
     { key: "grades",     label: "שכבות וכיתות" },
     { key: "categories", label: "קטגוריות תקציב" },
+    { key: "sources",    label: "מקורות תקציב" },
     { key: "team",       label: "צוות" },
   ];
 
@@ -165,6 +173,7 @@ function SettingsPage() {
       {tab === "years"      && <YearsTab />}
       {tab === "grades"     && <GradesTab />}
       {tab === "categories" && <CategoriesTab />}
+      {tab === "sources"    && <SourcesTab />}
       {tab === "team"       && <TeamTab />}
     </div>
   );
@@ -476,6 +485,227 @@ function GradesTab() {
       ) : (
         <button type="button" style={{ ...btnOutline, marginTop: "4px" }} onClick={() => setShowForm(true)}>
           + הוסף שכבה
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Sources tab ────────────────────────────────────────────────────────────
+
+const PRESET_COLORS = [
+  { color: "#166534", bg: "#F0FDF4" },
+  { color: "#7C2D12", bg: "#FFF7ED" },
+  { color: "#6B21A8", bg: "#FAF5FF" },
+  { color: "#0E7490", bg: "#ECFEFF" },
+  { color: "#9A3412", bg: "#FFF7ED" },
+  { color: "#1E40AF", bg: "#EFF6FF" },
+  { color: "#6B21A8", bg: "#FDF4FF" },
+  { color: "#065F46", bg: "#ECFDF5" },
+];
+
+function SourcesTab() {
+  const { data: sources = [], isLoading } = useOrgBudgetSources();
+  const addSource    = useAddBudgetSource();
+  const updateSource = useUpdateBudgetSource();
+  const deleteSource = useDeleteBudgetSource();
+
+  // Add form state
+  const [showAdd, setShowAdd]       = useState(false);
+  const [newLabel, setNewLabel]     = useState("");
+  const [newColor, setNewColor]     = useState(PRESET_COLORS[3].color);
+  const [newBg, setNewBg]           = useState(PRESET_COLORS[3].bg);
+
+  // Edit state
+  const [editId, setEditId]         = useState<string | null>(null);
+  const [editLabel, setEditLabel]   = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleAdd = async () => {
+    if (!newLabel.trim()) return;
+    try {
+      await addSource.mutateAsync({ label: newLabel.trim(), color: newColor, bg_color: newBg });
+      toast.success(`מקור "${newLabel.trim()}" נוסף`);
+      setNewLabel(""); setShowAdd(false);
+    } catch { toast.error("שגיאה בהוספת מקור"); }
+  };
+
+  const handleUpdate = async (id: string) => {
+    if (!editLabel.trim()) return;
+    try {
+      await updateSource.mutateAsync({ id, label: editLabel.trim() });
+      toast.success("שם המקור עודכן");
+      setEditId(null);
+    } catch { toast.error("שגיאה בעדכון"); }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteSource.mutateAsync(id);
+      toast.success("מקור נמחק");
+      setConfirmDeleteId(null);
+    } catch { toast.error("שגיאה במחיקה"); }
+  };
+
+  if (isLoading) return <Loader />;
+
+  return (
+    <div>
+      <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "20px", lineHeight: 1.6 }}>
+        מקורות התקציב הם הקטגוריות הראשיות שלפיהן מסווגות ההוצאות וההכנסות.
+        מקורות ברירת המחדל (גפן, עירייה, הורים) ניתנים לשינוי שם בלבד. מקורות מותאמים אישית ניתנים לעריכה ומחיקה.
+      </div>
+
+      {/* Sources list */}
+      {sources.map((src) => {
+        const isEditing = editId === src.id;
+        const isConfirmDelete = confirmDeleteId === src.id;
+
+        return (
+          <div key={src.id} style={{
+            ...card,
+            borderRight: `4px solid ${src.color}`,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              {/* Color dot + badge */}
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: "6px",
+                padding: "4px 12px", borderRadius: "20px",
+                background: src.bg_color, color: src.color,
+                fontSize: "13px", fontWeight: 600, flexShrink: 0,
+              }}>
+                <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: src.color }} />
+                {src.label}
+              </div>
+
+              {/* Slug chip */}
+              <span style={{ fontSize: "11px", color: "#AAA099", background: "#F5F2EE", borderRadius: "5px", padding: "2px 7px" }}>
+                {src.slug}
+              </span>
+
+              {src.is_default && (
+                <span style={{ fontSize: "11px", color: "#6B6560", background: "#F0EBE5", borderRadius: "5px", padding: "2px 7px" }}>
+                  ברירת מחדל
+                </span>
+              )}
+
+              {/* Edit label inline */}
+              <div style={{ flex: 1 }} />
+              {isEditing ? (
+                <div style={{ display: "flex", gap: "7px", alignItems: "center" }}>
+                  <input
+                    autoFocus
+                    value={editLabel}
+                    onChange={e => setEditLabel(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") handleUpdate(src.id); if (e.key === "Escape") setEditId(null); }}
+                    style={{ ...inputStyle, width: "140px", padding: "6px 10px" }}
+                  />
+                  <button onClick={() => handleUpdate(src.id)} style={{ ...btnPrimary, padding: "6px 14px", fontSize: "12.5px" }}>שמור</button>
+                  <button onClick={() => setEditId(null)} style={{ ...btnOutline, padding: "6px 10px", fontSize: "12.5px" }}>ביטול</button>
+                </div>
+              ) : isConfirmDelete ? (
+                <div style={{ display: "flex", gap: "7px", alignItems: "center" }}>
+                  <span style={{ fontSize: "12.5px", color: "#C0392B" }}>למחוק את "{src.label}"?</span>
+                  <button onClick={() => handleDelete(src.id)} style={{ ...btnDanger, padding: "6px 14px" }}>מחק</button>
+                  <button onClick={() => setConfirmDeleteId(null)} style={{ ...btnOutline, padding: "6px 10px", fontSize: "12.5px" }}>ביטול</button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    onClick={() => { setEditId(src.id); setEditLabel(src.label); }}
+                    style={{ ...btnOutline, padding: "6px 12px", fontSize: "12.5px" }}
+                  >
+                    שנה שם
+                  </button>
+                  {!src.is_default && (
+                    <button
+                      onClick={() => setConfirmDeleteId(src.id)}
+                      style={{ ...btnDanger, padding: "6px 12px" }}
+                    >
+                      מחק
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Add new source */}
+      {showAdd ? (
+        <div style={{ ...card, border: "1.5px dashed #D0DDD4" }}>
+          <div style={{ fontSize: "14px", fontWeight: 600, color: "#1A1A1A", marginBottom: "14px" }}>
+            הוספת מקור תקציב חדש
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: 500, color: "#6B6560", display: "block", marginBottom: "5px" }}>שם המקור</label>
+              <input
+                autoFocus
+                value={newLabel}
+                onChange={e => setNewLabel(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setShowAdd(false); }}
+                placeholder='לדוגמה: צהרון'
+                style={{ ...inputStyle, maxWidth: "260px" }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: 500, color: "#6B6560", display: "block", marginBottom: "8px" }}>צבע</label>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {PRESET_COLORS.map((p) => (
+                  <button
+                    key={p.color}
+                    type="button"
+                    onClick={() => { setNewColor(p.color); setNewBg(p.bg); }}
+                    style={{
+                      width: "28px", height: "28px", borderRadius: "50%",
+                      background: p.color, border: "none", cursor: "pointer",
+                      outline: newColor === p.color ? `3px solid ${p.color}` : "none",
+                      outlineOffset: "2px",
+                      boxShadow: newColor === p.color ? "0 0 0 4px rgba(0,0,0,0.08)" : "none",
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+            {newLabel && (
+              <div>
+                <label style={{ fontSize: "12px", fontWeight: 500, color: "#6B6560", display: "block", marginBottom: "5px" }}>תצוגה מקדימה</label>
+                <div style={{
+                  display: "inline-flex", alignItems: "center", gap: "6px",
+                  padding: "4px 12px", borderRadius: "20px",
+                  background: newBg, color: newColor, fontSize: "13px", fontWeight: 600,
+                }}>
+                  <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: newColor }} />
+                  {newLabel}
+                </div>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+              <button onClick={handleAdd} disabled={!newLabel.trim() || addSource.isPending} style={btnPrimary}>
+                {addSource.isPending ? "מוסיף..." : "הוסף מקור"}
+              </button>
+              <button onClick={() => { setShowAdd(false); setNewLabel(""); }} style={btnOutline}>ביטול</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowAdd(true)}
+          style={{
+            width: "100%", padding: "14px", marginTop: "4px",
+            border: "1.5px dashed #D0DDD4", borderRadius: "14px",
+            background: "#FAFAF8", color: "#6B6560",
+            fontSize: "14px", cursor: "pointer", fontFamily: "Rubik, sans-serif",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = "#2D6644"; e.currentTarget.style.color = "#2D6644"; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = "#D0DDD4"; e.currentTarget.style.color = "#6B6560"; }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          הוסף מקור מותאם אישית
         </button>
       )}
     </div>
