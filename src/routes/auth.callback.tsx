@@ -8,13 +8,30 @@ export const Route = createFileRoute("/auth/callback")({
 
 function AuthCallback() {
   useEffect(() => {
-    supabase.auth.exchangeCodeForSession(window.location.href).then(({ error }) => {
-      if (error) {
-        window.location.href = "/auth";
-      } else {
+    // Supabase v2 with detectSessionInUrl (default: true) automatically
+    // exchanges the PKCE code on client init. We just wait for SIGNED_IN.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
         window.location.href = "/dashboard";
       }
     });
+
+    // Fallback: maybe already signed in by the time we get here
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        window.location.href = "/dashboard";
+      }
+    });
+
+    // Safety timeout — if nothing happens in 5s, bail to /auth
+    const timeout = setTimeout(() => {
+      window.location.href = "/auth";
+    }, 5000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   return (
