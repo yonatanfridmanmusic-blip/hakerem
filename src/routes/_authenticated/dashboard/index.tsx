@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCreateSchoolYear } from "@/hooks/use-school-years";
 import { useAddGrade, useGrades } from "@/hooks/use-grades";
 import { useAddBudgetCategory, useUpdatePlannedAmount, type BudgetSource } from "@/hooks/use-budget-plan";
+import { useOrgBudgetSources, useAddBudgetSource, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 
 export const Route = createFileRoute("/_authenticated/dashboard/")({
   component: DashboardPage,
@@ -220,11 +221,16 @@ const CAT_SUGGESTIONS: Record<string, string[]> = {
   horim:  ["פעילויות חינוכיות","טיולים","הצגות ואירועים","ציוד ספורט","ימי כיף"],
 };
 
-const SRC_CFG: Record<string, { label: string; color: string; light: string; grad: string }> = {
-  gefen:  { label: "גפן",    color: "#2D6644", light: "#EDFBF3", grad: "linear-gradient(135deg,#2D6644,#1A3D2B)" },
-  iriyah: { label: "עירייה", color: "#B5472A", light: "#FDF1EA", grad: "linear-gradient(135deg,#B5472A,#7C2E18)" },
-  horim:  { label: "הורים",  color: "#8B2F6E", light: "#F4EBF2", grad: "linear-gradient(135deg,#8B2F6E,#4A1A38)" },
+// Derives wizard-card style from an OrgBudgetSource (default or custom)
+const WIZARD_GRAD: Record<string, { light: string; grad: string }> = {
+  gefen:  { light: "#EDFBF3", grad: "linear-gradient(135deg,#2D6644,#1A3D2B)" },
+  iriyah: { light: "#FDF1EA", grad: "linear-gradient(135deg,#B5472A,#7C2E18)" },
+  horim:  { light: "#F4EBF2", grad: "linear-gradient(135deg,#8B2F6E,#4A1A38)" },
 };
+function wizardStyle(src: OrgBudgetSource) {
+  const g = WIZARD_GRAD[src.slug] ?? { light: src.bg_color, grad: `linear-gradient(135deg,${src.color},${src.color}CC)` };
+  return { label: src.label, color: src.color, light: g.light, grad: g.grad };
+}
 
 function SmartDefaults() {
   const now = new Date();
@@ -348,13 +354,21 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   const addGrade = useAddGrade();
   const { data: grades = [] } = useGrades(yearId || undefined);
 
+  // Org sources (loaded dynamically — wizard shows ALL sources including custom)
+  const { data: orgSources = FALLBACK_SOURCES } = useOrgBudgetSources();
+  const addBudgetSource = useAddBudgetSource();
+
   // Step 2 — categories
-  const [catSrc, setCatSrc] = useState<BudgetSource>("gefen");
+  const [catSrc, setCatSrc] = useState<string>("gefen");
   const [catCustom, setCatCustom] = useState("");
   type AddedCat = { id: string; name: string; amount: number };
-  const [addedCats, setAddedCats] = useState<Record<BudgetSource, AddedCat[]>>({ gefen: [], iriyah: [], horim: [] });
+  const [addedCats, setAddedCats] = useState<Record<string, AddedCat[]>>({});
   const addCategory = useAddBudgetCategory();
   const updatePlannedAmount = useUpdatePlannedAmount();
+
+  // "Add source" mini-form (inside wizard step 2)
+  const [showAddSrc, setShowAddSrc]     = useState(false);
+  const [newSrcLabel, setNewSrcLabel]   = useState("");
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -393,10 +407,10 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   };
 
   const handleAddCatSuggestion = async (name: string) => {
-    if (addedCats[catSrc].some(c => c.name === name)) return;
+    if ((addedCats[catSrc] ?? []).some(c => c.name === name)) return;
     const result = await addCategory.mutateAsync({ name, source: catSrc, plannedAmount: 0 });
     if (result?.id) {
-      setAddedCats(prev => ({ ...prev, [catSrc]: [...prev[catSrc], { id: result.id, name, amount: 0 }] }));
+      setAddedCats(prev => ({ ...prev, [catSrc]: [...(prev[catSrc] ?? []), { id: result.id, name, amount: 0 }] }));
     }
   };
 
@@ -405,7 +419,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
     const name = catCustom.trim();
     const result = await addCategory.mutateAsync({ name, source: catSrc, plannedAmount: 0 });
     if (result?.id) {
-      setAddedCats(prev => ({ ...prev, [catSrc]: [...prev[catSrc], { id: result.id, name, amount: 0 }] }));
+      setAddedCats(prev => ({ ...prev, [catSrc]: [...(prev[catSrc] ?? []), { id: result.id, name, amount: 0 }] }));
     }
     setCatCustom("");
   };
@@ -634,103 +648,133 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
               לחצי על הצעות מהירות להוסיף קטגוריות נפוצות, או הקלידי שם מותאם.
             </div>
 
-            {/* Source tabs */}
-            <div style={{ display: "flex", gap: "6px", marginBottom: "20px", background: "#F3EEE8", borderRadius: "10px", padding: "4px" }}>
-              {(["gefen","iriyah","horim"] as BudgetSource[]).map(src => {
-                const c = SRC_CFG[src];
-                const active = catSrc === src;
+            {/* Source tabs — all org sources */}
+            <div style={{ display: "flex", gap: "6px", marginBottom: "20px", background: "#F3EEE8", borderRadius: "10px", padding: "4px", flexWrap: "wrap" }}>
+              {orgSources.map(src => {
+                const c = wizardStyle(src);
+                const active = catSrc === src.slug;
                 return (
-                  <button key={src} type="button" onClick={() => setCatSrc(src)}
-                    style={{ flex: 1, padding: "8px 0", borderRadius: "8px", border: "none", fontSize: "13.5px", fontWeight: active ? "500" : "400", background: active ? c.grad : "transparent", color: active ? "#fff" : c.color, cursor: "pointer", fontFamily: "Rubik, sans-serif", transition: "all 0.15s", boxShadow: active ? "0 2px 8px rgba(0,0,0,0.2)" : "none" }}>
+                  <button key={src.slug} type="button" onClick={() => setCatSrc(src.slug)}
+                    style={{ flex: 1, minWidth: "72px", padding: "8px 0", borderRadius: "8px", border: "none", fontSize: "13.5px", fontWeight: active ? "500" : "400", background: active ? c.grad : "transparent", color: active ? "#fff" : c.color, cursor: "pointer", fontFamily: "Rubik, sans-serif", transition: "all 0.15s", boxShadow: active ? "0 2px 8px rgba(0,0,0,0.2)" : "none" }}>
                     {c.label}
                   </button>
                 );
               })}
-            </div>
-
-            {/* Quick suggestions */}
-            <div style={{ marginBottom: "16px" }}>
-              <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>הצעות מהירות</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
-                {CAT_SUGGESTIONS[catSrc].map(name => {
-                  const added = addedCats[catSrc].some(c => c.name === name);
-                  return (
-                    <button key={name} type="button"
-                      onClick={() => handleAddCatSuggestion(name)}
-                      disabled={added || addCategory.isPending}
-                      style={{
-                        padding: "6px 13px",
-                        background: added ? "#EDFBF3" : SRC_CFG[catSrc].light,
-                        color: added ? "#2D6644" : SRC_CFG[catSrc].color,
-                        border: added ? "1.5px solid #B6E8C4" : `1px solid ${SRC_CFG[catSrc].color}30`,
-                        borderRadius: "8px", fontSize: "12.5px", fontFamily: "Rubik, sans-serif",
-                        cursor: added ? "default" : "pointer",
-                        fontWeight: added ? "500" : "400",
-                        transition: "all 0.15s",
-                        display: "inline-flex", alignItems: "center", gap: "5px",
-                        opacity: addCategory.isPending && !added ? 0.6 : 1,
-                      }}>
-                      {added ? (
-                        <>
-                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                            <path d="M2 6l3 3 5-5" stroke="#2D6644" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                          {name}
-                        </>
-                      ) : `+ ${name}`}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Added categories list with inline amount edit */}
-              {addedCats[catSrc].length > 0 && (
-                <div style={{ marginTop: "14px" }}>
-                  <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>
-                    נוספו ({addedCats[catSrc].length}) — לחץ על הסכום לעדכון
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {addedCats[catSrc].map(cat => (
-                      <div key={cat.id} style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                        background: SRC_CFG[catSrc].light,
-                        border: `1px solid ${SRC_CFG[catSrc].color}30`,
-                        borderRadius: "9px", padding: "7px 12px",
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                            <path d="M2 6l3 3 5-5" stroke={SRC_CFG[catSrc].color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                          <span style={{ fontSize: "13px", color: SRC_CFG[catSrc].color, fontWeight: "500" }}>{cat.name}</span>
-                        </div>
-                        <InlineAmountEdit
-                          catId={cat.id}
-                          current={cat.amount}
-                          color={SRC_CFG[catSrc].color}
-                          onSave={async (n) => {
-                            await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
-                            setAddedCats(prev => ({
-                              ...prev,
-                              [catSrc]: prev[catSrc].map(c => c.id === cat.id ? { ...c, amount: n } : c)
-                            }));
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
+              {/* Add new source inline */}
+              {showAddSrc ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 6px" }}>
+                  <input autoFocus value={newSrcLabel} onChange={e => setNewSrcLabel(e.target.value)}
+                    onKeyDown={async e => {
+                      if (e.key === "Enter" && newSrcLabel.trim()) {
+                        await addBudgetSource.mutateAsync({ label: newSrcLabel.trim() });
+                        setCatSrc(newSrcLabel.trim().toLowerCase().replace(/\s+/g, "_"));
+                        setNewSrcLabel(""); setShowAddSrc(false);
+                      }
+                      if (e.key === "Escape") { setNewSrcLabel(""); setShowAddSrc(false); }
+                    }}
+                    placeholder="שם מקור..."
+                    style={{ width: "100px", padding: "5px 8px", border: "1.5px solid #D0DDD4", borderRadius: "7px", fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none" }} />
+                  <button type="button" onClick={async () => {
+                    if (!newSrcLabel.trim()) return;
+                    await addBudgetSource.mutateAsync({ label: newSrcLabel.trim() });
+                    setCatSrc(newSrcLabel.trim().toLowerCase().replace(/\s+/g, "_"));
+                    setNewSrcLabel(""); setShowAddSrc(false);
+                  }} style={{ padding: "5px 10px", background: "#2D6644", color: "#fff", border: "none", borderRadius: "7px", fontSize: "12px", cursor: "pointer", fontFamily: "Rubik, sans-serif" }}>
+                    הוסף
+                  </button>
+                  <button type="button" onClick={() => { setNewSrcLabel(""); setShowAddSrc(false); }}
+                    style={{ padding: "5px 8px", background: "none", border: "1px solid #D0DDD4", borderRadius: "7px", fontSize: "12px", cursor: "pointer", color: "#888" }}>✕</button>
                 </div>
+              ) : (
+                <button type="button" onClick={() => setShowAddSrc(true)}
+                  style={{ padding: "8px 12px", borderRadius: "8px", border: "1.5px dashed #C0C8C2", background: "transparent", color: "#7A8A82", fontSize: "13px", cursor: "pointer", fontFamily: "Rubik, sans-serif", whiteSpace: "nowrap" }}>
+                  + מקור חדש
+                </button>
               )}
             </div>
 
+            {/* Quick suggestions */}
+            {(() => {
+              const activeSrc = orgSources.find(s => s.slug === catSrc) ?? orgSources[0];
+              const c = activeSrc ? wizardStyle(activeSrc) : { label: catSrc, color: "#6B6560", light: "#F5F5F2", grad: "#aaa" };
+              const suggestions = CAT_SUGGESTIONS[catSrc] ?? [];
+              const cats = addedCats[catSrc] ?? [];
+              return (
+                <div style={{ marginBottom: "16px" }}>
+                  {suggestions.length > 0 && (
+                    <>
+                      <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>הצעות מהירות</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
+                        {suggestions.map(name => {
+                          const added = cats.some(cat => cat.name === name);
+                          return (
+                            <button key={name} type="button"
+                              onClick={() => handleAddCatSuggestion(name)}
+                              disabled={added || addCategory.isPending}
+                              style={{
+                                padding: "6px 13px",
+                                background: added ? "#EDFBF3" : c.light,
+                                color: added ? "#2D6644" : c.color,
+                                border: added ? "1.5px solid #B6E8C4" : `1px solid ${c.color}30`,
+                                borderRadius: "8px", fontSize: "12.5px", fontFamily: "Rubik, sans-serif",
+                                cursor: added ? "default" : "pointer", fontWeight: added ? "500" : "400",
+                                transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: "5px",
+                                opacity: addCategory.isPending && !added ? 0.6 : 1,
+                              }}>
+                              {added ? (<><svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#2D6644" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>{name}</>) : `+ ${name}`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Added categories list */}
+                  {cats.length > 0 && (
+                    <div style={{ marginTop: "14px" }}>
+                      <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>
+                        נוספו ({cats.length}) — לחץ/י על הסכום לעדכון
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {cats.map(cat => (
+                          <div key={cat.id} style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            background: c.light, border: `1px solid ${c.color}30`,
+                            borderRadius: "9px", padding: "7px 12px",
+                          }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke={c.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              <span style={{ fontSize: "13px", color: c.color, fontWeight: "500" }}>{cat.name}</span>
+                            </div>
+                            <InlineAmountEdit catId={cat.id} current={cat.amount} color={c.color}
+                              onSave={async (n) => {
+                                await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
+                                setAddedCats(prev => ({ ...prev, [catSrc]: (prev[catSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                              }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Custom cat input */}
-            <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
-              <input style={{ ...inputSt, flex: 1 }} value={catCustom} onChange={e => setCatCustom(e.target.value)} placeholder="קטגוריה מותאמת אישית..."
-                onKeyDown={e => { if (e.key === "Enter") handleAddCustomCat(); }} />
-              <button type="button" onClick={handleAddCustomCat} disabled={!catCustom.trim()}
-                style={{ padding: "10px 18px", background: catCustom.trim() ? SRC_CFG[catSrc].grad : "#E8E2D9", color: catCustom.trim() ? "#fff" : "#AAA099", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: catCustom.trim() ? "pointer" : "not-allowed", fontWeight: "500" }}>
-                הוסף
-              </button>
-            </div>
+            {(() => {
+              const activeSrc = orgSources.find(s => s.slug === catSrc) ?? orgSources[0];
+              const c = activeSrc ? wizardStyle(activeSrc) : { grad: "#aaa" };
+              return (
+                <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+                  <input style={{ ...inputSt, flex: 1 }} value={catCustom} onChange={e => setCatCustom(e.target.value)}
+                    placeholder="קטגוריה מותאמת אישית..." onKeyDown={e => { if (e.key === "Enter") handleAddCustomCat(); }} />
+                  <button type="button" onClick={handleAddCustomCat} disabled={!catCustom.trim()}
+                    style={{ padding: "10px 18px", background: catCustom.trim() ? c.grad : "#E8E2D9", color: catCustom.trim() ? "#fff" : "#AAA099", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: catCustom.trim() ? "pointer" : "not-allowed", fontWeight: "500" }}>
+                    הוסף
+                  </button>
+                </div>
+              );
+            })()}
 
             <div style={{ display: "flex", gap: "10px", marginTop: "28px" }}>
               <button type="button" onClick={() => setStep(3)} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
