@@ -103,15 +103,35 @@ export function usePeriodicReport(from: string | null, to: string | null) {
 
       const parentCollTotal = collections.reduce((s, c) => s + Number(c.amount), 0);
 
-      const ALL_SOURCES: BudgetSource[] = ["gefen", "iriyah", "horim"];
-      const LABELS: Record<BudgetSource, string> = { gefen: "גפן", iriyah: "עירייה", horim: "הורים" };
+      // Resolve org sources dynamically (same pattern as useDashboardSummary)
+      const { data: { session: sess2 } } = await supabase.auth.getSession();
+      const { data: mem2 } = sess2
+        ? await supabase.from("organization_members").select("organization_id")
+            .eq("user_id", sess2.user.id).eq("status", "active").maybeSingle()
+        : { data: null };
+      const { data: orgSrcRows } = mem2?.organization_id
+        ? await supabase.from("org_budget_sources").select("slug, label")
+            .eq("org_id", mem2.organization_id).order("order_index")
+        : { data: null };
+      const allOrgSources: { slug: string; label: string }[] = orgSrcRows?.length
+        ? orgSrcRows
+        : [{ slug: "gefen", label: "גפן" }, { slug: "iriyah", label: "עירייה" }, { slug: "horim", label: "הורים" }];
 
-      const sources: PeriodicSource[] = ALL_SOURCES.map((source) => {
+      // Also include any slugs from actual data not in org sources list
+      const seenSlugs = new Set<string>(allOrgSources.map(s => s.slug));
+      [...expenses, ...income].forEach(r => {
+        if (r.source && !seenSlugs.has(r.source)) {
+          seenSlugs.add(r.source);
+          allOrgSources.push({ slug: r.source, label: r.source });
+        }
+      });
+
+      const sources: PeriodicSource[] = allOrgSources.map(({ slug: source, label }) => {
         const srcIncome  = income.filter((r) => r.source === source).reduce((s, r) => s + Number(r.amount), 0);
         const horimExtra = source === "horim" ? parentCollTotal : 0;
         const totalInc   = srcIncome + horimExtra;
         const totalExp   = expenses.filter((r) => r.source === source).reduce((s, r) => s + Number(r.amount), 0);
-        return { source, label: LABELS[source], income: totalInc, expenses: totalExp, net: totalInc - totalExp };
+        return { source, label, income: totalInc, expenses: totalExp, net: totalInc - totalExp };
       });
 
       const totalIncome   = income.reduce((s, r) => s + Number(r.amount), 0);

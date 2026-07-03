@@ -88,6 +88,9 @@ export function useDeleteGrade() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["grades"] });
+      queryClient.invalidateQueries({ queryKey: ["grade-section-amounts"] });
+      queryClient.invalidateQueries({ queryKey: ["parent-collections"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }

@@ -25,6 +25,7 @@ import {
   useAddBudgetSource,
   useUpdateBudgetSource,
   useDeleteBudgetSource,
+  FALLBACK_SOURCES,
 } from "@/hooks/use-budget-sources";
 import { toast } from "sonner";
 
@@ -41,8 +42,6 @@ const SOURCE_CFG: Record<string, { label: string; color: string; bg: string; tex
   iriyah: { label: "עירייה", color: "#B5472A", bg: "#FDF1EA", textColor: "#7C3010", gradient: "linear-gradient(160deg, #7C2E18 0%, #3A140A 100%)" },
   horim:  { label: "הורים",  color: "#8B2F6E", bg: "#F4EBF2", textColor: "#6B2356", gradient: "linear-gradient(160deg, #4A1A38 0%, #1F0B17 100%)" },
 };
-
-const SOURCES: BudgetSource[] = ["gefen", "iriyah", "horim"];
 
 // ─── Shared styles ─────────────────────────────────────────────────────────
 
@@ -715,21 +714,40 @@ function SourcesTab() {
 // ─── Categories tab ─────────────────────────────────────────────────────────
 
 function CategoriesTab() {
-  const [src, setSrc] = useState<BudgetSource>("gefen");
-  const cfg = SOURCE_CFG[src];
+  const { data: orgSources } = useOrgBudgetSources();
+  const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
+  const [src, setSrc] = useState<string>("");
+
+  // Effective source: use selection if valid, else first available
+  const effectiveSrc = src && sources.some(s => s.slug === src) ? src : (sources[0]?.slug ?? "gefen");
+
+  // Build cfg for any source slug
+  const getCfg = (slug: string) => {
+    if (SOURCE_CFG[slug]) return SOURCE_CFG[slug];
+    const orgSrc = sources.find(s => s.slug === slug);
+    return {
+      label: orgSrc?.label ?? slug,
+      color: orgSrc?.color ?? "#6B6560",
+      bg: orgSrc?.bg_color ?? "#F5F5F2",
+      textColor: orgSrc?.color ?? "#6B6560",
+      gradient: "linear-gradient(160deg, #2A2A2A 0%, #111 100%)",
+    };
+  };
+
+  const cfg = getCfg(effectiveSrc);
 
   return (
     <div>
       {/* Source selector */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
-        {SOURCES.map((s) => {
-          const c = SOURCE_CFG[s];
-          const active = src === s;
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
+        {sources.map((s) => {
+          const c = getCfg(s.slug);
+          const active = effectiveSrc === s.slug;
           return (
             <button
-              key={s}
+              key={s.slug}
               type="button"
-              onClick={() => setSrc(s)}
+              onClick={() => setSrc(s.slug)}
               style={{
                 padding: "8px 22px",
                 borderRadius: "9px",
@@ -756,7 +774,7 @@ function CategoriesTab() {
         <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>קטגוריות תקציב</div>
       </div>
 
-      <CategoryList source={src} color={cfg.color} bg={cfg.bg} textColor={cfg.textColor} />
+      <CategoryList source={effectiveSrc} color={cfg.color} bg={cfg.bg} textColor={cfg.textColor} />
     </div>
   );
 }
