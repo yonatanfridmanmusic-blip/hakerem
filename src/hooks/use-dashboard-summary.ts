@@ -42,10 +42,22 @@ export function useDashboardSummary() {
         incomeTotals: { fromIncome: 0, fromParentCollections: 0, grand: 0 },
       };
 
-      // 1. Active school year
+      // 0. Resolve current user's org (explicit filter — super_admin sees all orgs otherwise)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return empty;
+      const { data: mem } = await supabase
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", session.user.id)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!mem?.organization_id) return empty;
+
+      // 1. Active school year (filtered to this org)
       const { data: yearData, error: yearError } = await supabase
         .from("school_years")
         .select("id, name")
+        .eq("organization_id", mem.organization_id)
         .eq("is_active", true)
         .maybeSingle();
 

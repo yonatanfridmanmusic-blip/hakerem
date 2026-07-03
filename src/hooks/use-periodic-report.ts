@@ -39,9 +39,20 @@ export function useActiveSchoolYearMeta() {
   return useQuery<SchoolYearMeta | null>({
     queryKey: ["active-school-year-meta"],
     queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return null;
+      const { data: mem } = await supabase
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", session.user.id)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!mem?.organization_id) return null;
+
       const { data, error } = await supabase
         .from("school_years")
         .select("id, name, start_date, end_date")
+        .eq("organization_id", mem.organization_id)
         .eq("is_active", true)
         .maybeSingle();
       if (error) throw error;
