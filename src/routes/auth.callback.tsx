@@ -3,35 +3,39 @@ import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/auth/callback")({
+  ssr: false, // Must run client-side — PKCE verifier lives in localStorage
   component: AuthCallback,
 });
 
 function AuthCallback() {
   useEffect(() => {
-    // Supabase v2 with detectSessionInUrl (default: true) automatically
-    // exchanges the PKCE code on client init. We just wait for SIGNED_IN.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) {
-        window.location.href = "/dashboard";
-      }
-    });
+    async function handleCallback() {
+      // PKCE flow: Supabase sends ?code=xxx
+      const code = new URLSearchParams(window.location.search).get("code");
 
-    // Fallback: maybe already signed in by the time we get here
-    supabase.auth.getSession().then(({ data }) => {
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) {
+          console.error("[auth/callback] exchange error:", error.message);
+          window.location.href = "/auth";
+        } else {
+          window.location.href = "/dashboard";
+        }
+        return;
+      }
+
+      // Implicit / hash flow fallback
+      const { data } = await supabase.auth.getSession();
       if (data.session) {
         window.location.href = "/dashboard";
+        return;
       }
-    });
 
-    // Safety timeout — if nothing happens in 5s, bail to /auth
-    const timeout = setTimeout(() => {
+      // Nothing — bail
       window.location.href = "/auth";
-    }, 5000);
+    }
 
-    return () => {
-      subscription.unsubscribe();
-      clearTimeout(timeout);
-    };
+    handleCallback();
   }, []);
 
   return (
