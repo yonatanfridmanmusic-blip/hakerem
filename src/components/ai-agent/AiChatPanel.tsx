@@ -740,6 +740,13 @@ export function AiChatPanel() {
     if (isOpen) setTimeout(() => inputRef.current?.focus(), 150);
   }, [isOpen]);
 
+  // Refocus input after response arrives
+  useEffect(() => {
+    if (!send.isPending) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [send.isPending]);
+
   const handleSend = (text?: string, e?: FormEvent) => {
     e?.preventDefault();
     const msg = (text ?? input).trim();
