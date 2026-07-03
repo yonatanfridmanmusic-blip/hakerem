@@ -1,4 +1,5 @@
 import { createFileRoute, redirect, Link } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")({
@@ -230,6 +231,15 @@ const FEATURES = [
 
 export default function LandingPage() {
   const f = "var(--font-sans, 'Rubik', sans-serif)";
+
+  // Handle Supabase OAuth callback — Supabase redirects here with ?code=...
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("code");
+    if (!code) return;
+    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      if (!error) window.location.href = "/dashboard";
+    });
+  }, []);
 
   return (
     <div style={{ minHeight: "100vh", background: "#FAFAF7", fontFamily: f, direction: "rtl" }}>
