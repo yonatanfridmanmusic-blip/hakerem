@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-export const Route = createFileRoute("/auth/callback")({
+export const Route = createFileRoute("/auth/callback" as string)({
   ssr: false, // Must run client-side — PKCE verifier lives in localStorage
   component: AuthCallback,
 });
