@@ -291,13 +291,16 @@ function InlineAmountEdit({ catId, current, color, onSave }: {
 
 type WizardMode = "first" | "new-year";
 
-// Helper: create a default "שכר לימוד" parent section + grade_section_amount
-async function setGradeHorimAmount(yearId: string, gradeId: string, amountPerStudent: number) {
+// Helper: ensure named parent section exists + upsert grade_section_amount
+async function setGradeHorimAmount(
+  yearId: string, gradeId: string, amountPerStudent: number,
+  sectionName = "שכר לימוד",
+) {
   const { data: existing } = await supabase
     .from("parent_sections")
     .select("id")
     .eq("school_year_id", yearId)
-    .eq("name", "שכר לימוד")
+    .eq("name", sectionName)
     .limit(1);
 
   let sectionId: string;
@@ -350,9 +353,15 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   // Step 1 — grades
   const [selLetter, setSelLetter] = useState("");
   const [gradeCount, setGradeCount] = useState("0");
-  const [horimAmount, setHorimAmount] = useState("");
   const addGrade = useAddGrade();
   const { data: grades = [] } = useGrades(yearId || undefined);
+  // Wizard: parent-collection sections defined inline
+  const [wizardSections, setWizardSections] = useState<Array<{ name: string }>>([{ name: "שכר לימוד" }]);
+  const [addingSection, setAddingSection] = useState(false);
+  const [newSecName, setNewSecName] = useState("");
+  // wizardGSA[gradeId][sectionIndex] = amountString
+  const [wizardGSA, setWizardGSA] = useState<Record<string, Record<number, string>>>({});
+  const [editingCell, setEditingCell] = useState<{ gradeId: string; secIdx: number } | null>(null);
 
   // Org sources (loaded dynamically — wizard shows ALL sources including custom)
   const { data: orgSources = FALLBACK_SOURCES } = useOrgBudgetSources();
@@ -392,18 +401,21 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
 
   const handleAddGrade = async () => {
     if (!selLetter || !yearId) return;
-    const result = await addGrade.mutateAsync({
+    await addGrade.mutateAsync({
       name: `שכבה ${selLetter}'`,
       student_count: Number(gradeCount),
       yearId,
     });
-    if (horimAmount && Number(horimAmount) > 0 && result?.id) {
-      try { await setGradeHorimAmount(yearId, result.id, Number(horimAmount)); }
-      catch { /* non-blocking */ }
-    }
     setSelLetter("");
     setGradeCount("0");
-    setHorimAmount("");
+  };
+
+  const saveCellToDb = async (gradeId: string, sectionName: string, amountStr: string | undefined) => {
+    const n = Number(amountStr ?? "");
+    if (!amountStr || isNaN(n) || n < 0 || !yearId) { setEditingCell(null); return; }
+    try { await setGradeHorimAmount(yearId, gradeId, n, sectionName); }
+    catch { /* non-blocking */ }
+    setEditingCell(null);
   };
 
   const handleAddCatSuggestion = async (name: string) => {
@@ -587,42 +599,200 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
               </div>
             </div>
 
-            {/* Count + horim amount + add */}
+            {/* Student count + add */}
             {selLetter && (
               <div style={{ marginBottom: "20px" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "12px", alignItems: "flex-end" }}>
                   <div>
                     <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>
                       שכבה {selLetter}' — מספר תלמידים
                     </label>
-                    <input style={inputSt} type="number" min="0" value={gradeCount} onChange={e => setGradeCount(e.target.value)} autoFocus />
+                    <input style={inputSt} type="number" min="0" value={gradeCount} onChange={e => setGradeCount(e.target.value)} autoFocus
+                      onKeyDown={e => { if (e.key === "Enter") handleAddGrade(); }} />
                   </div>
-                  <div>
-                    <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>
-                      גביית הורים לתלמיד ₪ <span style={{ fontWeight: "400", color: "#AAA099" }}>(אופציונלי)</span>
-                    </label>
-                    <input style={inputSt} type="number" min="0" placeholder="0" value={horimAmount} onChange={e => setHorimAmount(e.target.value)} />
-                  </div>
+                  <button type="button" onClick={handleAddGrade} disabled={addGrade.isPending}
+                    style={{ padding: "10px 22px", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer", fontWeight: "500", whiteSpace: "nowrap" }}>
+                    {addGrade.isPending ? "..." : "הוסף שכבה"}
+                  </button>
                 </div>
-                <button type="button" onClick={handleAddGrade} disabled={addGrade.isPending}
-                  style={{ padding: "10px 22px", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer", fontWeight: "500" }}>
-                  {addGrade.isPending ? "..." : "הוסף שכבה"}
-                </button>
               </div>
             )}
 
-            {/* Added grades list */}
+            {/* Parent-collection sections × grades matrix */}
             {grades.length > 0 && (
               <div style={{ marginBottom: "20px" }}>
-                <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>שכבות שנוספו ({grades.length})</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                  {grades.map(g => (
-                    <div key={g.id} style={{ display: "flex", alignItems: "center", gap: "6px", background: "#EDFBF3", border: "1px solid #B6E8C4", borderRadius: "8px", padding: "5px 12px" }}>
-                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#2D6644" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      <span style={{ fontSize: "13px", color: "#1A3D2B", fontWeight: "500" }}>{g.name}</span>
-                      <span style={{ fontSize: "11.5px", color: "#4A8C62" }}>{g.student_count} תלמידים</span>
+                {/* Section header row */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560" }}>
+                    סעיפי גביית הורים לפי שכבה
+                  </div>
+                  {addingSection ? (
+                    <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
+                      <input
+                        autoFocus value={newSecName}
+                        onChange={e => setNewSecName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter" && newSecName.trim()) {
+                            setWizardSections(prev => [...prev, { name: newSecName.trim() }]);
+                            setNewSecName(""); setAddingSection(false);
+                          }
+                          if (e.key === "Escape") { setNewSecName(""); setAddingSection(false); }
+                        }}
+                        placeholder="שם סעיף..."
+                        style={{ width: "110px", padding: "4px 9px", border: "1.5px solid #D0DDD4", borderRadius: "7px", fontSize: "12px", fontFamily: "Rubik, sans-serif", outline: "none" }}
+                      />
+                      <button type="button" onClick={() => {
+                        if (newSecName.trim()) setWizardSections(prev => [...prev, { name: newSecName.trim() }]);
+                        setNewSecName(""); setAddingSection(false);
+                      }} style={{ padding: "4px 10px", background: "#EAF2EC", color: "#2D6644", border: "1px solid #B6E0C0", borderRadius: "7px", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                        הוסף
+                      </button>
+                      <button type="button" onClick={() => { setNewSecName(""); setAddingSection(false); }} style={{ padding: "4px 8px", background: "none", color: "#AAA099", border: "1px solid #E8E2D9", borderRadius: "7px", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>ביטול</button>
                     </div>
-                  ))}
+                  ) : (
+                    <button type="button" onClick={() => setAddingSection(true)}
+                      style={{ display: "flex", alignItems: "center", gap: "4px", padding: "4px 10px", background: "#F9F7F4", color: "#6B6560", border: "1px solid #E8E2D9", borderRadius: "7px", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                      + הוסף סעיף
+                    </button>
+                  )}
+                </div>
+
+                {/* Matrix table */}
+                <div style={{ border: "1px solid #E8E2D9", borderRadius: "10px", overflow: "hidden" }}>
+                  {/* Table header: Grade | Section1 | Section2 | ... | Total */}
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: `140px repeat(${wizardSections.length}, 1fr) 100px`,
+                    padding: "8px 14px", background: "#F5F3F0", borderBottom: "1px solid #E8E2D9",
+                  }}>
+                    <span style={{ fontSize: "11px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.04em" }}>שכבה</span>
+                    {wizardSections.map((sec, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: "3px", justifyContent: "center" }}>
+                        <span style={{ fontSize: "11px", fontWeight: "600", color: "#AAA099" }}>{sec.name}</span>
+                        {wizardSections.length > 1 && (
+                          <button type="button" onClick={() => {
+                            setWizardSections(prev => prev.filter((_, j) => j !== i));
+                            setWizardGSA(prev => {
+                              const next = { ...prev };
+                              Object.keys(next).forEach(gId => {
+                                const updated: Record<number, string> = {};
+                                Object.entries(next[gId] ?? {}).forEach(([k, v]) => {
+                                  const ki = Number(k);
+                                  if (ki < i) updated[ki] = v;
+                                  else if (ki > i) updated[ki - 1] = v;
+                                });
+                                next[gId] = updated;
+                              });
+                              return next;
+                            });
+                          }} style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", padding: "0", display: "flex", lineHeight: 1 }}>
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <span style={{ fontSize: "11px", fontWeight: "600", color: "#1A1A1A", textAlign: "center", letterSpacing: "0.04em" }}>סה"כ/תלמיד</span>
+                  </div>
+
+                  {/* Grade rows */}
+                  {grades.map((g, gIdx) => {
+                    const gAmts = wizardGSA[g.id] ?? {};
+                    const total = wizardSections.reduce((s, _, i) => s + (Number(gAmts[i]) || 0), 0);
+                    return (
+                      <div key={g.id} style={{
+                        display: "grid",
+                        gridTemplateColumns: `140px repeat(${wizardSections.length}, 1fr) 100px`,
+                        padding: "10px 14px", alignItems: "center",
+                        borderBottom: gIdx < grades.length - 1 ? "1px solid #F3EEE8" : "none",
+                        background: "#fff",
+                      }}>
+                        {/* Grade name */}
+                        <div>
+                          <div style={{ fontSize: "13px", color: "#1A1A1A", fontWeight: "500" }}>{g.name}</div>
+                          <div style={{ fontSize: "11px", color: "#AAA099" }}>{g.student_count} תלמידים</div>
+                        </div>
+
+                        {/* Amount cell per section */}
+                        {wizardSections.map((sec, secIdx) => (
+                          <div key={secIdx} style={{ display: "flex", justifyContent: "center" }}>
+                            {editingCell?.gradeId === g.id && editingCell?.secIdx === secIdx ? (
+                              <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                                <span style={{ fontSize: "11px", color: "#8B2F6E", fontWeight: "500" }}>₪</span>
+                                <input
+                                  autoFocus type="number" min="0"
+                                  value={gAmts[secIdx] ?? ""}
+                                  onChange={e => setWizardGSA(prev => ({
+                                    ...prev,
+                                    [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: e.target.value },
+                                  }))}
+                                  onBlur={() => saveCellToDb(g.id, sec.name, gAmts[secIdx])}
+                                  onKeyDown={e => {
+                                    if (e.key === "Enter") saveCellToDb(g.id, sec.name, gAmts[secIdx]);
+                                    if (e.key === "Escape") setEditingCell(null);
+                                    if (e.key === "Tab") {
+                                      e.preventDefault();
+                                      saveCellToDb(g.id, sec.name, gAmts[secIdx]);
+                                      if (secIdx < wizardSections.length - 1) setEditingCell({ gradeId: g.id, secIdx: secIdx + 1 });
+                                      else if (gIdx < grades.length - 1) setEditingCell({ gradeId: grades[gIdx + 1].id, secIdx: 0 });
+                                    }
+                                  }}
+                                  style={{
+                                    width: "62px", padding: "3px 6px",
+                                    border: "1.5px solid #C080A8", borderRadius: "6px",
+                                    fontSize: "12px", fontFamily: "Rubik, sans-serif",
+                                    direction: "ltr", textAlign: "right", outline: "none",
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <div
+                                onClick={() => setEditingCell({ gradeId: g.id, secIdx })}
+                                title="לחץ לעריכה"
+                                onMouseEnter={e => { e.currentTarget.style.background = "#F0E0ED"; e.currentTarget.style.borderColor = "#B060A0"; }}
+                                onMouseLeave={e => {
+                                  const hv = gAmts[secIdx] && Number(gAmts[secIdx]) > 0;
+                                  e.currentTarget.style.background = hv ? "#FAF0F8" : "#FCF7FB";
+                                  e.currentTarget.style.borderColor = hv ? "#DDB8D4" : "#D4B8CC";
+                                }}
+                                style={{
+                                  display: "inline-flex", alignItems: "center", gap: "4px",
+                                  padding: "5px 9px", borderRadius: "7px", cursor: "pointer",
+                                  border: gAmts[secIdx] && Number(gAmts[secIdx]) > 0
+                                    ? "1px solid #DDB8D4" : "1.5px dashed #D4B8CC",
+                                  background: gAmts[secIdx] && Number(gAmts[secIdx]) > 0
+                                    ? "#FAF0F8" : "#FCF7FB",
+                                  minWidth: "68px", justifyContent: "center", transition: "all 0.12s",
+                                }}
+                              >
+                                <span style={{ fontSize: "11px", color: "#8B2F6E", fontWeight: "500" }}>₪</span>
+                                {gAmts[secIdx] && Number(gAmts[secIdx]) > 0 ? (
+                                  <span style={{ fontSize: "12px", fontWeight: "500", color: "#8B2F6E" }}>
+                                    {Number(gAmts[secIdx]).toLocaleString("he-IL")}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: "11px", color: "#C0A0BE", fontStyle: "italic" }}>הגדר</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {/* Total */}
+                        <div style={{ textAlign: "center" }}>
+                          {total > 0 ? (
+                            <>
+                              <div style={{ fontSize: "13px", fontWeight: "600", color: "#1A1A1A" }}>
+                                ₪{total.toLocaleString("he-IL")}
+                              </div>
+                              <div style={{ fontSize: "10px", color: "#AAA099" }}>לתלמיד</div>
+                            </>
+                          ) : (
+                            <span style={{ fontSize: "11px", color: "#C0BAB4" }}>—</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
