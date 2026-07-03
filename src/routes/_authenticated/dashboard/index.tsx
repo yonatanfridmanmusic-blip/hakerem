@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowDownLeft, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDashboardSummary, type SourceSummary } from "@/hooks/use-dashboard-summary";
 import { useOrganization } from "@/hooks/use-organization";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
@@ -309,7 +309,7 @@ async function setGradeHorimAmount(
   } else {
     const { data: sec, error } = await supabase
       .from("parent_sections")
-      .insert({ school_year_id: yearId, name: "שכר לימוד", order_index: 0, is_active: true })
+      .insert({ school_year_id: yearId, name: sectionName, order_index: 0, is_active: true })
       .select("id").single();
     if (error) throw error;
     sectionId = sec.id;
@@ -362,6 +362,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   // wizardGSA[gradeId][sectionIndex] = amountString
   const [wizardGSA, setWizardGSA] = useState<Record<string, Record<number, string>>>({});
   const [editingCell, setEditingCell] = useState<{ gradeId: string; secIdx: number } | null>(null);
+  const savingCellRef = useRef(false); // guard against double-save (Enter → blur)
 
   // Org sources (loaded dynamically — wizard shows ALL sources including custom)
   const { data: orgSources = FALLBACK_SOURCES } = useOrgBudgetSources();
@@ -411,11 +412,18 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   };
 
   const saveCellToDb = async (gradeId: string, sectionName: string, amountStr: string | undefined) => {
+    if (savingCellRef.current) return;
+    savingCellRef.current = true;
     const n = Number(amountStr ?? "");
-    if (!amountStr || isNaN(n) || n < 0 || !yearId) { setEditingCell(null); return; }
+    if (!amountStr || isNaN(n) || n < 0 || !yearId) {
+      setEditingCell(null);
+      savingCellRef.current = false;
+      return;
+    }
     try { await setGradeHorimAmount(yearId, gradeId, n, sectionName); }
     catch { /* non-blocking */ }
     setEditingCell(null);
+    savingCellRef.current = false;
   };
 
   const handleAddCatSuggestion = async (name: string) => {

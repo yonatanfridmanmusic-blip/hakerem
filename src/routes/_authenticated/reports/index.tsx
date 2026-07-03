@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useDashboardSummary, type DashboardSummary } from "@/hooks/use-dashboard-summary";
+import { useOrgBudgetSources, FALLBACK_SOURCES } from "@/hooks/use-budget-sources";
 import {
   useGrades, useParentSections, useGradeSectionAmounts,
   useParentCollections, computeTarget,
@@ -24,12 +25,16 @@ type PeriodType = "monthly" | "quarterly" | "custom";
 const fmt = (n: number) => "₪" + Math.round(n).toLocaleString("he-IL");
 const toDate = () => new Date().toLocaleDateString("he-IL", { year: "numeric", month: "long", day: "numeric" });
 
-const SOURCE_CFG: Record<string, { label: string; color: string; bg: string; textColor: string }> = {
+type SourceCfgEntry = { label: string; color: string; bg: string; textColor: string };
+type SourceCfgMap = Record<string, SourceCfgEntry>;
+
+// Static config for the 3 built-in sources — used as fallback / baseline
+const BASE_SOURCE_CFG: SourceCfgMap = {
   gefen:  { label: "גפן",    color: "#2D6644", bg: "#EDFBF3", textColor: "#166534" },
   iriyah: { label: "עירייה", color: "#B5472A", bg: "#FDF1EA", textColor: "#7C3010" },
   horim:  { label: "הורים",  color: "#8B2F6E", bg: "#F4EBF2", textColor: "#6B2356" },
-  // custom sources get a neutral fallback
 };
+const NEUTRAL_CFG: SourceCfgEntry = { label: "", color: "#6B6560", bg: "#F5F5F2", textColor: "#6B6560" };
 
 // ─── Shared table styles ──────────────────────────────────────────────────────
 
@@ -144,11 +149,11 @@ const PRINT_CSS = `
 
 // ─── HTML builders ────────────────────────────────────────────────────────────
 
-function buildAnnualHTML(data: DashboardSummary): string {
+function buildAnnualHTML(data: DashboardSummary, cfgMap: SourceCfgMap): string {
   const { schoolYear, sources, totals, incomeTotals } = data;
   const yearName = schoolYear?.name ?? "";
   const sourceRows = sources.map((s) => {
-    const cfg = SOURCE_CFG[s.source] ?? { label: s.source, color: "#6B6560", bg: "#F5F5F2", textColor: "#6B6560" };
+    const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.label };
     const balance = s.planned - s.used;
     const pct = s.planned > 0 ? Math.round((s.used / s.planned) * 100) : 0;
     const barColor = pct > 100 ? "#C0392B" : pct > 80 ? "#E67E22" : cfg.color;
@@ -225,10 +230,10 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
 </body></html>`;
 }
 
-function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName: string): string {
+function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName: string, cfgMap: SourceCfgMap): string {
   const { sources, totals } = data;
   const sourceRows = sources.map((s) => {
-    const cfg = SOURCE_CFG[s.source] ?? { label: s.source, color: "#6B6560", bg: "#F5F5F2", textColor: "#6B6560" };
+    const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.source };
     const barColor = s.expenses > s.income ? "#B5472A" : cfg.color;
     return `<tr><td><span class="badge" style="background:${cfg.bg};color:${cfg.textColor}">${cfg.label}</span></td><td class="l green" style="font-weight:600">${fmt(s.income)}</td><td class="l">${fmt(s.expenses)}</td><td class="l" style="font-weight:700;color:${s.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(s.net)}</td></tr>`;
   }).join("");
@@ -284,6 +289,22 @@ function ReportsPage() {
   const amountsQuery  = useGradeSectionAmounts();
   const collectQuery  = useParentCollections();
 
+  // Dynamic source config — merges org sources with static baseline
+  const { data: orgSources } = useOrgBudgetSources();
+  const cfgMap = useMemo<SourceCfgMap>(() => {
+    const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
+    const map: SourceCfgMap = { ...BASE_SOURCE_CFG };
+    sources.forEach(s => {
+      if (!(s.slug in map)) {
+        map[s.slug] = { label: s.label, color: s.color, bg: s.bg_color, textColor: s.color };
+      } else {
+        // Update the label from org (may have been customized)
+        map[s.slug] = { ...map[s.slug], label: s.label };
+      }
+    });
+    return map;
+  }, [orgSources]);
+
   // Periodic state
   const [periodType, setPeriodType]   = useState<PeriodType>("monthly");
   const [selectedRange, setRange]     = useState<DateRange | null>(null);
@@ -302,7 +323,7 @@ function ReportsPage() {
   function handlePrint() {
     if (tab === "annual") {
       if (!annualQuery.data) return;
-      openPrint(buildAnnualHTML(annualQuery.data));
+      openPrint(buildAnnualHTML(annualQuery.data, cfgMap));
     } else if (tab === "horim") {
       openPrint(buildHorimHTML(
         gradesQuery.data   ?? [],
@@ -315,7 +336,7 @@ function ReportsPage() {
       const label = periodType === "custom"
         ? `${customFrom} — ${customTo}`
         : (selectedRange?.label ?? "תקופה נבחרת");
-      openPrint(buildPeriodicHTML(periodicData, label, annualQuery.data?.schoolYear?.name ?? ""));
+      openPrint(buildPeriodicHTML(periodicData, label, annualQuery.data?.schoolYear?.name ?? "", cfgMap));
     }
   }
 
@@ -352,7 +373,7 @@ function ReportsPage() {
         ))}
       </div>
 
-      {tab === "annual"   && <AnnualReport   data={annualQuery.data} isLoading={annualQuery.isLoading} />}
+      {tab === "annual"   && <AnnualReport   data={annualQuery.data} isLoading={annualQuery.isLoading} cfgMap={cfgMap} />}
       {tab === "horim"    && <HorimReport    grades={gradesQuery.data ?? []} sections={sectionsQuery.data ?? []} amounts={amountsQuery.data ?? []} collections={collectQuery.data ?? []} isLoading={gradesQuery.isLoading} />}
       {tab === "periodic" && (
         <PeriodicReport
@@ -369,6 +390,7 @@ function ReportsPage() {
           data={periodicData ?? null}
           isLoading={periodicLoading}
           hasQuery={!!(periodicFrom && periodicTo)}
+          cfgMap={cfgMap}
         />
       )}
     </div>
@@ -377,7 +399,7 @@ function ReportsPage() {
 
 // ─── Annual Report ────────────────────────────────────────────────────────────
 
-function AnnualReport({ data, isLoading }: { data: DashboardSummary | undefined; isLoading: boolean }) {
+function AnnualReport({ data, isLoading, cfgMap }: { data: DashboardSummary | undefined; isLoading: boolean; cfgMap: SourceCfgMap }) {
   if (isLoading) return <Loader />;
   if (!data?.schoolYear) return <EmptyState text="אין שנת לימודים פעילה" />;
   const { sources, totals, incomeTotals } = data;
@@ -403,7 +425,7 @@ function AnnualReport({ data, isLoading }: { data: DashboardSummary | undefined;
           <thead style={{ background: "#FAFAF8" }}><tr><th style={th}>מקור</th><th style={thL}>מתוכנן</th><th style={thL}>הכנסות</th><th style={thL}>הוצאות</th><th style={thL}>יתרה</th><th style={{ ...thL, minWidth: "140px" }}>ניצול</th></tr></thead>
           <tbody>
             {sources.map((s) => {
-              const cfg = SOURCE_CFG[s.source] ?? { label: s.source, color: "#6B6560", bg: "#F5F5F2", textColor: "#6B6560" };
+              const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.label };
               const balance = s.planned - s.used;
               const pct = s.planned > 0 ? Math.round((s.used / s.planned) * 100) : 0;
               return (
@@ -518,7 +540,7 @@ function PeriodicReport({
   monthRanges, quarterRanges,
   selectedRange, onSelectRange,
   customFrom, customTo, onCustomFrom, onCustomTo,
-  data, isLoading, hasQuery,
+  data, isLoading, hasQuery, cfgMap,
 }: {
   periodType: PeriodType; onPeriodType: (pt: PeriodType) => void;
   monthRanges: DateRange[]; quarterRanges: DateRange[];
@@ -526,6 +548,7 @@ function PeriodicReport({
   customFrom: string; customTo: string;
   onCustomFrom: (v: string) => void; onCustomTo: (v: string) => void;
   data: PeriodicSummary | null; isLoading: boolean; hasQuery: boolean;
+  cfgMap: SourceCfgMap;
 }) {
   const periodTypeOptions: { key: PeriodType; label: string; emoji: string }[] = [
     { key: "monthly",   label: "חודשי",           emoji: "📅" },
@@ -713,7 +736,7 @@ function PeriodicReport({
               </thead>
               <tbody>
                 {data.sources.map((s) => {
-                  const cfg = SOURCE_CFG[s.source] ?? { label: s.source, color: "#6B6560", bg: "#F5F5F2", textColor: "#6B6560" };
+                  const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.source };
                   return (
                     <tr key={s.source}>
                       <td style={td}><span style={{ background: cfg.bg, color: cfg.textColor, borderRadius: "8px", padding: "3px 10px", fontSize: "12.5px", fontWeight: 600 }}>{cfg.label}</span></td>
