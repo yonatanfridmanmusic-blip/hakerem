@@ -161,6 +161,26 @@ function AuthPage() {
     }
   };
 
+  const hebrewSignupError = (msg: string): string => {
+    const m = msg.toLowerCase();
+    if (m.includes("already registered") || m.includes("already been registered") || m.includes("user already registered"))
+      return "כתובת האימייל הזו כבר רשומה. נסה/י להתחבר במקום להירשם.";
+    if (m.includes("rate limit") || m.includes("too many"))
+      return "יותר מדי ניסיונות. נסה/י שוב עוד מספר דקות.";
+    if (m.includes("invalid email") || m.includes("unable to validate email"))
+      return "כתובת האימייל אינה תקינה.";
+    if (m.includes("password") && m.includes("6"))
+      return "הסיסמה חייבת להכיל לפחות 6 תווים.";
+    if (m.includes("signup") && m.includes("disabled"))
+      return "ההרשמה אינה פעילה כרגע. פנה/י אל צוות הכרם.";
+    if (m.includes("email not confirmed"))
+      return "האימייל טרם אושר. בדוק/י את תיבת הדואר שלך.";
+    if (m.includes("email address not authorized"))
+      return "כתובת האימייל אינה מורשית לשימוש במערכת.";
+    // Fallback — show original for debugging, but in a softer tone
+    return `שגיאה: ${msg}`;
+  };
+
   const signUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) { toast.error("נא להזין שם מלא"); return; }
@@ -173,12 +193,15 @@ function AuthPage() {
       options: { data: { full_name: fullName.trim() } },
     });
     if (error) {
-      toast.error(error.message);
+      toast.error(hebrewSignupError(error.message));
       setLoading(false);
       return;
     }
     if (data.user) {
-      await supabase.from("profiles").upsert({ id: data.user.id, full_name: fullName.trim(), email });
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({ id: data.user.id, full_name: fullName.trim(), email });
+      if (profileError) console.error("Profile upsert error:", profileError);
       if (!data.session) {
         // Email confirmation required — show "check your email" screen
         setEmailSent(true);
@@ -188,6 +211,9 @@ function AuthPage() {
         window.location.href = "/onboarding";
       }
     } else {
+      // Supabase sometimes returns null user without error when email is already in use
+      // (security: prevents email enumeration). Show "check email" anyway.
+      setEmailSent(true);
       setLoading(false);
     }
   };
@@ -398,7 +424,7 @@ function AuthPage() {
                   יצירת חשבון
                 </h1>
                 <p style={{ fontSize: "14px", color: "#AAA099", margin: 0 }}>
-                  הצטרפי לניהול פיננסי חכם לבית הספר שלך
+                  הצטרף/י לניהול פיננסי חכם לבית הספר שלך
                 </p>
               </div>
 
