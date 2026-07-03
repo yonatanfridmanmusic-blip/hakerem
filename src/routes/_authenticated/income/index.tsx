@@ -380,6 +380,11 @@ function InlineCategoryCell({ inc }: { inc: Income }) {
   const addCategory = useAddBudgetCategory();
   const isAddingNew = selectedId === "__new__";
 
+  // Sync selectedId when inc.budget_category_id changes (e.g. after a background refetch)
+  useEffect(() => {
+    if (!editing) setSelectedId(inc.budget_category_id ?? "");
+  }, [inc.budget_category_id, editing]);
+
   useEffect(() => { if (isAddingNew) setTimeout(() => newCatRef.current?.focus(), 50); }, [isAddingNew]);
 
   const save = async () => {

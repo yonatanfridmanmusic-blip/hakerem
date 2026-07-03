@@ -116,9 +116,12 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim()) return;
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const duplicate = sections.some((s) => s.name.trim() === trimmed);
+    if (duplicate) { toast.error(`סעיף בשם "${trimmed}" כבר קיים`); return; }
     try {
-      await addSection.mutateAsync({ name: newName.trim() });
+      await addSection.mutateAsync({ name: trimmed });
       toast.success("סעיף נוסף");
       setNewName("");
       inputRef.current?.focus();

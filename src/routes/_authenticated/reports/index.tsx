@@ -636,7 +636,7 @@ function PeriodicReport({
         {periodType === "custom" && (
           <div>
             <div style={{ fontSize: "12px", color: "#6B7A72", fontWeight: 500, marginBottom: "10px" }}>בחר טווח תאריכים</div>
-            <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "14px", alignItems: "center", flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontSize: "11px", color: "#6B7A72", marginBottom: "5px" }}>מתאריך</div>
                 <input
@@ -652,11 +652,21 @@ function PeriodicReport({
                 <input
                   type="date"
                   value={customTo}
-                  onChange={(e) => onCustomTo(e.target.value)}
-                  style={{ padding: "9px 13px", borderRadius: "9px", border: "1px solid #D8E2DA", fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none", color: "#1A1A1A", background: "#FAFAF8", cursor: "pointer" }}
+                  min={customFrom || undefined}
+                  onChange={(e) => {
+                    const newTo = e.target.value;
+                    if (customFrom && newTo && newTo < customFrom) return; // block invalid range
+                    onCustomTo(newTo);
+                  }}
+                  style={{ padding: "9px 13px", borderRadius: "9px", border: `1px solid ${customFrom && customTo && customTo < customFrom ? "#EF4444" : "#D8E2DA"}`, fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none", color: "#1A1A1A", background: "#FAFAF8", cursor: "pointer" }}
                 />
               </div>
             </div>
+            {customFrom && customTo && customTo < customFrom && (
+              <div style={{ marginTop: "8px", fontSize: "12.5px", color: "#EF4444" }}>
+                תאריך הסיום חייב להיות אחרי תאריך ההתחלה
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -540,8 +540,11 @@ function CategoryList({ source, color, bg, textColor }: { source: BudgetSource; 
   const [planned, setPlanned]   = useState("0");
 
   const handleAdd = async () => {
-    if (!catName) return;
-    await addCategory.mutateAsync({ name: catName, source, plannedAmount: Number(planned) });
+    const trimmed = catName.trim();
+    if (!trimmed) return;
+    const duplicate = categories.some((c) => c.name.trim() === trimmed);
+    if (duplicate) { alert(`קטגוריה בשם "${trimmed}" כבר קיימת`); return; }
+    await addCategory.mutateAsync({ name: trimmed, source, plannedAmount: Number(planned) });
     setCatName(""); setPlanned("0"); setShowForm(false);
   };
 
@@ -788,17 +791,33 @@ function TeamTab() {
         <div style={{ marginTop: "20px" }}>
           <SectionTitle>נדחו ({rejected.length})</SectionTitle>
           {rejected.map((m) => (
-            <div key={m.id} style={{ ...card, opacity: 0.6 }}>
+            <div key={m.id} style={{ ...card, opacity: 0.75 }}>
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <Avatar name={m.profiles?.full_name ?? "?"} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--hk-ink-1)" }}>{m.profiles?.full_name ?? "—"}</div>
                   <div style={{ fontSize: "12px", color: "var(--hk-ink-3)" }}>{m.profiles?.email}</div>
                 </div>
+                <select
+                  id={`rej-role-${m.id}`}
+                  defaultValue="viewer"
+                  style={{
+                    padding: "6px 10px", borderRadius: "8px",
+                    border: "1.5px solid #E8E2D9", fontSize: "13px",
+                    color: "#1A1A1A", background: "#fff",
+                    fontFamily: "inherit", cursor: "pointer",
+                  }}
+                >
+                  <option value="viewer">צופה</option>
+                  <option value="admin">מנהל</option>
+                </select>
                 <button
                   type="button"
                   style={{ ...btnOutline, fontSize: "12px", padding: "6px 12px" }}
-                  onClick={() => updateStatus.mutate({ memberId: m.id, status: "active", role: "admin" })}
+                  onClick={() => {
+                    const sel = document.getElementById(`rej-role-${m.id}`) as HTMLSelectElement;
+                    updateStatus.mutate({ memberId: m.id, status: "active", role: (sel?.value as "viewer" | "admin") ?? "viewer" });
+                  }}
                 >
                   אשר בכל זאת
                 </button>
