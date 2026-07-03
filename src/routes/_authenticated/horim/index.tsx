@@ -98,7 +98,7 @@ function AmountPerStudentCell({
   return (
     <div
       onClick={() => setEditing(true)}
-      title="לחץ לעריכה"
+      title="עריכה"
       onMouseEnter={e => {
         e.currentTarget.style.background = "#F0E0ED";
         e.currentTarget.style.borderColor = "#B060A0";
@@ -541,7 +541,7 @@ export default function HorimPage() {
       return;
     }
     if (sections.length === 0) {
-      alert("יש להגדיר סעיפי גבייה תחילה — לחץ על כפתור 'סעיפים'");
+      alert("יש להגדיר סעיפי גבייה תחילה — לחצו על כפתור 'סעיפים'");
       return;
     }
     setPreGradeId(gradeId);

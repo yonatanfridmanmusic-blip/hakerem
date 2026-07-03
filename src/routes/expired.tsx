@@ -120,7 +120,7 @@ function ExpiredPage() {
             <h2 style={{ margin: "0 0 8px", fontSize: "18px", fontWeight: "500", color: INK }}>
               הרישיון הופעל בהצלחה
             </h2>
-            <p style={{ color: INK3, fontSize: "13.5px", margin: 0 }}>מעביר אותך לאפליקציה…</p>
+            <p style={{ color: INK3, fontSize: "13.5px", margin: 0 }}>מעבירים אותך למערכת…</p>
           </div>
         ) : (
           <>

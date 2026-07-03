@@ -491,7 +491,7 @@ export default function ExpensesPage() {
                 {q ? `אין תוצאות עבור "${search}"` : "אין הוצאות להצגה"}
               </div>
               <div style={{ color: "#7A7470", fontSize: "12px", marginTop: "4px" }}>
-                {q ? "נסה מילת חיפוש אחרת" : "לחץ על \"הוסף הוצאה\" להתחלה"}
+                {q ? "נסו מילת חיפוש אחרת" : "לחצו על \"הוסף הוצאה\" להתחלה"}
               </div>
             </div>
           ) : (

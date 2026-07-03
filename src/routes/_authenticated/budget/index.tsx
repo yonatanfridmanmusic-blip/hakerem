@@ -858,7 +858,7 @@ function SourceTab({
               <div
                 style={{ color: "#7A7470", fontSize: "12px", marginTop: "4px" }}
               >
-                לחץ "הוסף קטגוריה" להתחלה
+                לחצו על "הוסף קטגוריה" להתחלה
               </div>
             </div>
           )
@@ -1027,7 +1027,7 @@ export default function BudgetPage() {
           </h1>
           <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099" }}>
             {isCurrentYear
-              ? "תכנית שנתית לפי מקור — לחץ על סכום מתוכנן לעריכה"
+              ? "תכנית שנתית לפי מקור — לחצו על סכום מתוכנן לעריכה"
               : selectedYear
               ? `תכנון תקציב — ${selectedYear.name}`
               : "טוען..."}
@@ -1060,8 +1060,8 @@ export default function BudgetPage() {
         >
           <span style={{ fontSize: "16px" }}>✏️</span>
           <span>
-            <strong>מצב תכנון — {selectedYear.name}.</strong> אתה מתכנן תקציב
-            לשנה הבאה. נתוני הניצול יופיעו כשהשנה תהיה פעילה.
+            <strong>מצב תכנון — {selectedYear.name}.</strong> תקציב זה הוא לשנה הבאה.
+            נתוני הניצול יופיעו כשהשנה תהיה פעילה.
           </span>
           {activeYear && (
             <button

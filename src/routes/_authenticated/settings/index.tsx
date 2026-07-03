@@ -28,13 +28,12 @@ import {
   FALLBACK_SOURCES,
 } from "@/hooks/use-budget-sources";
 import { toast } from "sonner";
-import { useOrgAiSettings, useUpsertOrgAiSettings } from "@/hooks/use-ai-agent";
 
 export const Route = createFileRoute("/_authenticated/settings/")({
   component: SettingsPage,
 });
 
-type Tab = "years" | "grades" | "categories" | "sources" | "team" | "ai";
+type Tab = "years" | "grades" | "categories" | "sources" | "team";
 
 // ─── Source config (matches rest of app) ──────────────────────────────────
 
@@ -115,7 +114,6 @@ function SettingsPage() {
     { key: "categories", label: "קטגוריות תקציב" },
     { key: "sources",    label: "מקורות תקציב" },
     { key: "team",       label: "צוות" },
-    { key: "ai",         label: "סוכן AI" },
   ];
 
   return (
@@ -176,7 +174,6 @@ function SettingsPage() {
       {tab === "categories" && <CategoriesTab />}
       {tab === "sources"    && <SourcesTab />}
       {tab === "team"       && <TeamTab />}
-      {tab === "ai"         && <AiSettingsTab />}
     </div>
   );
 }
@@ -231,7 +228,7 @@ function YearsTab() {
               שנת הלימודים לא פעילה
             </div>
             <div style={{ fontSize: "13px", color: "#B45309", lineHeight: 1.55 }}>
-              יצרת שנת לימודים אך היא אינה פעילה עדיין. לחצי על <strong>הגדר כפעיל</strong> כדי שהדשבורד יתחיל לעבוד.
+              יצרת שנת לימודים אך היא אינה פעילה עדיין. לחצו על <strong>הגדר כפעיל</strong> כדי שלוח הבקרה יתחיל לעבוד.
             </div>
           </div>
         </div>
@@ -1146,182 +1143,3 @@ function Loader() {
   return <div style={{ color: "var(--hk-ink-3)", padding: "24px", fontSize: "14px" }}>טוען...</div>;
 }
 
-// ─── AI Settings Tab ────────────────────────────────────────────────────────
-
-function AiSettingsTab() {
-  const { data: membership } = useOrganization();
-  const orgId = membership?.organization?.id;
-  const { data: aiSettings, isLoading } = useOrgAiSettings();
-  const upsert = useUpsertOrgAiSettings();
-
-  const [keyInput, setKeyInput] = useState("");
-  const [showKey, setShowKey] = useState(false);
-
-  const hasKey = !!aiSettings?.claude_api_key;
-  const displayKey = hasKey && !showKey
-    ? "sk-ant-••••••••••••••••••••••"
-    : (keyInput || aiSettings?.claude_api_key || "");
-
-  const handleSave = () => {
-    const val = keyInput.trim();
-    if (!val) { toast.error("נא להזין מפתח API"); return; }
-    if (!val.startsWith("sk-ant-")) { toast.error("מפתח Claude חייב להתחיל ב-sk-ant-"); return; }
-    if (!orgId) return;
-    upsert.mutate(
-      { orgId, claudeApiKey: val },
-      {
-        onSuccess: () => {
-          toast.success("מפתח Claude API נשמר בהצלחה");
-          setKeyInput("");
-          setShowKey(false);
-        },
-        onError: () => toast.error("שגיאה בשמירה"),
-      },
-    );
-  };
-
-  if (isLoading) return <Loader />;
-
-  return (
-    <div style={{ maxWidth: "560px" }}>
-      {/* Info card */}
-      <div style={{
-        ...card,
-        background: "linear-gradient(135deg, #0F2419 0%, #081510 100%)",
-        border: "1px solid rgba(45,102,68,0.3)",
-        marginBottom: "20px",
-      }}>
-        <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
-          <div style={{
-            width: "36px", height: "36px", borderRadius: "10px",
-            background: "rgba(45,102,68,0.3)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="rgba(255,255,255,0.8)" />
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontSize: "14px", fontWeight: 600, color: "#fff", marginBottom: "5px" }}>
-              סוכן AI — Claude
-            </div>
-            <div style={{ fontSize: "12.5px", color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
-              הסוכן מאפשר ניהול פיננסי בשפה טבעית — שאלות, תובנות, וביצוע פעולות עם אישור.
-              כל ארגון עובד עם מפתח API משלו. המפתח מאוחסן בצורה מאובטחת בשרת.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Status */}
-      <div style={{ ...card, marginBottom: "16px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-          <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--hk-ink-1)" }}>מפתח Claude API</div>
-          <span style={{
-            fontSize: "11.5px",
-            fontWeight: 600,
-            padding: "3px 10px",
-            borderRadius: "20px",
-            background: hasKey ? "#EDFBF3" : "#FEF2F2",
-            color: hasKey ? "#166534" : "#B91C1C",
-          }}>
-            {hasKey ? "✓ מוגדר" : "✗ לא מוגדר"}
-          </span>
-        </div>
-
-        {/* Key input */}
-        <div style={{ marginBottom: "12px" }}>
-          <Label>מפתח API (sk-ant-...)</Label>
-          <div style={{ position: "relative" }}>
-            <input
-              type={showKey ? "text" : "password"}
-              value={showKey ? (keyInput || aiSettings?.claude_api_key || "") : keyInput}
-              onChange={e => setKeyInput(e.target.value)}
-              placeholder={hasKey ? "הזן מפתח חדש להחלפה" : "sk-ant-api03-..."}
-              style={{ ...inputStyle, paddingLeft: "40px", fontFamily: "monospace, Rubik" }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey(v => !v)}
-              style={{
-                position: "absolute",
-                left: "10px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--hk-ink-3)",
-                fontSize: "12px",
-                padding: "2px 4px",
-              }}
-            >
-              {showKey ? "הסתר" : "הצג"}
-            </button>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={upsert.isPending}
-            style={{ ...btnPrimary, opacity: upsert.isPending ? 0.7 : 1 }}
-          >
-            {upsert.isPending ? "שומר..." : "שמור מפתח"}
-          </button>
-          {hasKey && (
-            <button
-              type="button"
-              onClick={() => {
-                if (!orgId) return;
-                upsert.mutate(
-                  { orgId, claudeApiKey: "" },
-                  { onSuccess: () => toast.success("המפתח הוסר") },
-                );
-              }}
-              style={{ ...btnOutline, color: "#C0392B", borderColor: "#E8C5C0" }}
-            >
-              הסר מפתח
-            </button>
-          )}
-        </div>
-
-        <div style={{ marginTop: "12px", fontSize: "11.5px", color: "var(--hk-ink-3)", lineHeight: 1.6 }}>
-          ניתן לקבל מפתח API מ-{" "}
-          <a
-            href="https://console.anthropic.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "#2D6644" }}
-          >
-            console.anthropic.com
-          </a>
-          {" "}(נדרשת הרשמה חינמית).
-          המפתח מאובטח ומשמש רק לעיבוד שאלות הסוכן בארגון שלך.
-        </div>
-      </div>
-
-      {/* Capabilities */}
-      {hasKey && (
-        <div style={{ ...card, background: "#F7FAF8" }}>
-          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--hk-ink-1)", marginBottom: "12px" }}>
-            יכולות הסוכן
-          </div>
-          {[
-            { icon: "📊", text: "שאלות על נתוני תקציב, הוצאות, הכנסות" },
-            { icon: "✍️", text: "הוספת הוצאה / הכנסה עם אישור מפורש" },
-            { icon: "🔍", text: "סינון וחיפוש בנתונים היסטוריים" },
-            { icon: "💡", text: "תובנות ומגמות פיננסיות" },
-          ].map(({ icon, text }) => (
-            <div key={text} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "7px" }}>
-              <span style={{ fontSize: "16px" }}>{icon}</span>
-              <span style={{ fontSize: "13px", color: "var(--hk-ink-2)" }}>{text}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}

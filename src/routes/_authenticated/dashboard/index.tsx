@@ -493,7 +493,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
             {step === 0 && (mode === "new-year" ? "איזה כיף לפתוח שנה חדשה ביחד — נתחיל?" : "נגדיר את שנת הלימודים שלך יחד — שלב שלב")}
             {step === 1 && `✓ שנת הלימודים "${createdYearName}" נוצרה! עכשיו נוסיף שכבות.`}
             {step === 2 && `✓ השכבות הוגדרו! עכשיו נגדיר קטגוריות תקציב.`}
-            {step === 3 && (mode === "new-year" ? "השנה החדשה פעילה ומחכה להוצאות ראשונות!" : "לוח הבקרה שלך פעיל ומוכן לעבודה. בואי נתחיל!")}
+            {step === 3 && (mode === "new-year" ? "השנה החדשה פעילה ומחכה להוצאות ראשונות!" : "לוח הבקרה שלך פעיל ומוכן לעבודה. בוא נתחיל!")}
           </div>
 
           {/* Progress bar */}
@@ -537,7 +537,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
           <div>
             <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>יצירת שנת הלימודים</div>
             <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "24px", lineHeight: 1.6 }}>
-              נתחיל מהבסיס — מה שם שנת הלימודים שתרצי להגדיר?
+              נתחיל מהבסיס — מה שם שנת הלימודים שתרצה/י להגדיר?
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -585,7 +585,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
           <div>
             <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>הגדרת שכבות</div>
             <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "24px", lineHeight: 1.6 }}>
-              בחרי שכבה, הזיני מספר תלמידים ולחצי "הוסף". אפשר להוסיף כמה שתרצי.
+              בחרו שכבה, הזינו מספר תלמידים ולחצו על "הוסף". אפשר להוסיף כמה שרוצים.
             </div>
 
             {/* Grade chips */}
@@ -825,7 +825,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
           <div>
             <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>קטגוריות תקציב</div>
             <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "20px", lineHeight: 1.6 }}>
-              לחצי על הצעות מהירות להוסיף קטגוריות נפוצות, או הקלידי שם מותאם.
+              לחצו על הצעות מהירות להוסיף קטגוריות נפוצות, או הקלידו שם מותאם.
             </div>
 
             {/* Source tabs — all org sources */}

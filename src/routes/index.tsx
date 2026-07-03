@@ -496,10 +496,10 @@ export default function LandingPage() {
         <div style={{ position: "absolute", top: "-60px", left: "-60px", width: "220px", height: "220px", borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
         <div style={{ position: "relative", zIndex: 1 }}>
           <h2 style={{ fontSize: "clamp(24px, 3.5vw, 38px)", fontWeight: "300", color: "#fff", margin: "0 0 10px", letterSpacing: "-0.8px" }}>
-            מוכנה להתחיל?
+            מוכנים להתחיל?
           </h2>
           <p style={{ fontSize: "15px", color: "rgba(255,255,255,0.6)", margin: 0, lineHeight: 1.6 }}>
-            הצטרפי לבתי ספר שכבר מנהלים את תקציבם בהכרם
+            הצטרפו לבתי ספר שכבר מנהלים את תקציבם בהכרם
           </p>
         </div>
         <Link to="/auth" style={{

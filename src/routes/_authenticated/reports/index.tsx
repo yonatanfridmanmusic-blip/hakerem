@@ -161,7 +161,7 @@ function buildAnnualHTML(data: DashboardSummary, cfgMap: SourceCfgMap): string {
   }).join("");
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח שנתי – ${yearName}</title><style>${PRINT_CSS}</style></head><body>
   <div class="print-bar">
-    <div><div class="print-bar-title">📋 דוח שנתי — ${yearName}</div><div class="print-bar-hint">לחץ "ייצוא PDF" כדי לשמור את הדוח</div></div>
+    <div><div class="print-bar-title">📋 דוח שנתי — ${yearName}</div><div class="print-bar-hint">לחצו על "ייצוא PDF" כדי לשמור את הדוח</div></div>
     <div style="display:flex;align-items:center">
       <button class="btn-close" onclick="window.close()">✕ סגור</button>
       <button class="btn-print" onclick="window.print()">📄 ייצוא PDF / הדפסה</button>
@@ -208,7 +208,7 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
   const tS = grades.reduce((s, g) => s + g.student_count, 0);
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>גבייה מהורים – ${yearName}</title><style>${PRINT_CSS}</style></head><body>
   <div class="print-bar">
-    <div><div class="print-bar-title">📋 גבייה מהורים — ${yearName}</div><div class="print-bar-hint">לחץ "ייצוא PDF" כדי לשמור את הדוח</div></div>
+    <div><div class="print-bar-title">📋 גבייה מהורים — ${yearName}</div><div class="print-bar-hint">לחצו על "ייצוא PDF" כדי לשמור את הדוח</div></div>
     <div style="display:flex;align-items:center">
       <button class="btn-close" onclick="window.close()">✕ סגור</button>
       <button class="btn-print" onclick="window.print()">📄 ייצוא PDF / הדפסה</button>
@@ -239,7 +239,7 @@ function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName:
   }).join("");
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח תקופתי – ${periodLabel}</title><style>${PRINT_CSS}</style></head><body>
   <div class="print-bar">
-    <div><div class="print-bar-title">📋 דוח תקופתי — ${periodLabel}</div><div class="print-bar-hint">לחץ "ייצוא PDF" כדי לשמור את הדוח</div></div>
+    <div><div class="print-bar-title">📋 דוח תקופתי — ${periodLabel}</div><div class="print-bar-hint">לחצו על "ייצוא PDF" כדי לשמור את הדוח</div></div>
     <div style="display:flex;align-items:center">
       <button class="btn-close" onclick="window.close()">✕ סגור</button>
       <button class="btn-print" onclick="window.print()">📄 ייצוא PDF / הדפסה</button>
