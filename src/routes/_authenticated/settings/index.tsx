@@ -29,13 +29,13 @@ type Tab = "years" | "grades" | "categories" | "team";
 
 // ─── Source config (matches rest of app) ──────────────────────────────────
 
-const SOURCE_CFG = {
+const SOURCE_CFG: Record<string, { label: string; color: string; bg: string; textColor: string; gradient: string }> = {
   gefen:  { label: "גפן",    color: "#2D6644", bg: "#EDFBF3", textColor: "#166534", gradient: "linear-gradient(160deg, #1A3D2B 0%, #0F2419 100%)" },
   iriyah: { label: "עירייה", color: "#B5472A", bg: "#FDF1EA", textColor: "#7C3010", gradient: "linear-gradient(160deg, #7C2E18 0%, #3A140A 100%)" },
   horim:  { label: "הורים",  color: "#8B2F6E", bg: "#F4EBF2", textColor: "#6B2356", gradient: "linear-gradient(160deg, #4A1A38 0%, #1F0B17 100%)" },
-} as const;
+};
 
-const SOURCES = (["gefen", "iriyah", "horim"] as BudgetSource[]);
+const SOURCES: BudgetSource[] = ["gefen", "iriyah", "horim"];
 
 // ─── Shared styles ─────────────────────────────────────────────────────────
 

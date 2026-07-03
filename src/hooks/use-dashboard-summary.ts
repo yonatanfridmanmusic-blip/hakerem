@@ -1,10 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-import { type BudgetSource } from "@/types/budget";
-
 export interface SourceSummary {
-  source: BudgetSource;
+  source: string;
   label: string;
   // Budget planning (from budget_categories)
   planned: number;
@@ -24,12 +22,6 @@ export interface DashboardSummary {
   totals: { planned: number; used: number; balance: number; pct: number };
   incomeTotals: { fromIncome: number; fromParentCollections: number; grand: number };
 }
-
-const SOURCE_LABELS: Record<BudgetSource, string> = {
-  gefen: "גפן",
-  iriyah: "עירייה",
-  horim: "הורים",
-};
 
 export function useDashboardSummary() {
   return useQuery<DashboardSummary>({
@@ -53,11 +45,13 @@ export function useDashboardSummary() {
         .maybeSingle();
       if (!mem?.organization_id) return empty;
 
+      const orgId = mem.organization_id;
+
       // 1. Active school year (filtered to this org)
       const { data: yearData, error: yearError } = await supabase
         .from("school_years")
         .select("id, name")
-        .eq("organization_id", mem.organization_id)
+        .eq("organization_id", orgId)
         .eq("is_active", true)
         .maybeSingle();
 
@@ -66,48 +60,69 @@ export function useDashboardSummary() {
 
       const yearId = yearData.id;
 
-      // 2. Budget categories (planned amounts)
+      // 2. Org budget sources (dynamic — includes custom sources)
+      const { data: orgSources } = await supabase
+        .from("org_budget_sources")
+        .select("slug, label")
+        .eq("org_id", orgId)
+        .order("order_index");
+
+      const allSources: { slug: string; label: string }[] =
+        orgSources?.length
+          ? orgSources
+          : [
+              { slug: "gefen",  label: "גפן" },
+              { slug: "iriyah", label: "עירייה" },
+              { slug: "horim",  label: "הורים" },
+            ];
+
+      // 3. Budget categories (planned amounts)
       const { data: categories, error: catError } = await supabase
         .from("budget_categories")
         .select("source, planned_amount")
         .eq("school_year_id", yearId);
       if (catError) throw catError;
 
-      // 3. Expenses
+      // 4. Expenses
       const { data: expenses, error: expError } = await supabase
         .from("expenses")
         .select("source, amount")
         .eq("school_year_id", yearId);
       if (expError) throw expError;
 
-      // 4. Income table (per source)
+      // 5. Income table (per source)
       const { data: incomeRows } = await supabase
         .from("income")
         .select("source, amount")
         .eq("school_year_id", yearId);
 
-      // 5. Parent collections (all go to "horim" source)
+      // 6. Parent collections (always go to "horim" source)
       const { data: parentCollRows } = await supabase
         .from("parent_collections")
         .select("amount")
         .eq("school_year_id", yearId);
 
+      const parentCollTotal = (parentCollRows ?? []).reduce((s, r) => s + Number(r.amount), 0);
+
       // Aggregate income by source
-      const incomeBySource: Record<BudgetSource, number> = { gefen: 0, iriyah: 0, horim: 0 };
+      const incomeBySource: Record<string, number> = {};
+      allSources.forEach(s => { incomeBySource[s.slug] = 0; });
       (incomeRows ?? []).forEach((r) => {
-        const src = r.source as BudgetSource;
-        if (src in incomeBySource) incomeBySource[src] += Number(r.amount);
+        if (r.source in incomeBySource) incomeBySource[r.source] += Number(r.amount);
+        else incomeBySource[r.source] = Number(r.amount);
       });
 
       // Add parent collections to horim income
-      const parentCollTotal = (parentCollRows ?? []).reduce((s, r) => s + Number(r.amount), 0);
-      incomeBySource.horim += parentCollTotal;
+      if ("horim" in incomeBySource) {
+        incomeBySource["horim"] += parentCollTotal;
+      } else {
+        incomeBySource["horim"] = parentCollTotal;
+      }
 
       const fromIncome = Object.values(incomeBySource).reduce((a, b) => a + b, 0) - parentCollTotal;
 
-      // 6. Per-source summaries
-      const allSources: BudgetSource[] = ["gefen", "iriyah", "horim"];
-      const sources: SourceSummary[] = allSources.map((source) => {
+      // 7. Per-source summaries
+      const sources: SourceSummary[] = allSources.map(({ slug: source, label }) => {
         const planned = (categories ?? [])
           .filter((c) => c.source === source)
           .reduce((sum, c) => sum + Number(c.planned_amount), 0);
@@ -120,19 +135,19 @@ export function useDashboardSummary() {
         const pct = planned > 0 ? Math.round((used / planned) * 100) : 0;
 
         // Cash / income side
-        const income = incomeBySource[source];
-        const isIncomeBased = income > 0; // true if we have actual income/collections recorded
+        const income = incomeBySource[source] ?? 0;
+        const isIncomeBased = income > 0;
         const cashBalance = isIncomeBased ? income - used : balance;
         const cashPct = income > 0 ? Math.round((used / income) * 100) : pct;
 
         return {
-          source, label: SOURCE_LABELS[source],
+          source, label,
           planned, used, balance, pct,
           income, cashBalance, cashPct, isIncomeBased,
         };
       });
 
-      // 7. Totals (budget-side for hero)
+      // 8. Totals (budget-side for hero)
       const totalPlanned = sources.reduce((s, x) => s + x.planned, 0);
       const totalUsed    = sources.reduce((s, x) => s + x.used, 0);
       const totalBalance = totalPlanned - totalUsed;

@@ -13,6 +13,7 @@ import {
   type BudgetCategory,
 } from "@/hooks/use-budget-plan";
 import { useSchoolYears } from "@/hooks/use-school-years";
+import { useOrgBudgetSources, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 
 export const Route = createFileRoute("/_authenticated/budget/")({
   component: BudgetPage,
@@ -20,8 +21,8 @@ export const Route = createFileRoute("/_authenticated/budget/")({
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const SOURCES: {
-  key: BudgetSource;
+interface SrcCfg {
+  key: string;
   label: string;
   color: string;
   bg: string;
@@ -29,38 +30,26 @@ const SOURCES: {
   barGradient: string;
   heroGradient: string;
   heroShadow: string;
-}[] = [
-  {
-    key: "gefen",
-    label: "גפן",
-    color: "#2D6644",
-    bg: "#EDFBF3",
-    textColor: "#166534",
-    barGradient: "linear-gradient(90deg, #5AA674, #2D6644)",
-    heroGradient: "linear-gradient(160deg, #1A3D2B 0%, #0F2419 55%, #081510 100%)",
-    heroShadow: "0 8px 32px rgba(15,36,25,0.45)",
-  },
-  {
-    key: "iriyah",
-    label: "עירייה",
-    color: "#B5472A",
-    bg: "#FDF1EA",
-    textColor: "#7C3010",
-    barGradient: "linear-gradient(90deg, #D46A42, #B5472A)",
-    heroGradient: "linear-gradient(160deg, #7C2E18 0%, #5A1F10 55%, #3A140A 100%)",
-    heroShadow: "0 8px 32px rgba(90,31,16,0.45)",
-  },
-  {
-    key: "horim",
-    label: "הורים",
-    color: "#8B2F6E",
-    bg: "#F4EBF2",
-    textColor: "#6B2356",
-    barGradient: "linear-gradient(90deg, #B04A90, #8B2F6E)",
-    heroGradient: "linear-gradient(160deg, #4A1A38 0%, #331228 55%, #1F0B17 100%)",
-    heroShadow: "0 8px 32px rgba(51,18,40,0.45)",
-  },
-];
+}
+
+// Polished styles for the 3 default sources
+const SOURCE_STYLE_MAP: Record<string, Omit<SrcCfg, "key" | "label">> = {
+  gefen:  { color: "#2D6644", bg: "#EDFBF3", textColor: "#166534", barGradient: "linear-gradient(90deg, #5AA674, #2D6644)", heroGradient: "linear-gradient(160deg, #1A3D2B 0%, #0F2419 55%, #081510 100%)", heroShadow: "0 8px 32px rgba(15,36,25,0.45)" },
+  iriyah: { color: "#B5472A", bg: "#FDF1EA", textColor: "#7C3010", barGradient: "linear-gradient(90deg, #D46A42, #B5472A)", heroGradient: "linear-gradient(160deg, #7C2E18 0%, #5A1F10 55%, #3A140A 100%)", heroShadow: "0 8px 32px rgba(90,31,16,0.45)" },
+  horim:  { color: "#8B2F6E", bg: "#F4EBF2", textColor: "#6B2356", barGradient: "linear-gradient(90deg, #B04A90, #8B2F6E)", heroGradient: "linear-gradient(160deg, #4A1A38 0%, #331228 55%, #1F0B17 100%)", heroShadow: "0 8px 32px rgba(51,18,40,0.45)" },
+};
+
+function buildSrcCfg(src: OrgBudgetSource): SrcCfg {
+  const known = SOURCE_STYLE_MAP[src.slug];
+  if (known) return { key: src.slug, label: src.label, ...known };
+  return {
+    key: src.slug, label: src.label,
+    color: src.color, bg: src.bg_color, textColor: src.color,
+    barGradient: `linear-gradient(90deg, ${src.color}88, ${src.color})`,
+    heroGradient: `linear-gradient(160deg, ${src.color} 0%, ${src.color}CC 100%)`,
+    heroShadow: `0 8px 32px ${src.color}40`,
+  };
+}
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("he-IL", {
@@ -611,7 +600,7 @@ function SourceTab({
   isCurrentYear,
   years,
 }: {
-  srcCfg: (typeof SOURCES)[0];
+  srcCfg: SrcCfg;
   targetYearId: string | null;
   isCurrentYear: boolean;
   years: ReturnType<typeof useSchoolYears>["data"] & {};
@@ -1003,11 +992,13 @@ function SourceTab({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function BudgetPage() {
-  const [activeTab, setActiveTab] = useState<BudgetSource>("gefen");
+  const [activeTab, setActiveTab] = useState<string>("gefen");
   const [selectedYearId, setSelectedYearId] = useState<string | null>(null);
   const { data: years = [] } = useSchoolYears();
+  const { data: orgSources } = useOrgBudgetSources();
 
-  const srcCfg = SOURCES.find((s) => s.key === activeTab)!;
+  const sources: SrcCfg[] = (orgSources ?? FALLBACK_SOURCES).map(buildSrcCfg);
+  const srcCfg = sources.find((s) => s.key === activeTab) ?? sources[0];
   const activeYear = years.find((y) => y.is_active);
   const selectedYear = years.find((y) => y.id === selectedYearId);
   const isCurrentYear = !!selectedYear?.is_active;
@@ -1101,7 +1092,7 @@ export default function BudgetPage() {
           borderBottom: "2px solid #EAE5DE",
         }}
       >
-        {SOURCES.map((src) => {
+        {sources.map((src) => {
           const active = activeTab === src.key;
           return (
             <button

@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_authenticated/dashboard/")({
 
 // ─── Source config (colors only) ─────────────────────────────────────────────
 
-const SOURCE_CONFIG = {
+const SOURCE_CONFIG: Record<string, { color: string; barGradient: string; accentGradient: string }> = {
   gefen: {
     color: "#2D6644",
     barGradient: "linear-gradient(90deg, #5AA674, #2D6644)",
@@ -31,7 +31,7 @@ const SOURCE_CONFIG = {
     barGradient: "linear-gradient(90deg, #B04A90, #8B2F6E)",
     accentGradient: "linear-gradient(90deg, #B04A90, #6E235A)",
   },
-} as const;
+};
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -83,7 +83,7 @@ function Bar({ pct, gradient }: { pct: number; gradient: string }) {
 }
 
 function SourceCard({ s }: { s: SourceSummary }) {
-  const cfg = SOURCE_CONFIG[s.source];
+  const cfg = SOURCE_CONFIG[s.source] ?? { color: "#6B6560", barGradient: "linear-gradient(90deg,#AAA099,#6B6560)", accentGradient: "linear-gradient(90deg,#AAA099,#6B6560)" };
   // Cash / income side
   const animCashBalance = useCountUp(s.cashBalance);
   const animIncome      = useCountUp(s.income);
@@ -214,17 +214,17 @@ function SkeletonCard() {
 
 const GRADE_LETTERS = ["א","ב","ג","ד","ה","ו","ז","ח"];
 
-const CAT_SUGGESTIONS: Record<BudgetSource, string[]> = {
+const CAT_SUGGESTIONS: Record<string, string[]> = {
   gefen:  ["ציוד משרדי","ספרי לימוד","ציוד ניקיון","חשמל ומים","תחזוקה","תקשורת"],
   iriyah: ["שכר עובדים","שיפוצים","ריהוט","ציוד טכנולוגי","נסיעות"],
   horim:  ["פעילויות חינוכיות","טיולים","הצגות ואירועים","ציוד ספורט","ימי כיף"],
 };
 
-const SRC_CFG = {
+const SRC_CFG: Record<string, { label: string; color: string; light: string; grad: string }> = {
   gefen:  { label: "גפן",    color: "#2D6644", light: "#EDFBF3", grad: "linear-gradient(135deg,#2D6644,#1A3D2B)" },
   iriyah: { label: "עירייה", color: "#B5472A", light: "#FDF1EA", grad: "linear-gradient(135deg,#B5472A,#7C2E18)" },
   horim:  { label: "הורים",  color: "#8B2F6E", light: "#F4EBF2", grad: "linear-gradient(135deg,#8B2F6E,#4A1A38)" },
-} as const;
+};
 
 function SmartDefaults() {
   const now = new Date();

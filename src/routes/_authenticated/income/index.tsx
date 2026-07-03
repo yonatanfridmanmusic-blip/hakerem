@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { Plus, X, TrendingUp, Pencil, Check, Trash2, Search } from "lucide-react";
-import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
+import { useCountUp } from "@/hooks/use-count-up";
 import { toast } from "sonner";
 import {
   useIncome,
@@ -15,18 +15,13 @@ import {
 } from "@/hooks/use-income";
 import { useBudgetCategories } from "@/hooks/use-expenses";
 import { useAddBudgetCategory } from "@/hooks/use-budget-plan";
+import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES } from "@/hooks/use-budget-sources";
 
 export const Route = createFileRoute("/_authenticated/income/")({
   component: IncomePage,
 });
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-
-const SOURCE_CONFIG = {
-  gefen:  { label: "גפן",    color: "#2D6644", bg: "#EDFBF3", textColor: "#166534" },
-  iriyah: { label: "עירייה", color: "#B5472A", bg: "#FDF1EA", textColor: "#7C3010" },
-  horim:  { label: "הורים",  color: "#8B2F6E", bg: "#F4EBF2", textColor: "#6B2356" },
-} as const;
 
 const PAYMENT_METHODS = ["העברה בנקאית", "מזומן", "צ׳ק", "אשראי", "ביט", "פייבוקס", "אחר"];
 
@@ -84,9 +79,12 @@ function IncomeForm({
   const [newCatName, setNewCatName] = useState("");
   const newCatRef = useRef<HTMLInputElement>(null);
   const { data: categories } = useBudgetCategories(form.source);
+  const { data: orgSources } = useOrgBudgetSources();
+  const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
   const addCategory = useAddBudgetCategory();
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const isAddingNew = form.budget_category_id === "__new__";
+  const activeSourceStyle = getSourceStyle(sources, form.source);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,21 +117,20 @@ function IncomeForm({
 
       <div>
         <label style={labelStyle}>מקור תקציב</label>
-        <div style={{ display: "flex", gap: "8px" }}>
-          {(["gefen", "iriyah", "horim"] as BudgetSource[]).map((src) => {
-            const cfg = SOURCE_CONFIG[src];
-            const active = form.source === src;
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {sources.map((src) => {
+            const active = form.source === src.slug;
             return (
-              <button key={src} type="button" onClick={() => { set("source", src); set("budget_category_id", ""); }}
+              <button key={src.slug} type="button" onClick={() => { set("source", src.slug); set("budget_category_id", ""); }}
                 style={{
-                  flex: 1, padding: "8px 0", borderRadius: "8px",
-                  border: `1.5px solid ${active ? cfg.color : "#E8E2D9"}`,
-                  background: active ? cfg.bg : "#fff",
-                  color: active ? cfg.textColor : "#888079",
+                  flex: "1 1 auto", minWidth: "80px", padding: "8px 12px", borderRadius: "8px",
+                  border: `1.5px solid ${active ? src.color : "#E8E2D9"}`,
+                  background: active ? src.bg_color : "#fff",
+                  color: active ? src.color : "#888079",
                   fontSize: "13px", fontWeight: active ? "600" : "400",
                   cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
                 }}>
-                {cfg.label}
+                {src.label}
               </button>
             );
           })}
@@ -155,7 +152,7 @@ function IncomeForm({
         {isAddingNew && (
           <input ref={newCatRef} type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
             placeholder="שם הקטגוריה החדשה"
-            style={{ ...inputStyle, marginTop: "8px", borderColor: SOURCE_CONFIG[form.source].color }} />
+            style={{ ...inputStyle, marginTop: "8px", borderColor: activeSourceStyle.color }} />
         )}
       </div>
 
@@ -256,10 +253,10 @@ function Modal({ title, subtitle, onClose, children }: {
 
 // ─── Add Income Modal ─────────────────────────────────────────────────────────
 
-function AddIncomeModal({ onClose }: { onClose: () => void }) {
+function AddIncomeModal({ onClose, defaultSource }: { onClose: () => void; defaultSource: string }) {
   const addIncome = useAddIncome();
   const initial: IncomeFormState = {
-    income_date: today(), amount: "", source: "gefen", bank_account: "school",
+    income_date: today(), amount: "", source: defaultSource, bank_account: "school",
     payer: "", description: "", payment_method: "", reference_number: "", budget_category_id: "", notes: "",
   };
   const handleSubmit = async (form: IncomeFormState) => {
@@ -376,6 +373,8 @@ function InlineCategoryCell({ inc }: { inc: Income }) {
   const [selectedId, setSelectedId] = useState(inc.budget_category_id ?? "");
   const newCatRef = useRef<HTMLInputElement>(null);
   const { data: categories } = useBudgetCategories(inc.source);
+  const { data: orgSources } = useOrgBudgetSources();
+  const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
   const updateCat = useUpdateIncomeCategory();
   const addCategory = useAddBudgetCategory();
   const isAddingNew = selectedId === "__new__";
@@ -402,7 +401,7 @@ function InlineCategoryCell({ inc }: { inc: Income }) {
     } catch { toast.error("שגיאה בעדכון"); }
   };
 
-  const cfg = SOURCE_CONFIG[inc.source];
+  const srcStyle = getSourceStyle(sources, inc.source);
 
   if (!editing) {
     return (
@@ -419,7 +418,7 @@ function InlineCategoryCell({ inc }: { inc: Income }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
       <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} autoFocus style={{
-        padding: "4px 8px", border: `1.5px solid ${cfg.color}`, borderRadius: "6px",
+        padding: "4px 8px", border: `1.5px solid ${srcStyle.color}`, borderRadius: "6px",
         fontSize: "12px", fontFamily: "var(--font-sans)", outline: "none", direction: "rtl", background: "#fff",
       }}>
         <option value="">— ללא —</option>
@@ -430,10 +429,10 @@ function InlineCategoryCell({ inc }: { inc: Income }) {
         <input ref={newCatRef} type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
           placeholder="שם קטגוריה חדשה"
-          style={{ padding: "4px 8px", border: `1.5px solid ${cfg.color}`, borderRadius: "6px", fontSize: "12px", fontFamily: "var(--font-sans)", outline: "none", direction: "rtl" }} />
+          style={{ padding: "4px 8px", border: `1.5px solid ${srcStyle.color}`, borderRadius: "6px", fontSize: "12px", fontFamily: "var(--font-sans)", outline: "none", direction: "rtl" }} />
       )}
       <div style={{ display: "flex", gap: "4px" }}>
-        <button onClick={save} style={{ padding: "3px 8px", borderRadius: "5px", border: "none", background: cfg.color, color: "#fff", fontSize: "11px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+        <button onClick={save} style={{ padding: "3px 8px", borderRadius: "5px", border: "none", background: srcStyle.color, color: "#fff", fontSize: "11px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
           <Check size={11} />
         </button>
         <button onClick={() => setEditing(false)} style={{ padding: "3px 8px", borderRadius: "5px", border: "1px solid #E8E2D9", background: "#fff", fontSize: "11px", cursor: "pointer", color: "#AAA099" }}>
@@ -453,6 +452,10 @@ export default function IncomePage() {
   const [editingIncome, setEditingIncome] = useState<Income | null>(null);
   const [deletingIncome, setDeletingIncome] = useState<Income | null>(null);
 
+  const { data: orgSources } = useOrgBudgetSources();
+  const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
+  const defaultSource = sources[0]?.slug ?? "gefen";
+
   const { data: income, isLoading } = useIncome(filter);
   const { data: allIncome } = useIncome("all");
 
@@ -465,23 +468,14 @@ export default function IncomePage() {
     : (income ?? []);
 
   const total = visibleIncome.reduce((sum, e) => sum + e.amount, 0);
-  const sourceTotals = { gefen: 0, iriyah: 0, horim: 0 };
-  (allIncome ?? []).forEach((i) => { sourceTotals[i.source] += i.amount; });
+  const sourceTotals: Record<string, number> = {};
+  (allIncome ?? []).forEach((i) => { sourceTotals[i.source] = (sourceTotals[i.source] ?? 0) + i.amount; });
   const grandTotal = Object.values(sourceTotals).reduce((a, b) => a + b, 0);
-
   const animGrand = useCountUp(grandTotal);
-  const animGefen = useCountUp(sourceTotals.gefen);
-  const animIriyah = useCountUp(sourceTotals.iriyah);
-  const animHorim = useCountUp(sourceTotals.horim);
-  const animGefenPct = useAnimatedPct(grandTotal > 0 ? Math.round((sourceTotals.gefen / grandTotal) * 100) : 0);
-  const animIriyahPct = useAnimatedPct(grandTotal > 0 ? Math.round((sourceTotals.iriyah / grandTotal) * 100) : 0);
-  const animHorimPct = useAnimatedPct(grandTotal > 0 ? Math.round((sourceTotals.horim / grandTotal) * 100) : 0);
-  const animPcts: Record<BudgetSource, number> = { gefen: animGefenPct, iriyah: animIriyahPct, horim: animHorimPct };
-  const animAmts: Record<BudgetSource, number> = { gefen: animGefen, iriyah: animIriyah, horim: animHorim };
 
   return (
     <>
-      {showModal && <AddIncomeModal onClose={() => setShowModal(false)} />}
+      {showModal && <AddIncomeModal defaultSource={defaultSource} onClose={() => setShowModal(false)} />}
       {editingIncome && <EditIncomeModal income={editingIncome} onClose={() => setEditingIncome(null)} />}
       {deletingIncome && <DeleteConfirm income={deletingIncome} onClose={() => setDeletingIncome(null)} />}
 
@@ -517,46 +511,65 @@ export default function IncomePage() {
         }}>
           <div style={{ position: "absolute", top: "-50px", left: "-50px", width: "180px", height: "180px", borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
           <div style={{ position: "absolute", bottom: "-30px", right: "25%", width: "130px", height: "130px", borderRadius: "50%", background: "rgba(255,255,255,0.03)" }} />
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", zIndex: 1 }}>
-            <div>
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)", marginBottom: "6px", letterSpacing: "0.04em" }}>סה״כ הכנסות</div>
-              <div className="num" style={{ fontSize: "38px", fontWeight: "200", letterSpacing: "-1.5px", color: "#fff", lineHeight: 1 }}>{fmt(animGrand)}</div>
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)", marginBottom: "6px", letterSpacing: "0.04em" }}>סה״כ הכנסות</div>
+                <div className="num" style={{ fontSize: "38px", fontWeight: "200", letterSpacing: "-1.5px", color: "#fff", lineHeight: 1 }}>{fmt(animGrand)}</div>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: "28px" }}>
-              {(["gefen", "iriyah", "horim"] as BudgetSource[]).map((src) => {
-                const cfg = SOURCE_CONFIG[src];
-                return (
-                  <div key={src} style={{ textAlign: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "5px", justifyContent: "center", marginBottom: "4px" }}>
-                      <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: cfg.color, opacity: 0.9 }} />
-                      <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.55)" }}>{cfg.label}</span>
+            {grandTotal > 0 && (
+              <div style={{ marginTop: "18px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                {sources.filter(s => (sourceTotals[s.slug] ?? 0) > 0).map(s => {
+                  const amt = sourceTotals[s.slug] ?? 0;
+                  const pct = Math.round((amt / grandTotal) * 100);
+                  return (
+                    <div key={s.slug}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.7)" }} />
+                          <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.65)" }}>{s.label}</span>
+                        </div>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                          <span className="num" style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>{pct}%</span>
+                          <span className="num" style={{ fontSize: "13px", color: "#fff", fontWeight: "300" }}>{fmt(amt)}</span>
+                        </div>
+                      </div>
+                      <div style={{ height: "3px", background: "rgba(255,255,255,0.15)", borderRadius: "99px" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: "rgba(255,255,255,0.6)", borderRadius: "99px", transition: "width 0.6s ease" }} />
+                      </div>
                     </div>
-                    <div className="num" style={{ fontSize: "17px", fontWeight: "300", color: "#fff" }}>{fmt(animAmts[src])}</div>
-                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", marginTop: "2px" }}>{animPcts[src]}%</div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Filter + Search row */}
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          <div style={{ display: "flex", gap: "8px" }}>
-          {([["all", "הכל"], ["gefen", "גפן"], ["iriyah", "עירייה"], ["horim", "הורים"]] as const).map(([val, label]) => {
-            const active = filter === val;
-            const cfg = val !== "all" ? SOURCE_CONFIG[val] : null;
-            return (
-              <button key={val} onClick={() => setFilter(val)} style={{
-                padding: "6px 16px", borderRadius: "99px",
-                border: `1px solid ${active && cfg ? cfg.color : active ? "#1A3D2B" : "#E8E2D9"}`,
-                background: active && cfg ? cfg.bg : active ? "#1A3D2B" : "#fff",
-                color: active && cfg ? cfg.textColor : active ? "#fff" : "#888079",
-                fontSize: "13px", fontWeight: active ? "600" : "400",
-                cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
-              }}>{label}</button>
-            );
-          })}
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <button onClick={() => setFilter("all")} style={{
+              padding: "6px 16px", borderRadius: "99px",
+              border: `1px solid ${filter === "all" ? "#1A3D2B" : "#E8E2D9"}`,
+              background: filter === "all" ? "#1A3D2B" : "#fff",
+              color: filter === "all" ? "#fff" : "#888079",
+              fontSize: "13px", fontWeight: filter === "all" ? "600" : "400",
+              cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
+            }}>הכל</button>
+            {sources.map((s) => {
+              const active = filter === s.slug;
+              return (
+                <button key={s.slug} onClick={() => setFilter(s.slug)} style={{
+                  padding: "6px 16px", borderRadius: "99px",
+                  border: `1px solid ${active ? s.color : "#E8E2D9"}`,
+                  background: active ? s.bg_color : "#fff",
+                  color: active ? s.color : "#888079",
+                  fontSize: "13px", fontWeight: active ? "600" : "400",
+                  cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
+                }}>{s.label}</button>
+              );
+            })}
           </div>
 
           {/* Search input */}
@@ -617,7 +630,8 @@ export default function IncomePage() {
             </div>
           ) : (
             visibleIncome.map((inc, i) => {
-              const cfg = SOURCE_CONFIG[inc.source];
+              const srcStyle = getSourceStyle(sources, inc.source);
+              const srcLabel = getSourceLabel(sources, inc.source);
               return (
                 <div key={inc.id} style={{
                   display: "grid", gridTemplateColumns: "110px 110px 70px 100px 1fr 1fr 90px 72px",
@@ -638,9 +652,9 @@ export default function IncomePage() {
                     display: "inline-flex", alignItems: "center",
                     padding: "3px 10px", borderRadius: "99px",
                     fontSize: "11px", fontWeight: "600",
-                    background: cfg.bg, color: cfg.textColor, whiteSpace: "nowrap",
+                    background: srcStyle.bg_color, color: srcStyle.color, whiteSpace: "nowrap",
                   }}>
-                    {cfg.label}
+                    {srcLabel}
                   </span>
                   <div style={{ overflow: "hidden" }}>
                     <InlineCategoryCell inc={inc} />

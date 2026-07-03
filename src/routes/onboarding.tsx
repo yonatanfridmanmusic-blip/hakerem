@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateOrganization, useAllOrganizations, useRequestJoinOrg } from "@/hooks/use-organization";
+import { seedDefaultSourcesForOrg, FALLBACK_SOURCES } from "@/hooks/use-budget-sources";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/onboarding")({
@@ -21,7 +22,7 @@ export const Route = createFileRoute("/onboarding")({
   component: OnboardingPage,
 });
 
-type Step = "choose" | "create-org" | "join-org" | "pending";
+type Step = "choose" | "create-org" | "sources" | "join-org" | "pending";
 
 const f = "Rubik, sans-serif";
 
@@ -208,7 +209,7 @@ function ChoiceCard({ icon, title, subtitle, onClick }: {
 
 // ─── Step: Create Org ─────────────────────────────────────────────────────────
 
-function CreateOrgStep({ onBack }: { onBack: () => void }) {
+function CreateOrgStep({ onBack, onCreated }: { onBack: () => void; onCreated: (orgId: string) => void }) {
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
   const createOrg = useCreateOrganization();
@@ -217,9 +218,11 @@ function CreateOrgStep({ onBack }: { onBack: () => void }) {
     e.preventDefault();
     if (!name.trim()) { toast.error("נא להזין שם בית הספר"); return; }
     try {
-      await createOrg.mutateAsync({ name: name.trim(), city: city.trim() || undefined });
-      toast.success(`בית הספר "${name}" נוצר בהצלחה!`);
-      window.location.href = "/dashboard";
+      const result = await createOrg.mutateAsync({ name: name.trim(), city: city.trim() || undefined });
+      const org = result as { id: string; name: string };
+      // Ensure default sources exist (trigger handles it, this is a safety net)
+      await seedDefaultSourcesForOrg(org.id);
+      onCreated(org.id);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "שגיאה ביצירת הארגון");
     }
@@ -258,16 +261,194 @@ function CreateOrgStep({ onBack }: { onBack: () => void }) {
               <circle cx="8" cy="5.5" r="0.7" fill="#2D6644"/>
             </svg>
           </div>
-          לאחר יצירת בית הספר תוכלי להזמין את שאר הצוות מתוך ההגדרות.
+          לאחר יצירת בית הספר תוכל/י להזמין את שאר הצוות מתוך ההגדרות.
         </div>
 
         <button type="submit" disabled={createOrg.isPending} style={{
           ...btnPrimary, opacity: createOrg.isPending ? 0.7 : 1,
           cursor: createOrg.isPending ? "not-allowed" : "pointer",
         }}>
-          {createOrg.isPending ? "יוצר..." : "יצירת בית הספר וכניסה"}
+          {createOrg.isPending ? "יוצר..." : "המשך →"}
         </button>
       </form>
+    </div>
+  );
+}
+
+// ─── Step: Sources ────────────────────────────────────────────────────────────
+
+const PRESET_COLORS = [
+  { color: "#0E7490", bg_color: "#ECFEFF", label: "כחול-טורקיז" },
+  { color: "#B45309", bg_color: "#FFFBEB", label: "כתום-חום" },
+  { color: "#0F766E", bg_color: "#F0FDFA", label: "ירוק-טיל" },
+  { color: "#7C3AED", bg_color: "#F5F3FF", label: "סגול" },
+  { color: "#B91C1C", bg_color: "#FEF2F2", label: "אדום" },
+  { color: "#0369A1", bg_color: "#F0F9FF", label: "כחול" },
+];
+
+function SourcesStep({ orgId, onDone }: { orgId: string; onDone: () => void }) {
+  const [customLabel, setCustomLabel] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [colorIdx, setColorIdx] = useState(0);
+  const [customSources, setCustomSources] = useState<{ label: string; color: string; bg_color: string }[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const handleAddCustom = () => {
+    const trimmed = customLabel.trim();
+    if (!trimmed) return;
+    const preset = PRESET_COLORS[colorIdx % PRESET_COLORS.length];
+    setCustomSources(prev => [...prev, { label: trimmed, color: preset.color, bg_color: preset.bg_color }]);
+    setCustomLabel("");
+    setAdding(false);
+    setColorIdx(prev => prev + 1);
+  };
+
+  const handleRemoveCustom = (idx: number) => {
+    setCustomSources(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleDone = async () => {
+    setSaving(true);
+    // Persist custom sources directly with the orgId prop (context may not be ready yet)
+    for (const src of customSources) {
+      try {
+        const slug = src.label.trim().toLowerCase()
+          .replace(/\s+/g, "_")
+          .replace(/[^a-z0-9_א-ת]/g, "");
+        const { data: existing } = await supabase
+          .from("org_budget_sources")
+          .select("order_index")
+          .eq("org_id", orgId)
+          .order("order_index", { ascending: false })
+          .limit(1);
+        const maxOrder = (existing?.[0] as { order_index: number } | undefined)?.order_index ?? 3;
+        await supabase.from("org_budget_sources").insert({
+          org_id: orgId, slug, label: src.label.trim(),
+          color: src.color, bg_color: src.bg_color,
+          is_default: false, order_index: maxOrder + 1,
+        });
+      } catch { /* ignore — user can add from settings later */ }
+    }
+    setSaving(false);
+    onDone();
+  };
+
+  return (
+    <div>
+      {/* Progress indicator */}
+      <div style={{ display: "flex", gap: "6px", marginBottom: "24px" }}>
+        {["בית הספר", "מקורות תקציב", "מוכן!"].map((label, i) => (
+          <div key={i} style={{ flex: 1, textAlign: "center" }}>
+            <div style={{
+              height: "3px", borderRadius: "99px", marginBottom: "5px",
+              background: i === 1 ? GREEN : i < 1 ? "#B6E8C4" : BORDER,
+            }} />
+            <div style={{ fontSize: "10px", color: i === 1 ? GREEN : INK3, fontWeight: i === 1 ? "500" : "400" }}>
+              {label}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h2 style={{ fontSize: "18px", fontWeight: "500", color: INK, margin: "0 0 6px" }}>
+        מקורות תקציב
+      </h2>
+      <p style={{ fontSize: "13px", color: INK2, margin: "0 0 20px", lineHeight: 1.65 }}>
+        אלו מקורות התקציב של בית הספר שלך. כבר הוספנו את הנפוצים — הוסף/י עוד לפי הצורך.
+      </p>
+
+      {/* Default sources — read-only display */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "12px" }}>
+        {FALLBACK_SOURCES.map(s => (
+          <div key={s.slug} style={{
+            display: "flex", alignItems: "center", gap: "10px",
+            padding: "10px 14px", borderRadius: "10px",
+            border: `1.5px solid ${BORDER}`, background: "#fff",
+          }}>
+            <div style={{
+              width: "8px", height: "8px", borderRadius: "50%",
+              background: s.color, flexShrink: 0,
+            }} />
+            <span style={{ fontSize: "14px", color: INK, flex: 1 }}>{s.label}</span>
+            <span style={{
+              fontSize: "11px", color: "#166534", background: "#EDFBF3",
+              padding: "2px 8px", borderRadius: "99px", fontWeight: "500",
+            }}>ברירת מחדל</span>
+          </div>
+        ))}
+
+        {/* Custom sources the user added */}
+        {customSources.map((s, i) => (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: "10px",
+            padding: "10px 14px", borderRadius: "10px",
+            border: `1.5px solid ${GREEN}`, background: "#F4FAF6",
+          }}>
+            <div style={{
+              width: "8px", height: "8px", borderRadius: "50%",
+              background: s.color, flexShrink: 0,
+            }} />
+            <span style={{ fontSize: "14px", color: INK, flex: 1 }}>{s.label}</span>
+            <button onClick={() => handleRemoveCustom(i)} style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: INK3, fontSize: "16px", padding: "0 2px", lineHeight: 1,
+            }}>×</button>
+          </div>
+        ))}
+      </div>
+
+      {/* Add custom source */}
+      {adding ? (
+        <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+          <input
+            autoFocus
+            style={{ ...inputStyle, flex: 1 }}
+            value={customLabel}
+            onChange={e => setCustomLabel(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAddCustom(); } if (e.key === "Escape") setAdding(false); }}
+            placeholder="לדוגמה: צהרון, תרומות..."
+          />
+          <button onClick={handleAddCustom} disabled={!customLabel.trim()} style={{
+            padding: "10px 16px", borderRadius: "9px", border: "none",
+            background: customLabel.trim() ? GREEN : BORDER,
+            color: "#fff", fontSize: "14px", cursor: customLabel.trim() ? "pointer" : "not-allowed",
+            fontFamily: f, whiteSpace: "nowrap",
+          }}>הוסף/י</button>
+          <button onClick={() => setAdding(false)} style={{
+            padding: "10px 12px", borderRadius: "9px", border: `1px solid ${BORDER}`,
+            background: "#fff", color: INK2, fontSize: "13px", cursor: "pointer", fontFamily: f,
+          }}>ביטול</button>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={{
+          display: "flex", alignItems: "center", gap: "7px",
+          background: "none", border: `1.5px dashed ${BORDER}`,
+          borderRadius: "10px", padding: "10px 14px",
+          width: "100%", cursor: "pointer", fontFamily: f,
+          color: INK2, fontSize: "13.5px", marginBottom: "16px",
+          transition: "border-color 0.15s",
+        }}
+          onMouseEnter={e => (e.currentTarget.style.borderColor = GREEN)}
+          onMouseLeave={e => (e.currentTarget.style.borderColor = BORDER)}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 2v10M2 7h10" stroke={GREEN} strokeWidth="1.8" strokeLinecap="round"/>
+          </svg>
+          הוסף/י מקור מותאם אישית (כגון: צהרון, תרומות...)
+        </button>
+      )}
+
+      <button onClick={handleDone} disabled={saving} style={{
+        ...btnPrimary,
+        opacity: saving ? 0.7 : 1,
+        cursor: saving ? "not-allowed" : "pointer",
+      }}>
+        {saving ? "שומר..." : "סיום וכניסה למערכת →"}
+      </button>
+
+      <p style={{ textAlign: "center", fontSize: "12px", color: INK3, margin: "10px 0 0" }}>
+        ניתן לערוך ולהוסיף מקורות בכל עת מדף ההגדרות
+      </p>
     </div>
   );
 }
@@ -426,6 +607,7 @@ function PendingStep() {
 
 function OnboardingPage() {
   const [step, setStep] = useState<Step>("choose");
+  const [newOrgId, setNewOrgId] = useState<string | null>(null);
 
   return (
     <div style={{
@@ -443,7 +625,18 @@ function OnboardingPage() {
         <LogoRow />
 
         {step === "choose"     && <ChooseStep onChoose={setStep} />}
-        {step === "create-org" && <CreateOrgStep onBack={() => setStep("choose")} />}
+        {step === "create-org" && (
+          <CreateOrgStep
+            onBack={() => setStep("choose")}
+            onCreated={(id) => { setNewOrgId(id); setStep("sources"); }}
+          />
+        )}
+        {step === "sources" && newOrgId && (
+          <SourcesStep
+            orgId={newOrgId}
+            onDone={() => { window.location.href = "/dashboard"; }}
+          />
+        )}
         {step === "join-org"   && <JoinOrgStep onBack={() => setStep("choose")} onSuccess={() => setStep("pending")} />}
         {step === "pending"    && <PendingStep />}
       </div>

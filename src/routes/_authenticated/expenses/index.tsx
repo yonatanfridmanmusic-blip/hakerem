@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Plus, X, AlertTriangle, Pencil, Trash2, Search } from "lucide-react";
-import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
+import { useCountUp } from "@/hooks/use-count-up";
 import { toast } from "sonner";
 import {
   useExpenses,
@@ -13,18 +13,13 @@ import {
   type NewExpense,
   type Expense,
 } from "@/hooks/use-expenses";
+import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES } from "@/hooks/use-budget-sources";
 
 export const Route = createFileRoute("/_authenticated/expenses/")({
   component: ExpensesPage,
 });
 
-// ─── Config ───────────────────────────────────────────────────────────────────
-
-const SOURCE_CONFIG = {
-  gefen:  { label: "גפן",    color: "#2D6644", bg: "#EDFBF3", textColor: "#166534" },
-  iriyah: { label: "עירייה", color: "#B5472A", bg: "#FDF1EA", textColor: "#7C3010" },
-  horim:  { label: "הורים",  color: "#8B2F6E", bg: "#F4EBF2", textColor: "#6B2356" },
-} as const;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 0 }).format(n);
@@ -72,6 +67,8 @@ function ExpenseForm({
 }) {
   const [form, setForm] = useState<ExpenseFormState>(initial);
   const { data: categories } = useBudgetCategories(form.source);
+  const { data: orgSources } = useOrgBudgetSources();
+  const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -95,24 +92,24 @@ function ExpenseForm({
         </div>
       </div>
 
+      {/* Dynamic source selector */}
       <div>
         <label style={labelStyle}>מקור תקציב</label>
-        <div style={{ display: "flex", gap: "8px" }}>
-          {(["gefen", "iriyah", "horim"] as BudgetSource[]).map((src) => {
-            const cfg = SOURCE_CONFIG[src];
-            const active = form.source === src;
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {sources.map((src) => {
+            const active = form.source === src.slug;
             return (
-              <button key={src} type="button"
-                onClick={() => { set("source", src); set("budget_category_id", ""); }}
+              <button key={src.slug} type="button"
+                onClick={() => { set("source", src.slug); set("budget_category_id", ""); }}
                 style={{
-                  flex: 1, padding: "8px 0", borderRadius: "8px",
-                  border: `1.5px solid ${active ? cfg.color : "#E8E2D9"}`,
-                  background: active ? cfg.bg : "#fff",
-                  color: active ? cfg.textColor : "#888079",
+                  flex: "1 1 auto", minWidth: "80px", padding: "8px 12px", borderRadius: "8px",
+                  border: `1.5px solid ${active ? src.color : "#E8E2D9"}`,
+                  background: active ? src.bg_color : "#fff",
+                  color: active ? src.color : "#888079",
                   fontSize: "13px", fontWeight: active ? "600" : "400",
                   cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
                 }}>
-                {cfg.label}
+                {src.label}
               </button>
             );
           })}
@@ -201,10 +198,10 @@ function Modal({ title, subtitle, onClose, children }: {
 
 // ─── Add Modal ────────────────────────────────────────────────────────────────
 
-function AddExpenseModal({ onClose }: { onClose: () => void }) {
+function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defaultSource: string }) {
   const addExpense = useAddExpense();
   const initial: ExpenseFormState = {
-    expense_date: today(), amount: "", source: "gefen",
+    expense_date: today(), amount: "", source: defaultSource,
     budget_category_id: "", supplier: "", description: "", bank_account: "school",
   };
   const handleSubmit = async (form: ExpenseFormState) => {
@@ -317,6 +314,10 @@ export default function ExpensesPage() {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deletingExpense, setDeletingExpense] = useState<Expense | null>(null);
 
+  const { data: orgSources } = useOrgBudgetSources();
+  const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
+  const defaultSource = sources[0]?.slug ?? "gefen";
+
   const { data: expenses, isLoading } = useExpenses(filter);
   const { data: allExpenses } = useExpenses("all");
 
@@ -329,23 +330,18 @@ export default function ExpensesPage() {
     : (expenses ?? []);
 
   const total = visibleExpenses.reduce((sum, e) => sum + e.amount, 0);
-  const expTotals = { gefen: 0, iriyah: 0, horim: 0 };
-  (allExpenses ?? []).forEach((e) => { expTotals[e.source] += e.amount; });
-  const grandTotal = Object.values(expTotals).reduce((a, b) => a + b, 0);
 
+  // Dynamic source totals
+  const sourceTotals: Record<string, number> = {};
+  (allExpenses ?? []).forEach((e) => {
+    sourceTotals[e.source] = (sourceTotals[e.source] ?? 0) + e.amount;
+  });
+  const grandTotal = Object.values(sourceTotals).reduce((a, b) => a + b, 0);
   const animGrand = useCountUp(grandTotal);
-  const animGefen = useCountUp(expTotals.gefen);
-  const animIriyah = useCountUp(expTotals.iriyah);
-  const animHorim = useCountUp(expTotals.horim);
-  const animGefenPct = useAnimatedPct(grandTotal > 0 ? Math.round((expTotals.gefen / grandTotal) * 100) : 0);
-  const animIriyahPct = useAnimatedPct(grandTotal > 0 ? Math.round((expTotals.iriyah / grandTotal) * 100) : 0);
-  const animHorimPct = useAnimatedPct(grandTotal > 0 ? Math.round((expTotals.horim / grandTotal) * 100) : 0);
-  const animPcts: Record<BudgetSource, number> = { gefen: animGefenPct, iriyah: animIriyahPct, horim: animHorimPct };
-  const animAmts: Record<BudgetSource, number> = { gefen: animGefen, iriyah: animIriyah, horim: animHorim };
 
   return (
     <>
-      {showAdd && <AddExpenseModal onClose={() => setShowAdd(false)} />}
+      {showAdd && <AddExpenseModal defaultSource={defaultSource} onClose={() => setShowAdd(false)} />}
       {editingExpense && <EditExpenseModal expense={editingExpense} onClose={() => setEditingExpense(null)} />}
       {deletingExpense && <DeleteConfirm expense={deletingExpense} onClose={() => setDeletingExpense(null)} />}
 
@@ -381,51 +377,71 @@ export default function ExpensesPage() {
         }}>
           <div style={{ position: "absolute", top: "-50px", left: "-50px", width: "180px", height: "180px", borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
           <div style={{ position: "absolute", bottom: "-30px", right: "25%", width: "130px", height: "130px", borderRadius: "50%", background: "rgba(255,255,255,0.03)" }} />
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", zIndex: 1 }}>
-            <div>
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)", marginBottom: "6px", letterSpacing: "0.04em" }}>סה״כ הוצאות</div>
-              <div className="num" style={{ fontSize: "38px", fontWeight: "200", letterSpacing: "-1.5px", color: "#fff", lineHeight: 1 }}>{fmt(animGrand)}</div>
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)", marginBottom: "6px", letterSpacing: "0.04em" }}>סה״כ הוצאות</div>
+                <div className="num" style={{ fontSize: "38px", fontWeight: "200", letterSpacing: "-1.5px", color: "#fff", lineHeight: 1 }}>{fmt(animGrand)}</div>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: "28px" }}>
-              {(["gefen", "iriyah", "horim"] as BudgetSource[]).map((src) => {
-                const cfg = SOURCE_CONFIG[src];
-                return (
-                  <div key={src} style={{ textAlign: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "5px", justifyContent: "center", marginBottom: "4px" }}>
-                      <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: cfg.color, opacity: 0.9 }} />
-                      <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.55)" }}>{cfg.label}</span>
+            {/* Dynamic source breakdown bars */}
+            {grandTotal > 0 && (
+              <div style={{ marginTop: "18px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                {sources.filter(s => (sourceTotals[s.slug] ?? 0) > 0).map(s => {
+                  const amt = sourceTotals[s.slug] ?? 0;
+                  const pct = Math.round((amt / grandTotal) * 100);
+                  return (
+                    <div key={s.slug}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.7)" }} />
+                          <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.65)" }}>{s.label}</span>
+                        </div>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                          <span className="num" style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>{pct}%</span>
+                          <span className="num" style={{ fontSize: "13px", color: "#fff", fontWeight: "300" }}>{fmt(amt)}</span>
+                        </div>
+                      </div>
+                      <div style={{ height: "3px", background: "rgba(255,255,255,0.15)", borderRadius: "99px" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: "rgba(255,255,255,0.6)", borderRadius: "99px", transition: "width 0.6s ease" }} />
+                      </div>
                     </div>
-                    <div className="num" style={{ fontSize: "17px", fontWeight: "300", color: "#fff" }}>{fmt(animAmts[src])}</div>
-                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", marginTop: "2px" }}>{animPcts[src]}%</div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Filter + Search row */}
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          {/* Source chips */}
-          <div style={{ display: "flex", gap: "8px" }}>
-          {([["all", "הכל"], ["gefen", "גפן"], ["iriyah", "עירייה"], ["horim", "הורים"]] as const).map(([val, label]) => {
-            const active = filter === val;
-            const cfg = val !== "all" ? SOURCE_CONFIG[val] : null;
-            return (
-              <button key={val} onClick={() => setFilter(val)} style={{
-                padding: "6px 16px", borderRadius: "99px",
-                border: `1px solid ${active && cfg ? cfg.color : active ? "#1A3D2B" : "#E8E2D9"}`,
-                background: active && cfg ? cfg.bg : active ? "#1A3D2B" : "#fff",
-                color: active && cfg ? cfg.textColor : active ? "#fff" : "#888079",
-                fontSize: "13px", fontWeight: active ? "600" : "400",
-                cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
-              }}>{label}</button>
-            );
-          })}
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+          {/* Source chips — dynamic */}
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <button onClick={() => setFilter("all")} style={{
+              padding: "6px 16px", borderRadius: "99px",
+              border: `1px solid ${filter === "all" ? "#1A3D2B" : "#E8E2D9"}`,
+              background: filter === "all" ? "#1A3D2B" : "#fff",
+              color: filter === "all" ? "#fff" : "#888079",
+              fontSize: "13px", fontWeight: filter === "all" ? "600" : "400",
+              cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
+            }}>הכל</button>
+            {sources.map((s) => {
+              const active = filter === s.slug;
+              return (
+                <button key={s.slug} onClick={() => setFilter(s.slug)} style={{
+                  padding: "6px 16px", borderRadius: "99px",
+                  border: `1px solid ${active ? s.color : "#E8E2D9"}`,
+                  background: active ? s.bg_color : "#fff",
+                  color: active ? s.color : "#888079",
+                  fontSize: "13px", fontWeight: active ? "600" : "400",
+                  cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
+                }}>{s.label}</button>
+              );
+            })}
           </div>
 
           {/* Search input */}
-          <div style={{ flex: 1, position: "relative" }}>
+          <div style={{ flex: 1, minWidth: "200px", position: "relative" }}>
             <Search size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#AAA099", pointerEvents: "none" }} />
             <input
               type="text"
@@ -480,7 +496,8 @@ export default function ExpensesPage() {
             </div>
           ) : (
             visibleExpenses.map((e, i) => {
-              const cfg = SOURCE_CONFIG[e.source];
+              const style = getSourceStyle(sources, e.source);
+              const label = getSourceLabel(sources, e.source);
               return (
                 <div key={e.id} style={{
                   display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 1fr 72px",
@@ -501,9 +518,9 @@ export default function ExpensesPage() {
                     display: "inline-flex", alignItems: "center",
                     padding: "3px 10px", borderRadius: "99px",
                     fontSize: "11px", fontWeight: "600",
-                    background: cfg.bg, color: cfg.textColor, whiteSpace: "nowrap",
+                    background: style.bg_color, color: style.color, whiteSpace: "nowrap",
                   }}>
-                    {cfg.label}
+                    {label}
                   </span>
                   <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {e.budget_categories?.name ?? "—"}

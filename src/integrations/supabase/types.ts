@@ -282,7 +282,7 @@ export type Database = {
           order_index: number
           planned_amount: number
           school_year_id: string
-          source: Database["public"]["Enums"]["budget_source"]
+          source: string
           target_grade_ids: string[]
           updated_at: string
         }
@@ -296,7 +296,7 @@ export type Database = {
           order_index?: number
           planned_amount?: number
           school_year_id: string
-          source: Database["public"]["Enums"]["budget_source"]
+          source: string
           target_grade_ids?: string[]
           updated_at?: string
         }
@@ -310,7 +310,7 @@ export type Database = {
           order_index?: number
           planned_amount?: number
           school_year_id?: string
-          source?: Database["public"]["Enums"]["budget_source"]
+          source?: string
           target_grade_ids?: string[]
           updated_at?: string
         }
@@ -347,7 +347,7 @@ export type Database = {
           order_index: number
           planned_amount: number
           school_year_id: string
-          source: Database["public"]["Enums"]["budget_source"]
+          source: string
           target_grade_ids: string[]
           updated_at: string
         }
@@ -359,7 +359,7 @@ export type Database = {
           order_index?: number
           planned_amount?: number
           school_year_id: string
-          source: Database["public"]["Enums"]["budget_source"]
+          source: string
           target_grade_ids?: string[]
           updated_at?: string
         }
@@ -371,7 +371,7 @@ export type Database = {
           order_index?: number
           planned_amount?: number
           school_year_id?: string
-          source?: Database["public"]["Enums"]["budget_source"]
+          source?: string
           target_grade_ids?: string[]
           updated_at?: string
         }
@@ -404,7 +404,7 @@ export type Database = {
           parent_section_id: string | null
           payment_method: string | null
           school_year_id: string
-          source: Database["public"]["Enums"]["budget_source"]
+          source: string
           supplier: string | null
           target_grade_ids: string[]
           updated_at: string
@@ -427,7 +427,7 @@ export type Database = {
           parent_section_id?: string | null
           payment_method?: string | null
           school_year_id: string
-          source: Database["public"]["Enums"]["budget_source"]
+          source: string
           supplier?: string | null
           target_grade_ids?: string[]
           updated_at?: string
@@ -450,7 +450,7 @@ export type Database = {
           parent_section_id?: string | null
           payment_method?: string | null
           school_year_id?: string
-          source?: Database["public"]["Enums"]["budget_source"]
+          source?: string
           supplier?: string | null
           target_grade_ids?: string[]
           updated_at?: string
@@ -610,7 +610,7 @@ export type Database = {
           payment_method: string | null
           reference_number: string | null
           school_year_id: string
-          source: Database["public"]["Enums"]["budget_source"]
+          source: string
           updated_at: string
         }
         Insert: {
@@ -627,7 +627,7 @@ export type Database = {
           payment_method?: string | null
           reference_number?: string | null
           school_year_id: string
-          source: Database["public"]["Enums"]["budget_source"]
+          source: string
           updated_at?: string
         }
         Update: {
@@ -644,7 +644,7 @@ export type Database = {
           payment_method?: string | null
           reference_number?: string | null
           school_year_id?: string
-          source?: Database["public"]["Enums"]["budget_source"]
+          source?: string
           updated_at?: string
         }
         Relationships: [
@@ -702,6 +702,50 @@ export type Database = {
           {
             foreignKeyName: "license_codes_organization_id_fkey"
             columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_budget_sources: {
+        Row: {
+          bg_color: string
+          color: string
+          created_at: string
+          id: string
+          is_default: boolean
+          label: string
+          order_index: number
+          org_id: string
+          slug: string
+        }
+        Insert: {
+          bg_color?: string
+          color?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label: string
+          order_index?: number
+          org_id: string
+          slug: string
+        }
+        Update: {
+          bg_color?: string
+          color?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label?: string
+          order_index?: number
+          org_id?: string
+          slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_budget_sources_org_id_fkey"
+            columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
@@ -992,12 +1036,12 @@ export type Database = {
     }
     Functions: {
       auth_is_super_admin: { Args: never; Returns: boolean }
-      check_my_org_expired: { Args: never; Returns: boolean }
       auth_org_role_for_year: {
         Args: { p_roles: string[]; p_year_id: string }
         Returns: boolean
       }
       auth_user_org_ids: { Args: never; Returns: string[] }
+      check_my_org_expired: { Args: never; Returns: boolean }
       create_organization: {
         Args: { p_city?: string; p_name: string }
         Returns: Json
@@ -1024,7 +1068,6 @@ export type Database = {
       ai_action_status: "draft" | "executed" | "cancelled" | "failed"
       app_role: "admin" | "secretary"
       bank_account: "school" | "parents"
-      budget_source: "gefen" | "iriyah" | "horim"
       working_budget_basis: "p85" | "p100" | "actual" | "custom"
     }
     CompositeTypes: {
@@ -1156,7 +1199,6 @@ export const Constants = {
       ai_action_status: ["draft", "executed", "cancelled", "failed"],
       app_role: ["admin", "secretary"],
       bank_account: ["school", "parents"],
-      budget_source: ["gefen", "iriyah", "horim"],
       working_budget_basis: ["p85", "p100", "actual", "custom"],
     },
   },
