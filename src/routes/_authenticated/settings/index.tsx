@@ -4,6 +4,7 @@ import {
   useSchoolYears,
   useCreateSchoolYear,
   useSetActiveYear,
+  useDeleteSchoolYear,
 } from "@/hooks/use-school-years";
 import { useGrades, useAddGrade, useUpdateGrade, useDeleteGrade } from "@/hooks/use-grades";
 import {
@@ -175,8 +176,10 @@ function YearsTab() {
   const { data: years = [], isLoading } = useSchoolYears();
   const createYear  = useCreateSchoolYear();
   const setActive   = useSetActiveYear();
+  const deleteYear  = useDeleteSchoolYear();
 
   const [showForm, setShowForm] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [name, setName]         = useState("");
   const [startDate, setStart]   = useState("");
   const [endDate, setEnd]       = useState("");
@@ -243,16 +246,38 @@ function YearsTab() {
                 יעד גבייה: {y.collection_percentage}%
               </div>
             </div>
-            {!y.is_active && (
-              <button
-                type="button"
-                style={btnOutline}
-                onClick={() => setActive.mutate(y.id)}
-                disabled={setActive.isPending}
-              >
-                הגדר כפעיל
-              </button>
-            )}
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              {!y.is_active && (
+                <button type="button" style={btnOutline} onClick={() => setActive.mutate(y.id)} disabled={setActive.isPending}>
+                  הגדר כפעיל
+                </button>
+              )}
+              {confirmDeleteId === y.id ? (
+                <div style={{ display: "flex", gap: "6px", alignItems: "center", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "5px 10px" }}>
+                  <span style={{ fontSize: "12px", color: "#991B1B" }}>למחוק את "{y.name}"?</span>
+                  <button type="button"
+                    onClick={async () => { await deleteYear.mutateAsync(y.id); setConfirmDeleteId(null); }}
+                    disabled={deleteYear.isPending}
+                    style={{ padding: "3px 10px", borderRadius: "6px", border: "none", background: "#B91C1C", color: "#fff", fontSize: "11px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                    {deleteYear.isPending ? "..." : "מחק"}
+                  </button>
+                  <button type="button" onClick={() => setConfirmDeleteId(null)}
+                    style={{ padding: "3px 8px", borderRadius: "6px", border: "1px solid #E8E2D9", background: "#fff", fontSize: "11px", fontFamily: "Rubik, sans-serif", cursor: "pointer", color: "#888" }}>
+                    בטל
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setConfirmDeleteId(y.id)}
+                  style={{ padding: "6px 8px", borderRadius: "7px", border: "1px solid #E8E2D9", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", color: "#C8C2BB" }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "#B91C1C")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "#C8C2BB")}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+                    <path d="M9 6V4h6v2"/>
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ))}

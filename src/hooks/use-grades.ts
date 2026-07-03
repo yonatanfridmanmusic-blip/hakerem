@@ -43,13 +43,14 @@ export function useAddGrade() {
 
       const nextOrder = (existing?.order_index ?? 0) + 1;
 
-      const { error } = await supabase.from("grades").insert({
+      const { data: inserted, error } = await supabase.from("grades").insert({
         name: payload.name,
         student_count: payload.student_count,
         school_year_id: payload.yearId,
         order_index: nextOrder,
-      });
+      }).select("id").single();
       if (error) throw error;
+      return inserted as { id: string };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["grades"] });

@@ -9,7 +9,7 @@ export const Route = createFileRoute("/")({
   component: LandingPage,
 });
 
-// ─── Logo SVG ────────────────────────────────────────────────────────────────
+// ─── Logo ─────────────────────────────────────────────────────────────────────
 
 function Logo({ size = 36 }: { size?: number }) {
   return (
@@ -34,38 +34,195 @@ function Logo({ size = 36 }: { size?: number }) {
   );
 }
 
-// ─── Feature data ─────────────────────────────────────────────────────────────
+// ─── Mini App Mockups (SVG previews of the actual UI) ─────────────────────────
+
+function MockupDashboard() {
+  return (
+    <div style={{ background: "linear-gradient(135deg,#2D6644 0%,#1A3D2B 55%,#0D2118 100%)", borderRadius: "12px", padding: "16px", position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", top: "-20px", left: "-20px", width: "80px", height: "80px", borderRadius: "50%", background: "rgba(255,255,255,0.05)" }} />
+      <div style={{ fontSize: "9px", color: "rgba(122,170,142,0.8)", marginBottom: "4px", letterSpacing: "0.06em" }}>יתרה תקציבית — כל המקורות</div>
+      <div style={{ fontSize: "28px", fontWeight: "200", color: "#fff", letterSpacing: "-1px", lineHeight: 1 }}>₪182,340</div>
+      <div style={{ marginTop: "6px", fontSize: "10px", color: "#7AAA8E" }}>
+        <span>₪66,160 </span><span style={{ color: "rgba(122,170,142,0.5)" }}>מתוך </span><span>₪248,500 מתוכנן</span>
+      </div>
+      <div style={{ marginTop: "10px", display: "flex", gap: "8px" }}>
+        {[["גפן","#7AAA8E","67%"], ["עירייה","#E88A6A","27%"], ["הורים","#C98AC4","15%"]].map(([l,c,p]) => (
+          <div key={l as string} style={{ flex: 1 }}>
+            <div style={{ fontSize: "8px", color: "rgba(255,255,255,0.4)", marginBottom: "3px" }}>{l as string}</div>
+            <div style={{ height: "3px", background: "rgba(255,255,255,0.1)", borderRadius: "99px" }}>
+              <div style={{ width: p as string, height: "100%", background: c as string, borderRadius: "99px" }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MockupSources() {
+  const cards = [
+    { label: "גפן", color: "#2D6644", light: "#EDFBF3", bal: "₪94,200", pct: "43%", w: "43%" },
+    { label: "עירייה", color: "#B5472A", light: "#FDF1EA", bal: "₪52,800", pct: "72%", w: "72%" },
+    { label: "הורים", color: "#8B2F6E", light: "#F4EBF2", bal: "₪35,340", pct: "28%", w: "28%" },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+      {cards.map(c => (
+        <div key={c.label} style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "10px", padding: "8px 10px", borderRight: `3px solid ${c.color}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <span style={{ fontSize: "10px", fontWeight: "500", color: "#1A1A1A" }}>{c.label}</span>
+            <span style={{ fontSize: "10px", fontWeight: "600", color: c.color }}>{c.bal}</span>
+          </div>
+          <div style={{ height: "3px", background: "#EAE5DE", borderRadius: "99px" }}>
+            <div style={{ width: c.w, height: "100%", background: c.color, borderRadius: "99px" }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MockupExpenses() {
+  const rows = [
+    { cat: "ספרי לימוד", src: "גפן", bg: "#EDFBF3", tc: "#166534", amt: "₪4,200" },
+    { cat: "טיולים", src: "הורים", bg: "#F4EBF2", tc: "#6B2356", amt: "₪1,850" },
+    { cat: "תחזוקה", src: "עירייה", bg: "#FDF1EA", tc: "#7C3010", amt: "₪7,500" },
+    { cat: "ציוד משרדי", src: "גפן", bg: "#EDFBF3", tc: "#166534", amt: "₪920" },
+  ];
+  return (
+    <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "10px", overflow: "hidden" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px", padding: "6px 10px", borderBottom: "1px solid #EAE5DE", fontSize: "8px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.05em" }}>
+        <span>קטגוריה</span><span style={{ textAlign: "center" }}>מקור</span><span style={{ textAlign: "right" }}>סכום</span>
+      </div>
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px", padding: "5px 10px", borderBottom: i < rows.length - 1 ? "1px solid #F3EEE8" : "none", alignItems: "center" }}>
+          <span style={{ fontSize: "9px", color: "#1A1A1A" }}>{r.cat}</span>
+          <span style={{ fontSize: "8px", fontWeight: "600", background: r.bg, color: r.tc, borderRadius: "99px", padding: "1px 5px", textAlign: "center" }}>{r.src}</span>
+          <span style={{ fontSize: "9px", fontWeight: "500", color: "#1A1A1A", textAlign: "right" }}>{r.amt}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MockupBudget() {
+  const cats = [
+    { name: "ספרי לימוד", planned: "₪20k", pct: 68, color: "#2D6644" },
+    { name: "ציוד טכנולוגי", planned: "₪35k", pct: 42, color: "#2D6644" },
+    { name: "תחזוקה", planned: "₪28k", pct: 91, color: "#B5472A" },
+  ];
+  return (
+    <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "10px", overflow: "hidden" }}>
+      {cats.map((c, i) => (
+        <div key={i} style={{ padding: "7px 10px", borderBottom: i < cats.length - 1 ? "1px solid #F3EEE8" : "none" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3px" }}>
+            <span style={{ fontSize: "9px", color: "#1A1A1A" }}>{c.name}</span>
+            <span style={{ fontSize: "8px", fontWeight: "600", color: c.color }}>{c.pct}%</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <div style={{ flex: 1, height: "4px", background: "#EAE5DE", borderRadius: "99px" }}>
+              <div style={{ width: `${c.pct}%`, height: "100%", background: c.pct > 80 ? "#B5472A" : "#2D6644", borderRadius: "99px" }} />
+            </div>
+            <span style={{ fontSize: "8px", color: "#AAA099" }}>{c.planned}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MockupTeam() {
+  const members = [
+    { name: "נורית כהן", role: "מנהלת", initial: "נ", color: "#2D6644" },
+    { name: "שירה לוי", role: "רכזת", initial: "ש", color: "#8B2F6E" },
+    { name: "דנה אבי", role: "מזכירה", initial: "ד", color: "#B5472A" },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+      {members.map((m, i) => (
+        <div key={i} style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "10px", padding: "7px 10px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: m.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <span style={{ fontSize: "11px", fontWeight: "600", color: "#fff" }}>{m.initial}</span>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "10px", fontWeight: "500", color: "#1A1A1A" }}>{m.name}</div>
+            <div style={{ fontSize: "8px", color: "#AAA099" }}>{m.role}</div>
+          </div>
+          <div style={{ fontSize: "8px", background: "#EDFBF3", color: "#166534", border: "1px solid #B6E8C4", borderRadius: "4px", padding: "2px 6px", fontWeight: "500" }}>פעיל</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MockupReports() {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "10px", padding: "10px", overflow: "hidden" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+        <span style={{ fontSize: "10px", fontWeight: "600", color: "#1A1A1A" }}>דוח חודשי — יוני</span>
+        <span style={{ fontSize: "8px", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", borderRadius: "4px", padding: "2px 7px" }}>PDF</span>
+      </div>
+      {[["גפן", "₪12,400", "#2D6644"], ["עירייה", "₪8,200", "#B5472A"], ["הורים", "₪3,600", "#8B2F6E"]].map(([l,a,c]) => (
+        <div key={l as string} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid #F3EEE8" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+            <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: c as string }} />
+            <span style={{ fontSize: "9px", color: "#6B6560" }}>{l as string}</span>
+          </div>
+          <span style={{ fontSize: "9px", fontWeight: "600", color: "#1A1A1A" }}>{a as string}</span>
+        </div>
+      ))}
+      <div style={{ marginTop: "6px", display: "flex", justifyContent: "space-between" }}>
+        <span style={{ fontSize: "9px", fontWeight: "600", color: "#1A1A1A" }}>סה״כ</span>
+        <span style={{ fontSize: "9px", fontWeight: "600", color: "#2D6644" }}>₪24,200</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Feature definitions ──────────────────────────────────────────────────────
 
 const FEATURES = [
   {
-    icon: "💰",
-    title: "תקציב לפי מקורות",
-    desc: "הפרדה ברורה בין כספי גפן, עירייה והורים — כל שקל מזוהה ועקוב.",
-  },
-  {
-    icon: "📊",
+    mockup: <MockupDashboard />,
+    label: "לוח בקרה",
+    bg: "linear-gradient(135deg,#0F2419,#1A3D2B)",
     title: "לוח בקרה בזמן אמת",
-    desc: "ראי בשניה אחת כמה יצא, כמה נכנס ומה נשאר — ללא גליונות אקסל.",
+    desc: "ראי בשנייה אחת כמה יצא, כמה נכנס ומה נשאר — ללא גיליונות אקסל, ללא בלבול.",
   },
   {
-    icon: "🧾",
+    mockup: <MockupSources />,
+    label: "מקורות",
+    bg: "#F8F5F1",
+    title: "תקציב לפי מקורות",
+    desc: "הפרדה ברורה בין גפן, עירייה והורים — כל שקל מזוהה, עקוב, ולא מתבלבל.",
+  },
+  {
+    mockup: <MockupExpenses />,
+    label: "הוצאות",
+    bg: "#FDF5F3",
     title: "מעקב הוצאות והכנסות",
-    desc: "הכנסי כל הוצאה והכנסה בשניות. חפשי, סנני, ערכי — הכל במקום אחד.",
+    desc: "הכניסי כל הוצאה תוך שניות. חפשי, סנני, ערכי — הכל במקום אחד, תמיד מסודר.",
   },
   {
-    icon: "📋",
+    mockup: <MockupBudget />,
+    label: "תכנון",
+    bg: "#F5F8F6",
     title: "תכנון תקציבי שנתי",
-    desc: "בני תכנית תקציבית, שייכי קטגוריות ובדקי כל רגע מה מנוצל מהתקציב.",
+    desc: "בני תכנית, שייכי קטגוריות ובדקי כל רגע אם החרגת את התקציב — לפני שזה מאוחר.",
   },
   {
-    icon: "👥",
+    mockup: <MockupTeam />,
+    label: "צוות",
+    bg: "#F8F5F8",
     title: "עבודה בצוות",
-    desc: "הזמיני רכזות ומזכירות עם גישה מותאמת תפקיד — ללא שיתוף סיסמאות.",
+    desc: "הזמיני רכזות ומזכירות עם גישה לפי תפקיד — ללא שיתוף סיסמאות, ללא כאוס.",
   },
   {
-    icon: "📄",
+    mockup: <MockupReports />,
+    label: "דוחות",
+    bg: "#F5F7FB",
     title: "דוחות מוכנים להדפסה",
-    desc: "הפקי דוח חודשי, שנתי או לפי מקור — מוכן להצגה להורים ולפיקוח.",
+    desc: "דוח חודשי, שנתי, לפי מקור — לחצי הדפסה וקיבלת עמוד מסודר לפיקוח ולהורים.",
   },
 ];
 
@@ -109,10 +266,9 @@ export default function LandingPage() {
 
       {/* ── Hero ── */}
       <section style={{
-        padding: "clamp(60px, 10vh, 120px) clamp(20px, 5vw, 80px) clamp(40px, 8vh, 100px)",
+        padding: "clamp(60px, 10vh, 120px) clamp(20px, 5vw, 80px) clamp(40px, 8vh, 80px)",
         maxWidth: "1100px", margin: "0 auto", textAlign: "center",
       }}>
-        {/* Badge */}
         <div style={{
           display: "inline-flex", alignItems: "center", gap: "7px",
           padding: "5px 14px", borderRadius: "99px",
@@ -163,62 +319,89 @@ export default function LandingPage() {
           </a>
         </div>
 
-        {/* Hero visual — abstract dashboard mockup */}
+        {/* Hero dashboard mockup */}
         <div style={{
           marginTop: "60px",
           borderRadius: "20px",
-          background: "linear-gradient(160deg, #1A3D2B 0%, #0F2419 60%, #460C0C 100%)",
+          background: "linear-gradient(160deg, #1A3D2B 0%, #0F2419 60%, #081510 100%)",
           padding: "28px 32px 0",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.18)",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.22), 0 1px 0 rgba(255,255,255,0.08) inset",
           maxWidth: "820px", margin: "60px auto 0",
-          overflow: "hidden",
-          position: "relative",
+          overflow: "hidden", position: "relative",
         }}>
-          {/* Fake nav */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
-            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "rgba(255,255,255,0.15)" }} />
-            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "rgba(255,255,255,0.15)" }} />
-            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "rgba(255,255,255,0.15)" }} />
+          {/* Window chrome */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "20px" }}>
+            {["rgba(255,90,97,0.7)","rgba(255,189,46,0.7)","rgba(39,201,63,0.7)"].map((c,i) => (
+              <div key={i} style={{ width: "9px", height: "9px", borderRadius: "50%", background: c }} />
+            ))}
+            <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+              <div style={{ background: "rgba(255,255,255,0.07)", borderRadius: "5px", padding: "3px 20px", fontSize: "9px", color: "rgba(255,255,255,0.3)" }}>
+                hakerem.app/dashboard
+              </div>
+            </div>
           </div>
-          {/* Fake hero row */}
+
+          {/* Dashboard hero */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "24px" }}>
             <div>
-              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.45)", marginBottom: "8px" }}>סה״כ הוצאות 2024/25</div>
-              <div style={{ fontSize: "40px", fontWeight: "200", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>₪248,500</div>
+              <div style={{ fontSize: "10px", color: "rgba(122,170,142,0.8)", marginBottom: "6px", letterSpacing: "0.04em" }}>יתרה תקציבית — כל המקורות</div>
+              <div style={{ fontSize: "44px", fontWeight: "200", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>₪182,340</div>
+              <div style={{ marginTop: "8px", fontSize: "11px", color: "#7AAA8E" }}>
+                <span>₪66,160</span> <span style={{ color: "rgba(122,170,142,0.5)" }}>מתוך</span> <span>₪248,500 מתוכנן</span>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: "24px" }}>
-              {[["גפן","#7AAA8E","₪140k","57%"], ["עירייה","#E88A6A","₪68k","27%"], ["הורים","#C98AC4","₪40k","16%"]].map(([label, color, amt, pct]) => (
-                <div key={label} style={{ textAlign: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "4px", justifyContent: "center", marginBottom: "4px" }}>
-                    <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: color }} />
-                    <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.45)" }}>{label}</span>
-                  </div>
-                  <div style={{ fontSize: "15px", fontWeight: "300", color: "#fff" }}>{amt}</div>
-                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>{pct}</div>
-                </div>
-              ))}
+            <div style={{
+              fontSize: "56px", fontWeight: "200",
+              background: "linear-gradient(135deg,#7EE8A6,#4DC483)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+              letterSpacing: "-2px", lineHeight: 1,
+            }}>
+              73%
             </div>
           </div>
-          {/* Fake table rows */}
-          <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: "12px 12px 0 0", overflow: "hidden" }}>
+
+          {/* Source cards row */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "20px" }}>
             {[
-              { date: "15/6", amt: "₪4,200", src: "גפן", cat: "ספרות ולמידה", color: "#EDFBF3", tc: "#166534" },
-              { date: "12/6", amt: "₪1,850", src: "הורים", cat: "טיולים", color: "#F4EBF2", tc: "#6B2356" },
-              { date: "08/6", amt: "₪7,500", src: "עירייה", cat: "תחזוקה", color: "#FDF1EA", tc: "#7C3010" },
-              { date: "05/6", amt: "₪2,300", src: "גפן", cat: "ציוד משרדי", color: "#EDFBF3", tc: "#166534" },
+              { label: "גפן", bal: "₪94,200", pct: 43, color: "#2D6644", grad: "linear-gradient(135deg,#2D6644,#1A3D2B)" },
+              { label: "עירייה", bal: "₪52,800", pct: 72, color: "#B5472A", grad: "linear-gradient(135deg,#B5472A,#7C2E18)" },
+              { label: "הורים", bal: "₪35,340", pct: 28, color: "#8B2F6E", grad: "linear-gradient(135deg,#8B2F6E,#4A1A38)" },
+            ].map(src => (
+              <div key={src.label} style={{
+                background: "rgba(255,255,255,0.06)", borderRadius: "10px", padding: "10px 12px",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: src.color }} />
+                    <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.6)" }}>{src.label}</span>
+                  </div>
+                  <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.35)" }}>{src.pct}%</span>
+                </div>
+                <div style={{ fontSize: "14px", fontWeight: "300", color: "#fff", letterSpacing: "-0.3px" }}>{src.bal}</div>
+                <div style={{ marginTop: "6px", height: "2px", background: "rgba(255,255,255,0.1)", borderRadius: "99px" }}>
+                  <div style={{ width: `${src.pct}%`, height: "100%", background: src.grad, borderRadius: "99px" }} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Expense table */}
+          <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "10px 10px 0 0", overflow: "hidden" }}>
+            {[
+              { date: "15/6", amt: "₪4,200", src: "גפן", bg: "#EDFBF3", tc: "#166534", cat: "ספרי לימוד" },
+              { date: "12/6", amt: "₪1,850", src: "הורים", bg: "#F4EBF2", tc: "#6B2356", cat: "טיולים" },
+              { date: "08/6", amt: "₪7,500", src: "עירייה", bg: "#FDF1EA", tc: "#7C3010", cat: "תחזוקה" },
             ].map((row, i) => (
               <div key={i} style={{
-                display: "grid", gridTemplateColumns: "50px 80px 70px 1fr",
-                padding: "10px 16px", gap: "12px", alignItems: "center",
-                borderBottom: "1px solid rgba(255,255,255,0.06)",
+                display: "grid", gridTemplateColumns: "44px 80px 60px 1fr",
+                padding: "9px 16px", gap: "10px", alignItems: "center",
+                borderBottom: "1px solid rgba(255,255,255,0.05)",
               }}>
-                <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>{row.date}</span>
-                <span style={{ fontSize: "12px", fontWeight: "500", color: "#fff", textAlign: "right" }}>{row.amt}</span>
-                <span style={{
-                  display: "inline-flex", padding: "2px 8px", borderRadius: "99px",
-                  fontSize: "10px", fontWeight: "600", background: row.color, color: row.tc, width: "fit-content",
-                }}>{row.src}</span>
-                <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>{row.cat}</span>
+                <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)" }}>{row.date}</span>
+                <span style={{ fontSize: "11px", fontWeight: "500", color: "#fff", textAlign: "right" }}>{row.amt}</span>
+                <span style={{ fontSize: "9px", fontWeight: "600", background: row.bg, color: row.tc, borderRadius: "99px", padding: "2px 7px", textAlign: "center" }}>{row.src}</span>
+                <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.45)" }}>{row.cat}</span>
               </div>
             ))}
           </div>
@@ -244,25 +427,36 @@ export default function LandingPage() {
           gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
           gap: "16px",
         }}>
-          {FEATURES.map((f) => (
-            <div key={f.title} style={{
-              background: "#fff", border: "1px solid #EAE5DE",
-              borderRadius: "16px", padding: "28px 24px",
-              boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
-              transition: "box-shadow 0.2s, transform 0.2s",
-            }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 32px rgba(0,0,0,0.1)";
-                (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)";
+          {FEATURES.map((feat) => (
+            <div key={feat.title}
+              style={{
+                background: "#fff", border: "1px solid #EAE5DE",
+                borderRadius: "18px", overflow: "hidden",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+                transition: "box-shadow 0.2s, transform 0.2s",
+                cursor: "default",
               }}
-              onMouseLeave={(e) => {
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLDivElement).style.boxShadow = "0 12px 40px rgba(0,0,0,0.1)";
+                (e.currentTarget as HTMLDivElement).style.transform = "translateY(-3px)";
+              }}
+              onMouseLeave={e => {
                 (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 4px rgba(0,0,0,0.05)";
                 (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)";
               }}
             >
-              <div style={{ fontSize: "28px", marginBottom: "14px" }}>{f.icon}</div>
-              <h3 style={{ fontSize: "16px", fontWeight: "600", color: "#1A1A1A", margin: "0 0 8px" }}>{f.title}</h3>
-              <p style={{ fontSize: "14px", color: "#6B6560", lineHeight: 1.65, margin: 0 }}>{f.desc}</p>
+              {/* Mockup preview area */}
+              <div style={{ background: feat.bg, padding: "20px 20px 16px", minHeight: "140px" }}>
+                {feat.mockup}
+              </div>
+              {/* Text */}
+              <div style={{ padding: "18px 20px 22px" }}>
+                <div style={{ fontSize: "11px", fontWeight: "600", color: "#2D6644", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "6px" }}>
+                  {feat.label}
+                </div>
+                <h3 style={{ fontSize: "15px", fontWeight: "600", color: "#1A1A1A", margin: "0 0 7px", letterSpacing: "-0.3px" }}>{feat.title}</h3>
+                <p style={{ fontSize: "13.5px", color: "#6B6560", lineHeight: 1.65, margin: 0 }}>{feat.desc}</p>
+              </div>
             </div>
           ))}
         </div>

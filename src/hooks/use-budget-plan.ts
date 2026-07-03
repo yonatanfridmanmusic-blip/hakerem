@@ -150,6 +150,24 @@ export function useAddBudgetCategory() {
   });
 }
 
+export function useDeleteBudgetCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (categoryId: string) => {
+      const { error } = await supabase
+        .from("budget_categories")
+        .delete()
+        .eq("id", categoryId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
 // ─── Copy categories from one year to another ─────────────────────────────────
 
 export function useCopyBudgetCategories() {

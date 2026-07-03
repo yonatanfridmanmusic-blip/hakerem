@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
-import { Plus, Check, X, Pencil, ChevronDown, Copy } from "lucide-react";
+import { Plus, Check, X, Pencil, ChevronDown, Copy, Trash2 } from "lucide-react";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { toast } from "sonner";
 import {
   useBudgetPlan,
   useUpdatePlannedAmount,
   useAddBudgetCategory,
+  useDeleteBudgetCategory,
   useCopyBudgetCategories,
   type BudgetSource,
   type BudgetCategory,
@@ -404,6 +405,43 @@ function AmountCell({
   );
 }
 
+// ─── Delete category button with inline confirm ───────────────────────────────
+
+function DeleteCatButton({ categoryId, color }: { categoryId: string; color: string }) {
+  const [confirming, setConfirming] = useState(false);
+  const deleteMutation = useDeleteBudgetCategory();
+
+  if (confirming) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+        <button
+          onClick={async () => {
+            try { await deleteMutation.mutateAsync(categoryId); toast.success("נמחקה"); }
+            catch { toast.error("שגיאה במחיקה"); }
+            setConfirming(false);
+          }}
+          disabled={deleteMutation.isPending}
+          style={{ padding: "3px 9px", borderRadius: "6px", border: "none", background: "#B5472A", color: "#fff", fontSize: "11px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+          {deleteMutation.isPending ? "..." : "מחק"}
+        </button>
+        <button onClick={() => setConfirming(false)}
+          style={{ padding: "3px 7px", borderRadius: "6px", border: "1px solid #E8E2D9", background: "#fff", fontSize: "11px", fontFamily: "Rubik, sans-serif", cursor: "pointer", color: "#888" }}>
+          בטל
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={() => setConfirming(true)} title="מחק קטגוריה"
+      style={{ padding: "4px", borderRadius: "6px", border: "none", background: "none", cursor: "pointer", color: "#C8C2BB", display: "flex", alignItems: "center" }}
+      onMouseEnter={e => (e.currentTarget.style.color = "#B5472A")}
+      onMouseLeave={e => (e.currentTarget.style.color = "#C8C2BB")}>
+      <Trash2 size={13} />
+    </button>
+  );
+}
+
 // ─── Progress bar ─────────────────────────────────────────────────────────────
 
 function MiniBar({ pct, gradient }: { pct: number; gradient: string }) {
@@ -787,8 +825,8 @@ function SourceTab({
           style={{
             display: "grid",
             gridTemplateColumns: isCurrentYear
-              ? "1fr 130px 120px 80px"
-              : "1fr 130px",
+              ? "1fr 130px 120px 80px 36px"
+              : "1fr 130px 36px",
             padding: "12px 20px",
             borderBottom: "1px solid #EAE5DE",
             fontSize: "11px",
@@ -807,6 +845,7 @@ function SourceTab({
               <span style={{ textAlign: "center" }}>ניצול</span>
             </>
           )}
+          <span />
         </div>
 
         {/* Rows */}
@@ -847,8 +886,8 @@ function SourceTab({
                 style={{
                   display: "grid",
                   gridTemplateColumns: isCurrentYear
-                    ? "1fr 130px 120px 80px"
-                    : "1fr 130px",
+                    ? "1fr 130px 120px 80px 36px"
+                    : "1fr 130px 36px",
                   padding: "14px 20px",
                   gap: "12px",
                   borderBottom:
@@ -914,6 +953,9 @@ function SourceTab({
                     </div>
                   </>
                 )}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <DeleteCatButton categoryId={cat.id} color={srcCfg.color} />
+                </div>
               </div>
             );
           })

@@ -81,6 +81,25 @@ export function useCreateSchoolYear() {
   });
 }
 
+export function useDeleteSchoolYear() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (yearId: string) => {
+      const { error } = await supabase
+        .from("school_years")
+        .delete()
+        .eq("id", yearId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["school-years"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+    },
+  });
+}
+
 export function useUpdateSchoolYear() {
   const queryClient = useQueryClient();
   return useMutation({

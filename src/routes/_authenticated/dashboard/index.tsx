@@ -7,7 +7,7 @@ import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateSchoolYear } from "@/hooks/use-school-years";
 import { useAddGrade, useGrades } from "@/hooks/use-grades";
-import { useAddBudgetCategory, type BudgetSource } from "@/hooks/use-budget-plan";
+import { useAddBudgetCategory, useUpdatePlannedAmount, type BudgetSource } from "@/hooks/use-budget-plan";
 
 export const Route = createFileRoute("/_authenticated/dashboard/")({
   component: DashboardPage,
@@ -237,7 +237,93 @@ function SmartDefaults() {
   };
 }
 
-function SetupWizard({ onComplete }: { onComplete: () => void }) {
+// ─── Inline amount editor (wizard step 2) ────────────────────────────────────
+
+function InlineAmountEdit({ catId, current, color, onSave }: {
+  catId: string; current: number; color: string;
+  onSave: (n: number) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(String(current || ""));
+  const [saving, setSaving] = useState(false);
+
+  if (editing) {
+    const save = async () => {
+      const n = Number(val);
+      if (isNaN(n) || n < 0) { setEditing(false); return; }
+      setSaving(true);
+      try { await onSave(n); } catch { /* silent */ }
+      setSaving(false);
+      setEditing(false);
+    };
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+        <input autoFocus type="number" min="0" value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+          style={{ width: "80px", padding: "3px 7px", border: `1.5px solid ${color}`, borderRadius: "6px", fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none", direction: "ltr", textAlign: "right" }} />
+        <button onClick={save} disabled={saving}
+          style={{ padding: "3px 8px", borderRadius: "6px", border: "none", background: color, color: "#fff", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+          {saving ? "..." : "שמור"}
+        </button>
+        <button onClick={() => setEditing(false)}
+          style={{ padding: "3px 6px", borderRadius: "6px", border: "1px solid #E8E2D9", background: "#fff", color: "#888", fontSize: "12px", cursor: "pointer", fontFamily: "Rubik, sans-serif" }}>
+          ✕
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={() => { setVal(String(current || "")); setEditing(true); }}
+      style={{ display: "flex", alignItems: "center", gap: "4px", background: "none", border: "none", cursor: "pointer", color: current > 0 ? color : "#AAA099", fontSize: "12.5px", fontFamily: "Rubik, sans-serif", fontWeight: current > 0 ? "500" : "400" }}>
+      {current > 0 ? `₪${current.toLocaleString("he-IL")}` : "הוסף סכום"}
+      <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M1 9l2 2 8-8" stroke="none"/><path d="M8 1l3 3-7 7H1V8l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    </button>
+  );
+}
+
+type WizardMode = "first" | "new-year";
+
+// Helper: create a default "שכר לימוד" parent section + grade_section_amount
+async function setGradeHorimAmount(yearId: string, gradeId: string, amountPerStudent: number) {
+  const { data: existing } = await supabase
+    .from("parent_sections")
+    .select("id")
+    .eq("school_year_id", yearId)
+    .eq("name", "שכר לימוד")
+    .limit(1);
+
+  let sectionId: string;
+  if (existing && existing.length > 0) {
+    sectionId = existing[0].id;
+  } else {
+    const { data: sec, error } = await supabase
+      .from("parent_sections")
+      .insert({ school_year_id: yearId, name: "שכר לימוד", order_index: 0, is_active: true })
+      .select("id").single();
+    if (error) throw error;
+    sectionId = sec.id;
+  }
+
+  const { data: gsa } = await supabase
+    .from("grade_section_amounts")
+    .select("id")
+    .eq("grade_id", gradeId)
+    .eq("parent_section_id", sectionId)
+    .maybeSingle();
+
+  if (gsa) {
+    await supabase.from("grade_section_amounts").update({ amount_per_student: amountPerStudent }).eq("id", gsa.id);
+  } else {
+    await supabase.from("grade_section_amounts").insert({
+      school_year_id: yearId, grade_id: gradeId, parent_section_id: sectionId,
+      amount_per_student: amountPerStudent, working_budget_basis: "p85",
+    });
+  }
+}
+
+function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; mode?: WizardMode }) {
   const { data: membership } = useOrganization();
   const orgName = membership?.organization?.name ?? "בית הספר";
   const [firstName, setFirstName] = useState<string>("");
@@ -258,14 +344,17 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
   // Step 1 — grades
   const [selLetter, setSelLetter] = useState("");
   const [gradeCount, setGradeCount] = useState("0");
+  const [horimAmount, setHorimAmount] = useState("");
   const addGrade = useAddGrade();
   const { data: grades = [] } = useGrades(yearId || undefined);
 
   // Step 2 — categories
   const [catSrc, setCatSrc] = useState<BudgetSource>("gefen");
   const [catCustom, setCatCustom] = useState("");
-  const [addedCatNames, setAddedCatNames] = useState<Record<BudgetSource, string[]>>({ gefen: [], iriyah: [], horim: [] });
+  type AddedCat = { id: string; name: string; amount: number };
+  const [addedCats, setAddedCats] = useState<Record<BudgetSource, AddedCat[]>>({ gefen: [], iriyah: [], horim: [] });
   const addCategory = useAddBudgetCategory();
+  const updatePlannedAmount = useUpdatePlannedAmount();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -289,26 +378,35 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
 
   const handleAddGrade = async () => {
     if (!selLetter || !yearId) return;
-    await addGrade.mutateAsync({
+    const result = await addGrade.mutateAsync({
       name: `שכבה ${selLetter}'`,
       student_count: Number(gradeCount),
       yearId,
     });
+    if (horimAmount && Number(horimAmount) > 0 && result?.id) {
+      try { await setGradeHorimAmount(yearId, result.id, Number(horimAmount)); }
+      catch { /* non-blocking */ }
+    }
     setSelLetter("");
     setGradeCount("0");
+    setHorimAmount("");
   };
 
   const handleAddCatSuggestion = async (name: string) => {
-    if (addedCatNames[catSrc].includes(name)) return;
-    await addCategory.mutateAsync({ name, source: catSrc, plannedAmount: 0 });
-    setAddedCatNames(prev => ({ ...prev, [catSrc]: [...prev[catSrc], name] }));
+    if (addedCats[catSrc].some(c => c.name === name)) return;
+    const result = await addCategory.mutateAsync({ name, source: catSrc, plannedAmount: 0 });
+    if (result?.id) {
+      setAddedCats(prev => ({ ...prev, [catSrc]: [...prev[catSrc], { id: result.id, name, amount: 0 }] }));
+    }
   };
 
   const handleAddCustomCat = async () => {
     if (!catCustom.trim()) return;
     const name = catCustom.trim();
-    await addCategory.mutateAsync({ name, source: catSrc, plannedAmount: 0 });
-    setAddedCatNames(prev => ({ ...prev, [catSrc]: [...prev[catSrc], name] }));
+    const result = await addCategory.mutateAsync({ name, source: catSrc, plannedAmount: 0 });
+    if (result?.id) {
+      setAddedCats(prev => ({ ...prev, [catSrc]: [...prev[catSrc], { id: result.id, name, amount: 0 }] }));
+    }
     setCatCustom("");
   };
 
@@ -324,7 +422,9 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
     background: "#FAFAF8", color: "#1A1A1A", outline: "none", boxSizing: "border-box",
   };
 
-  const greeting = firstName ? `ברוכים הבאים, ${firstName}!` : "ברוכים הבאים!";
+  const greeting = mode === "new-year"
+    ? (firstName ? `${firstName}, מתחילים שנה חדשה!` : "מתחילים שנה חדשה!")
+    : (firstName ? `ברוכים הבאים, ${firstName}!` : "ברוכים הבאים!");
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -351,13 +451,13 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
           </div>
 
           <div style={{ fontSize: "24px", fontWeight: "300", letterSpacing: "-0.6px", marginBottom: "4px" }}>
-            {step === 3 ? "הכל מוכן!" : greeting}
+            {step === 3 ? (mode === "new-year" ? "השנה החדשה מוכנה!" : "הכל מוכן!") : greeting}
           </div>
           <div style={{ fontSize: "13.5px", color: "rgba(255,255,255,0.6)" }}>
-            {step === 0 && "נגדיר את שנת הלימודים שלך יחד — שלב שלב"}
-            {step === 1 && `✓ שנת הלימודים "${createdYearName}" נוצרה ואופעלה! עכשיו נוסיף שכבות.`}
+            {step === 0 && (mode === "new-year" ? "איזה כיף לפתוח שנה חדשה ביחד — נתחיל?" : "נגדיר את שנת הלימודים שלך יחד — שלב שלב")}
+            {step === 1 && `✓ שנת הלימודים "${createdYearName}" נוצרה! עכשיו נוסיף שכבות.`}
             {step === 2 && `✓ השכבות הוגדרו! עכשיו נגדיר קטגוריות תקציב.`}
-            {step === 3 && "לוח הבקרה שלך מוכן ועובד. בואי נתחיל!"}
+            {step === 3 && (mode === "new-year" ? "השנה החדשה פעילה ומחכה להוצאות ראשונות!" : "לוח הבקרה שלך פעיל ומוכן לעבודה. בואי נתחיל!")}
           </div>
 
           {/* Progress bar */}
@@ -473,17 +573,25 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
               </div>
             </div>
 
-            {/* Count + add */}
+            {/* Count + horim amount + add */}
             {selLetter && (
-              <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", marginBottom: "20px" }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>
-                    שכבה {selLetter}' — מספר תלמידים
-                  </label>
-                  <input style={inputSt} type="number" min="0" value={gradeCount} onChange={e => setGradeCount(e.target.value)} autoFocus />
+              <div style={{ marginBottom: "20px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                  <div>
+                    <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>
+                      שכבה {selLetter}' — מספר תלמידים
+                    </label>
+                    <input style={inputSt} type="number" min="0" value={gradeCount} onChange={e => setGradeCount(e.target.value)} autoFocus />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>
+                      גביית הורים לתלמיד ₪ <span style={{ fontWeight: "400", color: "#AAA099" }}>(אופציונלי)</span>
+                    </label>
+                    <input style={inputSt} type="number" min="0" placeholder="0" value={horimAmount} onChange={e => setHorimAmount(e.target.value)} />
+                  </div>
                 </div>
                 <button type="button" onClick={handleAddGrade} disabled={addGrade.isPending}
-                  style={{ padding: "10px 22px", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer", fontWeight: "500", whiteSpace: "nowrap" }}>
+                  style={{ padding: "10px 22px", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer", fontWeight: "500" }}>
                   {addGrade.isPending ? "..." : "הוסף שכבה"}
                 </button>
               </div>
@@ -545,7 +653,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
               <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>הצעות מהירות</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
                 {CAT_SUGGESTIONS[catSrc].map(name => {
-                  const added = addedCatNames[catSrc].includes(name);
+                  const added = addedCats[catSrc].some(c => c.name === name);
                   return (
                     <button key={name} type="button"
                       onClick={() => handleAddCatSuggestion(name)}
@@ -575,24 +683,38 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                 })}
               </div>
 
-              {/* Added categories list */}
-              {addedCatNames[catSrc].length > 0 && (
+              {/* Added categories list with inline amount edit */}
+              {addedCats[catSrc].length > 0 && (
                 <div style={{ marginTop: "14px" }}>
                   <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>
-                    נוספו לקטגוריות {SRC_CFG[catSrc].label} ({addedCatNames[catSrc].length})
+                    נוספו ({addedCats[catSrc].length}) — לחץ על הסכום לעדכון
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
-                    {addedCatNames[catSrc].map(name => (
-                      <div key={name} style={{
-                        display: "inline-flex", alignItems: "center", gap: "5px",
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {addedCats[catSrc].map(cat => (
+                      <div key={cat.id} style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
                         background: SRC_CFG[catSrc].light,
                         border: `1px solid ${SRC_CFG[catSrc].color}30`,
-                        borderRadius: "8px", padding: "5px 12px",
+                        borderRadius: "9px", padding: "7px 12px",
                       }}>
-                        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                          <path d="M2 6l3 3 5-5" stroke={SRC_CFG[catSrc].color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                        <span style={{ fontSize: "12.5px", color: SRC_CFG[catSrc].color, fontWeight: "500" }}>{name}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 6l3 3 5-5" stroke={SRC_CFG[catSrc].color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          <span style={{ fontSize: "13px", color: SRC_CFG[catSrc].color, fontWeight: "500" }}>{cat.name}</span>
+                        </div>
+                        <InlineAmountEdit
+                          catId={cat.id}
+                          current={cat.amount}
+                          color={SRC_CFG[catSrc].color}
+                          onSave={async (n) => {
+                            await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
+                            setAddedCats(prev => ({
+                              ...prev,
+                              [catSrc]: prev[catSrc].map(c => c.id === cat.id ? { ...c, amount: n } : c)
+                            }));
+                          }}
+                        />
                       </div>
                     ))}
                   </div>
@@ -644,7 +766,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
               {[
                 { label: `שנת לימודים: ${createdYearName}`, done: true },
                 { label: grades.length > 0 ? `${grades.length} שכבות הוגדרו` : "שכבות — ניתן להוסיף בהגדרות", done: grades.length > 0 },
-                { label: (() => { const total = Object.values(addedCatNames).reduce((s,a) => s + a.length, 0); return total > 0 ? `${total} קטגוריות תקציב נוספו` : "קטגוריות — ניתן להוסיף בהגדרות"; })(), done: Object.values(addedCatNames).some(a => a.length > 0) },
+                { label: (() => { const total = Object.values(addedCats).reduce((s,a) => s + a.length, 0); return total > 0 ? `${total} קטגוריות תקציב נוספו` : "קטגוריות — ניתן להוסיף בהגדרות"; })(), done: Object.values(addedCats).some(a => a.length > 0) },
               ].map((item, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "5px 0" }}>
                   <div style={{ width: "18px", height: "18px", borderRadius: "50%", background: item.done ? "#EDFBF3" : "#F5F0EA", border: `1px solid ${item.done ? "#B6E8C4" : "#E8E2D9"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -675,6 +797,7 @@ export default function DashboardPage() {
   // Track whether this session started without a school year
   const [wizardTriggered, setWizardTriggered] = useState<boolean | null>(null);
   const [wizardDone, setWizardDone] = useState(false);
+  const [showNewYearWizard, setShowNewYearWizard] = useState(false);
 
   useEffect(() => {
     if (!isLoading && data !== undefined && wizardTriggered === null) {
@@ -694,22 +817,48 @@ export default function DashboardPage() {
   const animFromIncome     = useCountUp(incomeTotals.fromIncome);
   const animFromParentColl = useCountUp(incomeTotals.fromParentCollections);
 
-  // Show wizard if session started without a school year and wizard not completed
+  // Show initial wizard (no school year yet)
   if (wizardTriggered === true && !wizardDone) {
-    return <SetupWizard onComplete={() => setWizardDone(true)} />;
+    return <SetupWizard onComplete={() => setWizardDone(true)} mode="first" />;
+  }
+
+  // Show new-year wizard (triggered from button)
+  if (showNewYearWizard) {
+    return <SetupWizard onComplete={() => setShowNewYearWizard(false)} mode="new-year" />;
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
 
       {/* Page heading */}
-      <div>
-        <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>
-          לוח בקרה
-        </h1>
-        <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099", fontWeight: "400" }}>
-          {yearName} — מבט כולל על מצב התקציב
-        </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>
+            לוח בקרה
+          </h1>
+          <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099", fontWeight: "400" }}>
+            {yearName} — מבט כולל על מצב התקציב
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowNewYearWizard(true)}
+          style={{
+            display: "flex", alignItems: "center", gap: "7px",
+            padding: "9px 16px",
+            background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
+            color: "#fff", border: "none", borderRadius: "10px",
+            fontSize: "13px", fontWeight: "500", fontFamily: "Rubik, sans-serif",
+            cursor: "pointer",
+            boxShadow: "0 3px 10px rgba(26,61,43,0.25)",
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/>
+            <path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>
+          </svg>
+          פתח שנת לימודים חדשה
+        </button>
       </div>
 
       {/* Hero */}
