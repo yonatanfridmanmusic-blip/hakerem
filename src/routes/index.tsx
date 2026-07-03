@@ -188,7 +188,7 @@ const FEATURES = [
     label: "לוח בקרה",
     bg: "linear-gradient(135deg,#0F2419,#1A3D2B)",
     title: "לוח בקרה בזמן אמת",
-    desc: "ראי בשנייה אחת כמה יצא, כמה נכנס ומה נשאר — ללא גיליונות אקסל, ללא בלבול.",
+    desc: "ראה/י בשנייה אחת כמה יצא, כמה נכנס ומה נשאר — ללא גיליונות אקסל, ללא בלבול.",
   },
   {
     mockup: <MockupSources />,
@@ -202,21 +202,21 @@ const FEATURES = [
     label: "הוצאות",
     bg: "#FDF5F3",
     title: "מעקב הוצאות והכנסות",
-    desc: "הכניסי כל הוצאה תוך שניות. חפשי, סנני, ערכי — הכל במקום אחד, תמיד מסודר.",
+    desc: "הכנס/י כל הוצאה תוך שניות. חפש/י, סנן/י, ערוך/י — הכל במקום אחד, תמיד מסודר.",
   },
   {
     mockup: <MockupBudget />,
     label: "תכנון",
     bg: "#F5F8F6",
     title: "תכנון תקציבי שנתי",
-    desc: "בני תכנית, שייכי קטגוריות ובדקי כל רגע אם החרגת את התקציב — לפני שזה מאוחר.",
+    desc: "בנה/י תכנית, שייך/י קטגוריות ובדוק/י כל רגע אם חרגת מהתקציב — לפני שזה מאוחר.",
   },
   {
     mockup: <MockupTeam />,
     label: "צוות",
     bg: "#F8F5F8",
     title: "עבודה בצוות",
-    desc: "הזמיני רכזות ומזכירות עם גישה לפי תפקיד — ללא שיתוף סיסמאות, ללא כאוס.",
+    desc: "הזמן/י אנשי צוות עם גישה לפי תפקיד — ללא שיתוף סיסמאות, ללא כאוס.",
   },
   {
     mockup: <MockupReports />,
@@ -305,7 +305,7 @@ export default function LandingPage() {
           color: "#1A1A1A", letterSpacing: "-2px", lineHeight: 1.1,
           margin: "0 0 20px",
         }}>
-          כל כסף בית הספר שלך<br />
+          כל הכסף של בית הספר שלך<br />
           <span style={{ color: "#2D6644", fontWeight: "500" }}>במקום אחד.</span>
         </h1>
 
@@ -435,7 +435,7 @@ export default function LandingPage() {
       }}>
         <div style={{ textAlign: "center", marginBottom: "56px" }}>
           <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-1px", margin: "0 0 14px" }}>
-            כל מה שמנהלת צריכה
+            כל מה שמנהל/ת צריכ/ה
           </h2>
           <p style={{ fontSize: "16px", color: "#6B6560", maxWidth: "500px", margin: "0 auto", lineHeight: 1.65 }}>
             פותח במיוחד לצרכים הייחודיים של בתי ספר בישראל

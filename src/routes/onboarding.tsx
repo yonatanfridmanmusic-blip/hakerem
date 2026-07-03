@@ -313,7 +313,7 @@ function JoinOrgStep({ onBack, onSuccess }: { onBack: () => void; onSuccess: () 
           borderRadius: "10px", padding: "14px 16px",
           fontSize: "13px", color: "#78600A", lineHeight: 1.65,
         }}>
-          לא נמצאו בתי ספר רשומים. בקש ממנהלת בית הספר שלך להירשם תחילה.
+          לא נמצאו בתי ספר רשומים. בקש/י ממנהל/ת בית הספר שלך להירשם תחילה.
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "18px", maxHeight: "260px", overflowY: "auto" }}>
