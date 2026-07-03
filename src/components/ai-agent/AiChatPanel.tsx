@@ -152,6 +152,11 @@ function ConfirmCard({
             <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>
               📅 {p.date}
             </span>
+            {p.category_name && (
+              <span style={{ fontSize: "12px", color: isExpense ? "rgba(249,115,22,0.75)" : "rgba(74,222,128,0.75)", fontWeight: 500 }}>
+                📂 {p.category_name}
+              </span>
+            )}
             {p.supplier && (
               <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>
                 🏢 {p.supplier}

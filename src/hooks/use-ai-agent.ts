@@ -28,6 +28,8 @@ export interface ActionDraftPreview {
   source_slug: string;
   source_label: string;
   date: string;
+  budget_category_id?: string | null;
+  category_name?: string | null;
   supplier?: string | null;
   payer?: string | null;
 }
