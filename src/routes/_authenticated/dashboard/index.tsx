@@ -10,6 +10,7 @@ import { useCreateSchoolYear } from "@/hooks/use-school-years";
 import { useAddGrade, useGrades } from "@/hooks/use-grades";
 import { useAddBudgetCategory, useUpdatePlannedAmount, type BudgetSource } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, useAddBudgetSource, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
+import { syncHorimBudgetCategory } from "@/hooks/use-horim";
 
 export const Route = createFileRoute("/_authenticated/dashboard/")({
   component: DashboardPage,
@@ -346,6 +347,9 @@ async function setGradeHorimAmount(
       amount_per_student: amountPerStudent, working_budget_basis: "p85",
     });
   }
+
+  // Sync budget_category planned amount for this horim section
+  await syncHorimBudgetCategory(yearId, sectionId, sectionName);
 }
 
 function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; mode?: WizardMode }) {
@@ -425,6 +429,8 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["grade-section-amounts"] });
       queryClient.invalidateQueries({ queryKey: ["horim"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-categories"] });
     },
   });
 

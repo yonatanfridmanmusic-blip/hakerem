@@ -154,6 +154,74 @@ export function useToggleParentSection() {
   });
 }
 
+// ─── Horim → budget_category sync ────────────────────────────────────────────
+
+/**
+ * After any grade_section_amount change, recompute the total planned amount
+ * for the section across all grades and upsert it as a budget_category
+ * for the "horim" source. This lets the budget planning screen show
+ * planned vs. actual for parent collections.
+ */
+export async function syncHorimBudgetCategory(
+  yearId: string,
+  sectionId: string,
+  sectionName: string,
+) {
+  // All amounts for this section
+  const { data: allGSA } = await supabase
+    .from("grade_section_amounts")
+    .select("grade_id, amount_per_student")
+    .eq("school_year_id", yearId)
+    .eq("parent_section_id", sectionId);
+
+  // All grades with student_count
+  const { data: grades } = await supabase
+    .from("grades")
+    .select("id, student_count")
+    .eq("school_year_id", yearId);
+
+  const gradeMap: Record<string, number> = Object.fromEntries(
+    (grades ?? []).map((g) => [g.id, Number(g.student_count)]),
+  );
+
+  const totalPlanned = (allGSA ?? []).reduce((sum, gsa) => {
+    return sum + Number(gsa.amount_per_student) * (gradeMap[gsa.grade_id] ?? 0);
+  }, 0);
+
+  // Upsert: find existing budget_category by name+source+year, then update or insert
+  const { data: existing } = await supabase
+    .from("budget_categories")
+    .select("id")
+    .eq("school_year_id", yearId)
+    .eq("source", "horim")
+    .eq("name", sectionName)
+    .maybeSingle();
+
+  if (existing?.id) {
+    await supabase
+      .from("budget_categories")
+      .update({ planned_amount: totalPlanned })
+      .eq("id", existing.id);
+  } else {
+    const { data: maxOrder } = await supabase
+      .from("budget_categories")
+      .select("order_index")
+      .eq("school_year_id", yearId)
+      .eq("source", "horim")
+      .order("order_index", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    await supabase.from("budget_categories").insert({
+      school_year_id: yearId,
+      name: sectionName,
+      source: "horim",
+      planned_amount: totalPlanned,
+      order_index: (maxOrder?.order_index ?? 0) + 1,
+    });
+  }
+}
+
 // Upsert grade_section_amount (set amount_per_student for a grade+section)
 export function useUpsertGradeSectionAmount() {
   const queryClient = useQueryClient();
@@ -161,11 +229,13 @@ export function useUpsertGradeSectionAmount() {
     mutationFn: async ({
       gradeId,
       sectionId,
+      sectionName,
       amountPerStudent,
       existingId,
     }: {
       gradeId: string;
       sectionId: string;
+      sectionName: string;
       amountPerStudent: number;
       existingId?: string;
     }) => {
@@ -188,9 +258,14 @@ export function useUpsertGradeSectionAmount() {
         });
         if (error) throw error;
       }
+
+      // Sync budget_category planned amount for this horim section
+      await syncHorimBudgetCategory(yearId, sectionId, sectionName);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["grade-section-amounts"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-categories"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });

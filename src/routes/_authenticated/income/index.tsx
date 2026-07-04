@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { Plus, X, TrendingUp, Pencil, Check, Trash2, Search } from "lucide-react";
+import { CategorySearchSelect } from "@/components/ui/category-search-select";
 import { useCountUp } from "@/hooks/use-count-up";
 import { toast } from "sonner";
 import {
@@ -139,16 +140,16 @@ function IncomeForm({
 
       <div>
         <label style={labelStyle}>קטגוריה תקציבית</label>
-        <select value={form.budget_category_id}
-          onChange={(e) => {
-            set("budget_category_id", e.target.value);
-            if (e.target.value === "__new__") setTimeout(() => newCatRef.current?.focus(), 50);
+        <CategorySearchSelect
+          value={form.budget_category_id}
+          onChange={(id) => {
+            set("budget_category_id", id);
+            if (id === "__new__") setTimeout(() => newCatRef.current?.focus(), 50);
           }}
-          style={inputStyle}>
-          <option value="">— ללא קטגוריה —</option>
-          {(categories ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          <option value="__new__">+ הוסף קטגוריה חדשה...</option>
-        </select>
+          categories={categories ?? []}
+          allowAddNew
+          sourceColor={activeSourceStyle.color}
+        />
         {isAddingNew && (
           <input ref={newCatRef} type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
             placeholder="שם הקטגוריה החדשה"

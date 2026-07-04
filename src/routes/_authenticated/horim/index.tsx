@@ -54,9 +54,9 @@ function Bar({ pct }: { pct: number }) {
 // ─── Inline amount-per-student editor ─────────────────────────────────────────
 
 function AmountPerStudentCell({
-  gradeId, sectionId, current, existingId,
+  gradeId, sectionId, sectionName, current, existingId,
 }: {
-  gradeId: string; sectionId: string; current: number; existingId?: string;
+  gradeId: string; sectionId: string; sectionName: string; current: number; existingId?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(String(current));
@@ -71,7 +71,7 @@ function AmountPerStudentCell({
     if (isNaN(n) || n < 0) { toast.error("סכום לא תקין"); setValue(String(current)); setEditing(false); return; }
     if (n === current) { setEditing(false); return; }
     try {
-      await upsert.mutateAsync({ gradeId, sectionId, amountPerStudent: n, existingId });
+      await upsert.mutateAsync({ gradeId, sectionId, sectionName, amountPerStudent: n, existingId });
       toast.success("עודכן");
     } catch { toast.error("שגיאה בעדכון"); setValue(String(current)); }
     setEditing(false);
@@ -388,6 +388,7 @@ function GradeRow({
               <AmountPerStudentCell
                 gradeId={grade.id}
                 sectionId={s.id}
+                sectionName={s.name}
                 current={gsa?.amount_per_student ?? 0}
                 existingId={gsa?.existing_id}
               />

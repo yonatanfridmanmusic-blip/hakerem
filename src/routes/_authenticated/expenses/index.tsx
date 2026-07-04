@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Plus, X, AlertTriangle, Pencil, Trash2, Search } from "lucide-react";
+import { CategorySearchSelect } from "@/components/ui/category-search-select";
 import { useCountUp } from "@/hooks/use-count-up";
 import { toast } from "sonner";
 import {
@@ -70,6 +71,7 @@ function ExpenseForm({
   const { data: orgSources } = useOrgBudgetSources();
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const activeSourceColor = sources.find(s => s.slug === form.source)?.color ?? "#2D6644";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,10 +120,12 @@ function ExpenseForm({
 
       <div>
         <label style={labelStyle}>קטגוריה</label>
-        <select value={form.budget_category_id} onChange={(e) => set("budget_category_id", e.target.value)} style={inputStyle}>
-          <option value="">— ללא קטגוריה —</option>
-          {(categories ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <CategorySearchSelect
+          value={form.budget_category_id}
+          onChange={(id) => set("budget_category_id", id)}
+          categories={categories ?? []}
+          sourceColor={activeSourceColor}
+        />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
