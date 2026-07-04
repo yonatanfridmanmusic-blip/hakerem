@@ -42,13 +42,20 @@ function ConfirmCard({
   onDone: () => void;
 }) {
   const confirm = useConfirmAiAction();
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const p = draft.preview;
   const isExpense = p.type === "add_expense";
 
   const handle = (approved: boolean) => {
+    setConfirmError(null);
     confirm.mutate(
       { actionDraftId: draft.id, conversationId: convId, approved },
-      { onSuccess: onDone },
+      {
+        onSuccess: onDone,
+        onError: (err) => {
+          setConfirmError(err instanceof Error ? err.message : "שגיאה בביצוע הפעולה. נסה שוב.");
+        },
+      },
     );
   };
 
@@ -176,6 +183,34 @@ function ConfirmCard({
           background: "rgba(255,255,255,0.06)",
           marginBottom: "14px",
         }} />
+
+        {/* Error banner */}
+        {confirmError && (
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            background: "rgba(239,68,68,0.12)",
+            border: "1px solid rgba(239,68,68,0.3)",
+            borderRadius: "10px",
+            padding: "9px 12px",
+            marginBottom: "10px",
+            fontSize: "12px",
+            color: "#fca5a5",
+            direction: "rtl",
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10" stroke="#f87171" strokeWidth="2"/>
+              <path d="M12 7v5M12 16v1" stroke="#f87171" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            <span style={{ flex: 1 }}>{confirmError}</span>
+            <button
+              type="button"
+              onClick={() => setConfirmError(null)}
+              style={{ background: "none", border: "none", color: "rgba(252,165,165,0.6)", cursor: "pointer", padding: "0 2px", fontSize: "12px", lineHeight: 1 }}
+            >✕</button>
+          </div>
+        )}
 
         {/* Buttons */}
         <div style={{ display: "flex", gap: "10px" }}>
