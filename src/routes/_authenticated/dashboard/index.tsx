@@ -356,6 +356,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   const [step, setStep] = useState<0 | 1 | 2 | 3>(0); // 0=year 1=grades 2=categories 3=done
   const [yearId, setYearId]     = useState<string>("");
   const [createdYearName, setCreatedYearName] = useState("");
+  const [wizardError, setWizardError] = useState<string | null>(null);
 
   // Step 0 — school year form
   const defs = SmartDefaults();
@@ -419,22 +420,32 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
 
   const handleCreateYear = async () => {
     if (!yName || !yStart || !yEnd) return;
-    const id = await createYear.mutateAsync({
-      name: yName, start_date: yStart, end_date: yEnd,
-      collection_percentage: Number(yPct),
-    });
-    setYearId(id);
-    setCreatedYearName(yName);
-    setStep(1);
+    setWizardError(null);
+    try {
+      const id = await createYear.mutateAsync({
+        name: yName, start_date: yStart, end_date: yEnd,
+        collection_percentage: Number(yPct),
+      });
+      setYearId(id);
+      setCreatedYearName(yName);
+      setStep(1);
+    } catch (err) {
+      setWizardError(err instanceof Error ? err.message : "שגיאה ביצירת שנת הלימודים. נסה שוב.");
+    }
   };
 
   const handleAddGrade = async () => {
     if (!selLetter || !yearId) return;
-    await addGrade.mutateAsync({
-      name: `שכבה ${selLetter}'`,
-      student_count: Number(gradeCount),
-      yearId,
-    });
+    setWizardError(null);
+    try {
+      await addGrade.mutateAsync({
+        name: `שכבה ${selLetter}'`,
+        student_count: Number(gradeCount),
+        yearId,
+      });
+    } catch (err) {
+      setWizardError(err instanceof Error ? err.message : "שגיאה בהוספת שכבה. נסה שוב.");
+    }
     setSelLetter("");
     setGradeCount("0");
   };
@@ -560,6 +571,27 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
         borderRadius: "0 0 20px 20px", padding: "32px 36px",
         boxShadow: "0 8px 32px rgba(0,0,0,0.08)",
       }}>
+
+        {/* ── Global error banner ── */}
+        {wizardError && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: "8px",
+            background: "#FEF2F2", border: "1px solid #FECACA",
+            borderRadius: "10px", padding: "10px 14px", marginBottom: "20px",
+          }}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+              <circle cx="8" cy="8" r="7" stroke="#EF4444" strokeWidth="1.4"/>
+              <path d="M8 5v3.5" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="8" cy="11" r="0.7" fill="#EF4444"/>
+            </svg>
+            <span style={{ fontSize: "13px", color: "#991B1B" }}>{wizardError}</span>
+            <button
+              type="button"
+              onClick={() => setWizardError(null)}
+              style={{ marginRight: "auto", background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: "14px", lineHeight: 1 }}
+            >✕</button>
+          </div>
+        )}
 
         {/* ── STEP 0: Create school year ── */}
         {step === 0 && (

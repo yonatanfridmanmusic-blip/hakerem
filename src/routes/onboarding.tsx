@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateOrganization, useAllOrganizations, useRequestJoinOrg } from "@/hooks/use-organization";
@@ -568,6 +568,28 @@ function JoinOrgStep({ onBack, onSuccess }: { onBack: () => void; onSuccess: () 
 // ─── Step: Pending ────────────────────────────────────────────────────────────
 
 function PendingStep() {
+  const [checking, setChecking] = useState(false);
+  const [notYet, setNotYet] = useState(false);
+
+  const handleTryEnter = async () => {
+    setChecking(true);
+    setNotYet(false);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setChecking(false); return; }
+    const { data: mem } = await supabase
+      .from("organization_members")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle();
+    setChecking(false);
+    if (mem) {
+      window.location.href = "/dashboard";
+    } else {
+      setNotYet(true);
+    }
+  };
+
   return (
     <div style={{ textAlign: "center", padding: "8px 0" }}>
       <div style={{
@@ -584,8 +606,29 @@ function PendingStep() {
       </h2>
       <p style={{ fontSize: "13.5px", color: INK2, lineHeight: 1.7, margin: "0 0 22px" }}>
         הבקשה הועברה למנהל/ת בית הספר לאישור.<br/>
-        ברגע שתאושר — תוכל/י להיכנס ולהתחיל לעבוד.
+        ברגע שתאושר — לחץ/י על הכפתור למטה להיכנס.
       </p>
+
+      <button
+        type="button"
+        onClick={handleTryEnter}
+        disabled={checking}
+        style={{
+          ...btnPrimary,
+          marginBottom: "12px",
+          opacity: checking ? 0.7 : 1,
+          cursor: checking ? "not-allowed" : "pointer",
+        }}
+      >
+        {checking ? "בודק..." : "אושרתי — כניסה למערכת"}
+      </button>
+
+      {notYet && (
+        <p style={{ fontSize: "13px", color: "#B5472A", margin: "0 0 12px" }}>
+          הבקשה עדיין ממתינה לאישור. נסה/י שוב מאוחר יותר.
+        </p>
+      )}
+
       <div style={{
         background: "#F8F5F0", border: `1px solid ${BORDER}`,
         borderRadius: "10px", padding: "13px 16px",
@@ -606,6 +649,7 @@ function PendingStep() {
 // ─── Page shell ───────────────────────────────────────────────────────────────
 
 function OnboardingPage() {
+  const navigate = useNavigate();
   const [step, setStep] = useState<Step>("choose");
   const [newOrgId, setNewOrgId] = useState<string | null>(null);
 
@@ -634,7 +678,7 @@ function OnboardingPage() {
         {step === "sources" && newOrgId && (
           <SourcesStep
             orgId={newOrgId}
-            onDone={() => { window.location.href = "/dashboard"; }}
+            onDone={() => navigate({ to: "/dashboard", replace: true })}
           />
         )}
         {step === "join-org"   && <JoinOrgStep onBack={() => setStep("choose")} onSuccess={() => setStep("pending")} />}
