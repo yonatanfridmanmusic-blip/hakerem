@@ -533,7 +533,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
             {step === 0 && (mode === "new-year" ? "איזה כיף לפתוח שנה חדשה ביחד — נתחיל?" : "נגדיר את שנת הלימודים שלך יחד — שלב שלב")}
             {step === 1 && `✓ שנת הלימודים "${createdYearName}" נוצרה! עכשיו נוסיף שכבות.`}
             {step === 2 && `✓ השכבות הוגדרו! עכשיו נגדיר קטגוריות תקציב.`}
-            {step === 3 && (mode === "new-year" ? "השנה החדשה פעילה ומחכה להוצאות ראשונות!" : "לוח הבקרה שלך פעיל ומוכן לעבודה. בוא נתחיל!")}
+            {step === 3 && (mode === "new-year" ? "השנה החדשה פעילה ומחכה להוצאות ראשונות!" : "לוח הבקרה שלך פעיל ומוכן לעבודה. בואו נתחיל!")}
           </div>
 
           {/* Progress bar */}
@@ -818,7 +818,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                             ) : (
                               <div
                                 onClick={() => setEditingCell({ gradeId: g.id, secIdx })}
-                                title="לחץ לעריכה"
+                                title="לחץ/י לעריכה"
                                 onMouseEnter={e => { e.currentTarget.style.background = "#F0E0ED"; e.currentTarget.style.borderColor = "#B060A0"; }}
                                 onMouseLeave={e => {
                                   const hv = gAmts[secIdx] && Number(gAmts[secIdx]) > 0;

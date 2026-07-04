@@ -992,13 +992,15 @@ function SourceTab({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function BudgetPage() {
-  const [activeTab, setActiveTab] = useState<string>("gefen");
+  const [activeTab, setActiveTab] = useState<string>("");
   const [selectedYearId, setSelectedYearId] = useState<string | null>(null);
   const { data: years = [] } = useSchoolYears();
   const { data: orgSources } = useOrgBudgetSources();
 
   const sources: SrcCfg[] = (orgSources ?? FALLBACK_SOURCES).map(buildSrcCfg);
-  const srcCfg = sources.find((s) => s.key === activeTab) ?? sources[0];
+  // Default to first org source once loaded
+  const effectiveTab = activeTab || sources[0]?.key || "gefen";
+  const srcCfg = sources.find((s) => s.key === effectiveTab) ?? sources[0];
   const activeYear = years.find((y) => y.is_active);
   const selectedYear = years.find((y) => y.id === selectedYearId);
   const isCurrentYear = !!selectedYear?.is_active;
@@ -1093,7 +1095,7 @@ export default function BudgetPage() {
         }}
       >
         {sources.map((src) => {
-          const active = activeTab === src.key;
+          const active = effectiveTab === src.key;
           return (
             <button
               key={src.key}
@@ -1122,7 +1124,7 @@ export default function BudgetPage() {
 
       {/* Tab content */}
       <SourceTab
-        key={`${activeTab}-${selectedYearId}`}
+        key={`${effectiveTab}-${selectedYearId}`}
         srcCfg={srcCfg}
         targetYearId={selectedYearId}
         isCurrentYear={isCurrentYear}

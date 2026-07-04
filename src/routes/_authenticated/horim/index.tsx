@@ -692,7 +692,7 @@ export default function HorimPage() {
                 background: "rgba(255,255,255,0.05)",
               }}>
                 <span style={{ fontSize: "13px", color: "rgba(220,150,200,0.7)", fontWeight: "500" }}>אין יעד מוגדר</span>
-                <span style={{ fontSize: "11px", color: "rgba(220,150,200,0.4)", marginTop: "3px" }}>לחץ על סכום בטבלה להגדרה</span>
+                <span style={{ fontSize: "11px", color: "rgba(220,150,200,0.4)", marginTop: "3px" }}>לחץ/י על סכום בטבלה להגדרה</span>
               </div>
             )}
           </div>
@@ -741,7 +741,7 @@ export default function HorimPage() {
         {/* Help text */}
         {!isLoading && grades.length > 0 && (
           <p style={{ margin: 0, fontSize: "12px", color: "#7A7470", textAlign: "center" }}>
-            לחץ על סכום/תלמיד לעריכה · לחץ על ▾ לפתיחת היסטוריית גבייה לשכבה
+            לחץ/י על סכום/תלמיד לעריכה · לחץ/י על ▾ לפתיחת היסטוריית גבייה לשכבה
           </p>
         )}
       </div>
