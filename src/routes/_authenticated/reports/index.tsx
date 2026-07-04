@@ -151,7 +151,15 @@ const PRINT_CSS = `
 
 // ─── HTML builders ────────────────────────────────────────────────────────────
 
-function buildAnnualHTML(data: DashboardSummary, cfgMap: SourceCfgMap, categories: CategoryReport[]): string {
+function buildAnnualHTML(
+  data: DashboardSummary,
+  cfgMap: SourceCfgMap,
+  categories: CategoryReport[],
+  grades: Grade[] = [],
+  sections: ParentSection[] = [],
+  amounts: GradeSectionAmount[] = [],
+  collections: ParentCollection[] = [],
+): string {
   const { schoolYear, sources, totals, incomeTotals } = data;
   const yearName = schoolYear?.name ?? "";
   const sourceRows = sources.map((s) => {
@@ -162,8 +170,9 @@ function buildAnnualHTML(data: DashboardSummary, cfgMap: SourceCfgMap, categorie
     return `<tr><td><span class="badge" style="background:${cfg.bg};color:${cfg.textColor}">${cfg.label}</span></td><td class="l">${fmt(s.planned)}</td><td class="l green" style="font-weight:600">${fmt(s.income)}</td><td class="l">${fmt(s.used)}</td><td class="l" style="font-weight:700;color:${balance >= 0 ? "#2D6644" : "#B5472A"}">${fmt(balance)}</td><td class="l" style="min-width:110px"><div class="bar-label">${pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(pct, 100)}%;background:${barColor}"></div></div></td></tr>`;
   }).join("");
 
-  // Per-source category tables for PDF
+  // Per-source category tables for PDF (skip horim — uses collections, not expenses)
   const catBySource = sources.map((s) => {
+    if (s.source === "horim") return "";
     const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.label };
     const cats = categories.filter((c) => c.source === s.source);
     if (cats.length === 0) return "";
@@ -175,6 +184,33 @@ function buildAnnualHTML(data: DashboardSummary, cfgMap: SourceCfgMap, categorie
     return `<h2 style="border-right:4px solid ${cfg.color};padding-right:10px;margin-top:22px">${cfg.label} — פירוט קטגוריות</h2>
     <table><thead><tr><th>קטגוריה</th><th class="l">תוכנן</th><th class="l">הוצאות</th><th class="l">נותר</th><th class="l">ניצול</th></tr></thead>
     <tbody>${catRows}</tbody></table>`;
+  }).join("");
+
+  // Horim: per-section then per-grade breakdown
+  const horimDetail = sections.map((sec) => {
+    const gradeData = grades.map((g) => {
+      const a = amounts.find(am => am.grade_id === g.id && am.parent_section_id === sec.id);
+      if (!a || a.amount_per_student === 0) return null;
+      const t100 = a.amount_per_student * g.student_count;
+      const t85 = t100 * 0.85;
+      const coll = collections.filter(c => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
+      const rem = Math.max(0, t85 - coll);
+      const pct = t85 > 0 ? Math.round((coll / t85) * 100) : 0;
+      return { g, t100, t85, coll, rem, pct };
+    }).filter(Boolean) as { g: Grade; t100: number; t85: number; coll: number; rem: number; pct: number }[];
+    if (gradeData.length === 0) return "";
+    const totT100 = gradeData.reduce((s, r) => s + r.t100, 0);
+    const totT85  = gradeData.reduce((s, r) => s + r.t85, 0);
+    const totColl = gradeData.reduce((s, r) => s + r.coll, 0);
+    const totRem  = Math.max(0, totT85 - totColl);
+    const totPct  = totT85 > 0 ? Math.round((totColl / totT85) * 100) : 0;
+    const gradeRowsHtml = gradeData.map(r =>
+      `<tr><td style="font-weight:600">${r.g.name}</td><td class="l" style="color:#6B7A72">${r.g.student_count}</td><td class="l">${fmt(r.t100)}</td><td class="l" style="color:#8B2F6E">${fmt(r.t85)}</td><td class="l green" style="font-weight:600">${fmt(r.coll)}</td><td class="l" style="font-weight:700;color:${r.rem <= 0 ? "#2D6644" : "#B5472A"}">${r.rem <= 0 ? '<span class="done-badge">✓ הושלם</span>' : fmt(r.rem)}</td><td class="l" style="min-width:90px"><div class="bar-label">${r.pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(r.pct, 100)}%;background:#8B2F6E"></div></div></td></tr>`
+    ).join("");
+    const footRow = gradeData.length > 1 ? `<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${gradeData.reduce((s,r)=>s+r.g.student_count,0)}</td><td class="l">${fmt(totT100)}</td><td class="l" style="color:#8B2F6E">${fmt(totT85)}</td><td class="l green">${fmt(totColl)}</td><td class="l" style="color:${totRem<=0?"#2D6644":"#B5472A"}">${totRem<=0?'<span class="done-badge">✓</span>':fmt(totRem)}</td><td class="l"><div class="bar-label">${totPct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totPct,100)}%;background:#8B2F6E"></div></div></td></tr>` : "";
+    return `<h2 style="border-right:4px solid #8B2F6E;padding-right:10px;margin-top:22px">הורים · ${sec.name} — פירוט לפי שכבה</h2>
+    <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה</th><th class="l">נותר</th><th class="l">התקדמות</th></tr></thead>
+    <tbody>${gradeRowsHtml}${footRow}</tbody></table>`;
   }).join("");
 
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח שנתי – ${yearName}</title><style>${PRINT_CSS}</style></head><body>
@@ -198,6 +234,7 @@ function buildAnnualHTML(data: DashboardSummary, cfgMap: SourceCfgMap, categorie
     <table><thead><tr><th>מקור</th><th class="l">מתוכנן</th><th class="l">הכנסות</th><th class="l">הוצאות</th><th class="l">יתרה</th><th class="l">ניצול</th></tr></thead>
     <tbody>${sourceRows}<tr class="total-row"><td>סה"כ</td><td class="l">${fmt(totals.planned)}</td><td class="l green">${fmt(incomeTotals.grand)}</td><td class="l">${fmt(totals.used)}</td><td class="l" style="color:${totals.balance >= 0 ? "#2D6644" : "#B5472A"}">${fmt(totals.balance)}</td><td class="l"><div class="bar-label">${totals.pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totals.pct, 100)}%;background:#2D6644"></div></div></td></tr></tbody></table>
     ${catBySource}
+    ${horimDetail}
     <hr class="divider">
     <h2>פירוט הכנסות</h2>
     <div class="income-grid">
@@ -210,7 +247,8 @@ function buildAnnualHTML(data: DashboardSummary, cfgMap: SourceCfgMap, categorie
 </body></html>`;
 }
 
-function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: GradeSectionAmount[], collections: ParentCollection[], yearName: string): string {
+function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: GradeSectionAmount[], collections: ParentCollection[], yearName: string, cfgMapPdf?: SourceCfgMap): string {
+  void cfgMapPdf;
   const rows = grades.map((grade) => {
     const ga = amounts.filter((a) => a.grade_id === grade.id);
     const target = sections.reduce((s, sec) => s + computeTarget(grade, ga.find((a) => a.parent_section_id === sec.id)), 0);
@@ -263,6 +301,31 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
     ${secRows ? `<h2>גבייה לפי סעיף</h2>
     <table><thead><tr><th>סעיף</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה</th><th class="l">נותר (מ-85%)</th><th class="l">התקדמות</th></tr></thead>
     <tbody>${secRows}</tbody></table>` : ""}
+    ${sections.map((sec) => {
+      const gradeData = grades.map((g) => {
+        const a = amounts.find(am => am.grade_id === g.id && am.parent_section_id === sec.id);
+        if (!a || a.amount_per_student === 0) return null;
+        const t100 = a.amount_per_student * g.student_count;
+        const t85 = t100 * 0.85;
+        const coll = collections.filter(c => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
+        const rem = Math.max(0, t85 - coll);
+        const pct = t85 > 0 ? Math.round((coll / t85) * 100) : 0;
+        return { g, t100, t85, coll, rem, pct };
+      }).filter(Boolean) as { g: Grade; t100: number; t85: number; coll: number; rem: number; pct: number }[];
+      if (gradeData.length === 0) return "";
+      const totT100 = gradeData.reduce((s, r) => s + r.t100, 0);
+      const totT85  = gradeData.reduce((s, r) => s + r.t85, 0);
+      const totColl = gradeData.reduce((s, r) => s + r.coll, 0);
+      const totRem  = Math.max(0, totT85 - totColl);
+      const totPct  = totT85 > 0 ? Math.round((totColl / totT85) * 100) : 0;
+      const gradeRows = gradeData.map(r =>
+        `<tr><td style="font-weight:600">${r.g.name}</td><td class="l" style="color:#6B7A72">${r.g.student_count}</td><td class="l">${fmt(r.t100)}</td><td class="l" style="color:#8B2F6E">${fmt(r.t85)}</td><td class="l green" style="font-weight:600">${fmt(r.coll)}</td><td class="l" style="font-weight:700;color:${r.rem <= 0 ? "#2D6644" : "#B5472A"}">${r.rem <= 0 ? '<span class="done-badge">✓ הושלם</span>' : fmt(r.rem)}</td><td class="l" style="min-width:90px"><div class="bar-label">${r.pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(r.pct, 100)}%;background:#8B2F6E"></div></div></td></tr>`
+      ).join("");
+      const footRow = gradeData.length > 1 ? `<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${gradeData.reduce((s,r)=>s+r.g.student_count,0)}</td><td class="l">${fmt(totT100)}</td><td class="l" style="color:#8B2F6E">${fmt(totT85)}</td><td class="l green">${fmt(totColl)}</td><td class="l" style="color:${totRem<=0?"#2D6644":"#B5472A"}">${totRem<=0?'<span class="done-badge">✓</span>':fmt(totRem)}</td><td class="l"><div class="bar-label">${totPct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totPct,100)}%;background:#8B2F6E"></div></div></td></tr>` : "";
+      return `<h2 style="border-right:4px solid #8B2F6E;padding-right:10px;margin-top:22px">${sec.name} — פירוט לפי שכבה</h2>
+    <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה</th><th class="l">נותר</th><th class="l">התקדמות</th></tr></thead>
+    <tbody>${gradeRows}${footRow}</tbody></table>`;
+    }).join("")}
     <h2>פירוט לפי שכבה</h2>
     <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד</th><th class="l">נגבה</th><th class="l">טרם נגבה</th><th class="l">התקדמות</th></tr></thead>
     <tbody>${rows}<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${tS}</td><td class="l">${fmt(tT)}</td><td class="l green">${fmt(tC)}</td><td class="l" style="color:${tR <= 0 ? "#2D6644" : "#B5472A"}">${fmt(tR)}</td><td class="l"><div class="bar-label">${tP}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(tP, 100)}%;background:#8B2F6E"></div></div></td></tr></tbody></table>
@@ -271,17 +334,30 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
 </body></html>`;
 }
 
-function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName: string, cfgMap: SourceCfgMap, categories: PeriodicCategory[]): string {
+function buildPeriodicHTML(
+  data: PeriodicSummary,
+  periodLabel: string,
+  yearName: string,
+  cfgMap: SourceCfgMap,
+  categories: PeriodicCategory[],
+  grades: Grade[] = [],
+  sections: ParentSection[] = [],
+  amounts: GradeSectionAmount[] = [],
+  collections: ParentCollection[] = [],
+  periodFrom: string | null = null,
+  periodTo: string | null = null,
+): string {
   const { sources, totals } = data;
   const sourceRows = sources.map((s) => {
     const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.source };
     const barColor = s.expenses > s.income ? "#B5472A" : cfg.color;
-    return `<tr><td><span class="badge" style="background:${cfg.bg};color:${cfg.textColor}">${cfg.label}</span></td><td class="l green" style="font-weight:600">${fmt(s.income)}</td><td class="l">${fmt(s.expenses)}</td><td class="l" style="font-weight:700;color:${s.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(s.net)}</td></tr>`;
     void barColor;
+    return `<tr><td><span class="badge" style="background:${cfg.bg};color:${cfg.textColor}">${cfg.label}</span></td><td class="l green" style="font-weight:600">${fmt(s.income)}</td><td class="l">${fmt(s.expenses)}</td><td class="l" style="font-weight:700;color:${s.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(s.net)}</td></tr>`;
   }).join("");
 
-  // Per-source category detail for PDF
+  // Per-source category detail for PDF (skip horim — uses collections, not expenses)
   const catDetail = sources.map((s) => {
+    if (s.source === "horim") return "";
     const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.source };
     const cats = categories.filter((c) => c.source === s.source);
     if (cats.length === 0) return "";
@@ -300,6 +376,40 @@ function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName:
     return `<h2 style="border-right:4px solid ${cfg.color};padding-right:10px;margin-top:22px">${cfg.label} — פירוט קטגוריות</h2>
     <table><thead><tr><th>קטגוריה</th><th class="l">הוצאה בתקופה</th><th class="l">הוצאה מצטברת</th><th class="l">תוכנן שנתי</th><th class="l">נותר שנתי</th><th class="l">ניצול</th></tr></thead>
     <tbody>${catRows}</tbody></table>`;
+  }).join("");
+
+  // Horim: period-filtered collections per section per grade
+  const periodCollections = collections.filter((c) => {
+    if (periodFrom && c.collection_date < periodFrom) return false;
+    if (periodTo   && c.collection_date > periodTo)   return false;
+    return true;
+  });
+  const horimPeriodDetail = sections.map((sec) => {
+    const gradeData = grades.map((g) => {
+      const a = amounts.find(am => am.grade_id === g.id && am.parent_section_id === sec.id);
+      if (!a || a.amount_per_student === 0) return null;
+      const t100 = a.amount_per_student * g.student_count;
+      const t85  = t100 * 0.85;
+      const collPeriod = periodCollections.filter(c => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
+      const collYtd    = collections.filter(c => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
+      if (collPeriod === 0 && collYtd === 0) return null;
+      const pctYtd = t85 > 0 ? Math.round((collYtd / t85) * 100) : 0;
+      return { g, t100, t85, collPeriod, collYtd, pctYtd };
+    }).filter(Boolean) as { g: Grade; t100: number; t85: number; collPeriod: number; collYtd: number; pctYtd: number }[];
+    if (gradeData.length === 0) return "";
+    const gradeRowsHtml = gradeData.map(r =>
+      `<tr><td style="font-weight:600">${r.g.name}</td><td class="l" style="color:#6B7A72">${r.g.student_count}</td><td class="l">${fmt(r.t100)}</td><td class="l" style="color:#8B2F6E">${fmt(r.t85)}</td><td class="l green" style="font-weight:600">${fmt(r.collPeriod)}</td><td class="l green">${fmt(r.collYtd)}</td><td class="l" style="min-width:90px"><div class="bar-label">${r.pctYtd}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(r.pctYtd, 100)}%;background:#8B2F6E"></div></div></td></tr>`
+    ).join("");
+    const totPeriod = gradeData.reduce((s, r) => s + r.collPeriod, 0);
+    const totYtd    = gradeData.reduce((s, r) => s + r.collYtd,    0);
+    const totT85    = gradeData.reduce((s, r) => s + r.t85,        0);
+    const totPct    = totT85 > 0 ? Math.round((totYtd / totT85) * 100) : 0;
+    const footRow   = gradeData.length > 1
+      ? `<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${gradeData.reduce((s,r)=>s+r.g.student_count,0)}</td><td class="l">${fmt(gradeData.reduce((s,r)=>s+r.t100,0))}</td><td class="l" style="color:#8B2F6E">${fmt(totT85)}</td><td class="l green">${fmt(totPeriod)}</td><td class="l green">${fmt(totYtd)}</td><td class="l"><div class="bar-label">${totPct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totPct,100)}%;background:#8B2F6E"></div></div></td></tr>`
+      : "";
+    return `<h2 style="border-right:4px solid #8B2F6E;padding-right:10px;margin-top:22px">הורים · ${sec.name} — גבייה בתקופה</h2>
+    <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה בתקופה</th><th class="l">נגבה מצטבר</th><th class="l">התקדמות</th></tr></thead>
+    <tbody>${gradeRowsHtml}${footRow}</tbody></table>`;
   }).join("");
 
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח תקופתי – ${periodLabel}</title><style>${PRINT_CSS}</style></head><body>
@@ -323,6 +433,7 @@ function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName:
     <table><thead><tr><th>מקור</th><th class="l">הכנסות</th><th class="l">הוצאות</th><th class="l">מאזן</th></tr></thead>
     <tbody>${sourceRows}<tr class="total-row"><td>סה"כ</td><td class="l green">${fmt(totals.totalIncome)}</td><td class="l">${fmt(totals.expenses)}</td><td class="l" style="color:${totals.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(totals.net)}</td></tr></tbody></table>
     ${catDetail}
+    ${horimPeriodDetail}
     <div class="footer">הכרם — מערכת ניהול פיננסי לבתי ספר · נוצר אוטומטית ${toDate()}</div>
   </div>
 </body></html>`;
@@ -389,22 +500,23 @@ function ReportsPage() {
   const quarterRanges = yearMeta?.start_date                       ? getQuarterRanges(yearMeta.start_date)                    : [];
 
   function handlePrint() {
+    const grades      = gradesQuery.data   ?? [];
+    const sections    = sectionsQuery.data  ?? [];
+    const amounts     = amountsQuery.data   ?? [];
+    const collections = collectQuery.data   ?? [];
+    const yearName    = annualQuery.data?.schoolYear?.name ?? "";
     if (tab === "annual") {
       if (!annualQuery.data) return;
-      openPrint(buildAnnualHTML(annualQuery.data, cfgMap, allCategories ?? []));
+      openPrint(buildAnnualHTML(annualQuery.data, cfgMap, allCategories ?? [], grades, sections, amounts, collections));
     } else if (tab === "horim") {
-      openPrint(buildHorimHTML(
-        gradesQuery.data   ?? [],
-        sectionsQuery.data  ?? [],
-        amountsQuery.data   ?? [],
-        collectQuery.data   ?? [],
-        annualQuery.data?.schoolYear?.name ?? "",
-      ));
+      openPrint(buildHorimHTML(grades, sections, amounts, collections, yearName));
     } else if (tab === "periodic" && periodicData) {
       const label = periodType === "custom"
         ? `${customFrom} — ${customTo}`
         : (selectedRange?.label ?? "תקופה נבחרת");
-      openPrint(buildPeriodicHTML(periodicData, label, annualQuery.data?.schoolYear?.name ?? "", cfgMap, periodicCategories ?? []));
+      const fromD = periodType === "custom" ? (customFrom || null) : (selectedRange?.from ?? null);
+      const toD   = periodType === "custom" ? (customTo   || null) : (selectedRange?.to   ?? null);
+      openPrint(buildPeriodicHTML(periodicData, label, yearName, cfgMap, periodicCategories ?? [], grades, sections, amounts, collections, fromD, toD));
     }
   }
 
@@ -441,7 +553,7 @@ function ReportsPage() {
         ))}
       </div>
 
-      {tab === "annual"   && <AnnualReport   data={annualQuery.data} isLoading={annualQuery.isLoading} cfgMap={cfgMap} categories={allCategories ?? []} />}
+      {tab === "annual"   && <AnnualReport   data={annualQuery.data} isLoading={annualQuery.isLoading} cfgMap={cfgMap} categories={allCategories ?? []} grades={gradesQuery.data ?? []} sections={sectionsQuery.data ?? []} amounts={amountsQuery.data ?? []} collections={collectQuery.data ?? []} />}
       {tab === "horim"    && <HorimReport    grades={gradesQuery.data ?? []} sections={sectionsQuery.data ?? []} amounts={amountsQuery.data ?? []} collections={collectQuery.data ?? []} isLoading={gradesQuery.isLoading} />}
       {tab === "periodic" && (
         <PeriodicReport
@@ -460,6 +572,10 @@ function ReportsPage() {
           hasQuery={!!(periodicFrom && periodicTo)}
           cfgMap={cfgMap}
           categories={periodicCategories ?? []}
+          grades={gradesQuery.data ?? []}
+          sections={sectionsQuery.data ?? []}
+          amounts={amountsQuery.data ?? []}
+          collections={collectQuery.data ?? []}
         />
       )}
     </div>
@@ -468,7 +584,10 @@ function ReportsPage() {
 
 // ─── Annual Report ────────────────────────────────────────────────────────────
 
-function AnnualReport({ data, isLoading, cfgMap, categories }: { data: DashboardSummary | undefined; isLoading: boolean; cfgMap: SourceCfgMap; categories: CategoryReport[] }) {
+function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, amounts, collections }: {
+  data: DashboardSummary | undefined; isLoading: boolean; cfgMap: SourceCfgMap; categories: CategoryReport[];
+  grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[];
+}) {
   if (isLoading) return <Loader />;
   if (!data?.schoolYear) return <EmptyState text="אין שנת לימודים פעילה" />;
   const { sources, totals, incomeTotals } = data;
@@ -535,9 +654,75 @@ function AnnualReport({ data, isLoading, cfgMap, categories }: { data: Dashboard
         </div>
       </div>
 
-      {/* Per-source category breakdown tables */}
+      {/* Per-source breakdown tables */}
       {sources.map((s) => {
         const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.label };
+
+        // ── Horim: show section collection table (not expense categories which are always 0) ──
+        if (s.source === "horim" && sections.length > 0) {
+          const horimRows = sections.map((sec) => {
+            const t100 = grades.reduce((sum, g) => {
+              const a = amounts.find(am => am.grade_id === g.id && am.parent_section_id === sec.id);
+              return sum + (a ? a.amount_per_student * g.student_count : 0);
+            }, 0);
+            if (t100 === 0) return null;
+            const t85 = t100 * 0.85;
+            const coll = collections.filter(c => c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
+            const rem = Math.max(0, t85 - coll);
+            const pct = t85 > 0 ? Math.round((coll / t85) * 100) : 0;
+            return { sec, t100, t85, coll, rem, pct };
+          }).filter((r): r is NonNullable<typeof r> => r !== null);
+          if (horimRows.length === 0) return null;
+          const ttlT100 = horimRows.reduce((s, r) => s + r.t100, 0);
+          const ttlT85  = horimRows.reduce((s, r) => s + r.t85, 0);
+          const ttlColl = horimRows.reduce((s, r) => s + r.coll, 0);
+          const ttlRem  = Math.max(0, ttlT85 - ttlColl);
+          const ttlPct  = ttlT85 > 0 ? Math.round((ttlColl / ttlT85) * 100) : 0;
+          return (
+            <div key={s.source} style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "16px" }}>
+              <div style={{ padding: "14px 22px", borderBottom: "1px solid #F4F1EC", borderRight: `4px solid ${cfg.color}`, display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ background: cfg.bg, color: cfg.textColor, borderRadius: "8px", padding: "3px 10px", fontSize: "12.5px", fontWeight: 700 }}>{cfg.label}</span>
+                <span style={{ fontWeight: 700, fontSize: "14px", color: "#1A1A1A" }}>גבייה לפי סעיף</span>
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead style={{ background: "#FAF5F9" }}>
+                  <tr>
+                    <th style={th}>סעיף</th>
+                    <th style={thL}>יעד 100%</th>
+                    <th style={thL}>יעד 85%</th>
+                    <th style={thL}>נגבה</th>
+                    <th style={thL}>נותר (מ-85%)</th>
+                    <th style={{ ...thL, minWidth: "140px" }}>התקדמות</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {horimRows.map((r) => (
+                    <tr key={r.sec.id}>
+                      <td style={{ ...td, fontWeight: 600 }}>{r.sec.name}</td>
+                      <td style={tdL}>{fmt(r.t100)}</td>
+                      <td style={{ ...tdL, color: "#8B2F6E", fontWeight: 500 }}>{fmt(r.t85)}</td>
+                      <td style={{ ...tdL, color: "#2D6644", fontWeight: 600 }}>{fmt(r.coll)}</td>
+                      <td style={{ ...tdL, fontWeight: 700, color: r.rem <= 0 ? "#2D6644" : "#B5472A" }}>
+                        {r.rem <= 0 ? <span style={{ background: "#EDFBF3", color: "#2D6644", borderRadius: "6px", padding: "2px 8px", fontSize: "12px" }}>✓ הושלם</span> : fmt(r.rem)}
+                      </td>
+                      <td style={tdL}><div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "2px" }}>{r.pct}%</div><PctBar pct={r.pct} color={cfg.color} /></td>
+                    </tr>
+                  ))}
+                  <tr style={{ background: "#F7F4EF" }}>
+                    <td style={{ ...td, fontWeight: 700 }}>סה״כ</td>
+                    <td style={{ ...tdL, fontWeight: 700 }}>{fmt(ttlT100)}</td>
+                    <td style={{ ...tdL, fontWeight: 700, color: "#8B2F6E" }}>{fmt(ttlT85)}</td>
+                    <td style={{ ...tdL, fontWeight: 700, color: "#2D6644" }}>{fmt(ttlColl)}</td>
+                    <td style={{ ...tdL, fontWeight: 700, color: ttlRem <= 0 ? "#2D6644" : "#B5472A" }}>{ttlRem <= 0 ? "✓ הושלם" : fmt(ttlRem)}</td>
+                    <td style={tdL}><div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "2px" }}>{ttlPct}%</div><PctBar pct={ttlPct} color={cfg.color} /></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+
+        // ── Other sources: per-category expense table ──
         const cats = categories.filter((c) => c.source === s.source);
         if (cats.length === 0) return null;
         return (
@@ -674,6 +859,80 @@ function HorimReport({ grades, sections, amounts, collections, isLoading }: { gr
         </div>
       )}
 
+      {/* Per-section, per-grade breakdown */}
+      {sections.length > 0 && sections.map((sec) => {
+        const gradeRows = grades.map((g) => {
+          const a = amounts.find(am => am.grade_id === g.id && am.parent_section_id === sec.id);
+          if (!a || a.amount_per_student === 0) return null;
+          const t100 = a.amount_per_student * g.student_count;
+          const t85 = t100 * 0.85;
+          const coll = collections.filter(c => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
+          const rem = Math.max(0, t85 - coll);
+          const pct = t85 > 0 ? Math.round((coll / t85) * 100) : 0;
+          return { grade: g, t100, t85, coll, rem, pct };
+        }).filter((r): r is NonNullable<typeof r> => r !== null);
+        if (gradeRows.length === 0) return null;
+        const totT100 = gradeRows.reduce((s, r) => s + r.t100, 0);
+        const totT85  = gradeRows.reduce((s, r) => s + r.t85, 0);
+        const totColl = gradeRows.reduce((s, r) => s + r.coll, 0);
+        const totRem  = Math.max(0, totT85 - totColl);
+        const totPct  = totT85 > 0 ? Math.round((totColl / totT85) * 100) : 0;
+        return (
+          <div key={sec.id} style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "16px" }}>
+            <div style={{ padding: "14px 22px", borderBottom: "1px solid #F4F1EC", borderRight: "4px solid #8B2F6E", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ background: "#F4EBF2", color: "#6B2356", borderRadius: "8px", padding: "3px 10px", fontSize: "12.5px", fontWeight: 700 }}>{sec.name}</span>
+                <span style={{ fontWeight: 700, fontSize: "14px", color: "#1A1A1A" }}>פירוט לפי שכבה</span>
+              </div>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: totPct >= 85 ? "#2D6644" : "#8B2F6E" }}>{totPct}% נגבה מיעד 85%</span>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead style={{ background: "#FAF5F9" }}>
+                <tr>
+                  <th style={th}>שכבה</th>
+                  <th style={thL}>תלמידים</th>
+                  <th style={thL}>יעד 100%</th>
+                  <th style={thL}>יעד 85%</th>
+                  <th style={thL}>נגבה</th>
+                  <th style={thL}>נותר</th>
+                  <th style={{ ...thL, minWidth: "140px" }}>התקדמות</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gradeRows.map((r) => (
+                  <tr key={r.grade.id}>
+                    <td style={{ ...td, fontWeight: 600 }}>{r.grade.name}</td>
+                    <td style={{ ...tdL, color: "#6B7A72" }}>{r.grade.student_count}</td>
+                    <td style={tdL}>{fmt(r.t100)}</td>
+                    <td style={{ ...tdL, color: "#8B2F6E", fontWeight: 500 }}>{fmt(r.t85)}</td>
+                    <td style={{ ...tdL, color: "#2D6644", fontWeight: 600 }}>{fmt(r.coll)}</td>
+                    <td style={{ ...tdL, fontWeight: 700, color: r.rem <= 0 ? "#2D6644" : "#B5472A" }}>
+                      {r.rem <= 0 ? <span style={{ background: "#EDFBF3", color: "#2D6644", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 600 }}>✓ הושלם</span> : fmt(r.rem)}
+                    </td>
+                    <td style={tdL}><div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "3px" }}>{r.pct}%</div><PctBar pct={r.pct} color="#8B2F6E" /></td>
+                  </tr>
+                ))}
+              </tbody>
+              {gradeRows.length > 1 && (
+                <tfoot>
+                  <tr style={{ background: "#F4EBF2" }}>
+                    <td style={{ ...td, fontWeight: 700 }}>סה״כ</td>
+                    <td style={{ ...tdL, fontWeight: 700, color: "#6B7A72" }}>{gradeRows.reduce((s, r) => s + r.grade.student_count, 0)}</td>
+                    <td style={{ ...tdL, fontWeight: 700 }}>{fmt(totT100)}</td>
+                    <td style={{ ...tdL, fontWeight: 700, color: "#8B2F6E" }}>{fmt(totT85)}</td>
+                    <td style={{ ...tdL, fontWeight: 700, color: "#2D6644" }}>{fmt(totColl)}</td>
+                    <td style={{ ...tdL, fontWeight: 700, color: totRem <= 0 ? "#2D6644" : "#B5472A" }}>
+                      {totRem <= 0 ? <span style={{ background: "#EDFBF3", color: "#2D6644", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 600 }}>✓ הושלם</span> : fmt(totRem)}
+                    </td>
+                    <td style={tdL}><div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "3px" }}>{totPct}%</div><PctBar pct={totPct} color="#8B2F6E" /></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        );
+      })}
+
       <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
         <div style={{ padding: "16px 22px", borderBottom: "1px solid #F4F1EC" }}><div style={{ fontWeight: 700, fontSize: "14.5px", color: "#1A1A1A" }}>גבייה לפי שכבה</div></div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -714,6 +973,7 @@ function PeriodicReport({
   selectedRange, onSelectRange,
   customFrom, customTo, onCustomFrom, onCustomTo,
   data, isLoading, hasQuery, cfgMap, categories,
+  grades, sections, amounts, collections,
 }: {
   periodType: PeriodType; onPeriodType: (pt: PeriodType) => void;
   monthRanges: DateRange[]; quarterRanges: DateRange[];
@@ -722,6 +982,7 @@ function PeriodicReport({
   onCustomFrom: (v: string) => void; onCustomTo: (v: string) => void;
   data: PeriodicSummary | null; isLoading: boolean; hasQuery: boolean;
   cfgMap: SourceCfgMap; categories: PeriodicCategory[];
+  grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[];
 }) {
   const periodTypeOptions: { key: PeriodType; label: string; emoji: string }[] = [
     { key: "monthly",   label: "חודשי",           emoji: "📅" },
@@ -978,6 +1239,66 @@ function PeriodicReport({
               </div>
             );
           })}
+          {/* Horim collections breakdown for this period */}
+          {sections.length > 0 && (() => {
+            const pFrom = selectedRange?.from ?? (periodType === "custom" ? customFrom : null);
+            const pTo   = selectedRange?.to   ?? (periodType === "custom" ? customTo   : null);
+            const periodColl = collections.filter(c =>
+              (!pFrom || c.collection_date >= pFrom) &&
+              (!pTo   || c.collection_date <= pTo)
+            );
+            if (periodColl.length === 0) return null;
+            const secRows = sections.map((sec) => {
+              const t100 = grades.reduce((sum, g) => {
+                const a = amounts.find(am => am.grade_id === g.id && am.parent_section_id === sec.id);
+                return sum + (a ? a.amount_per_student * g.student_count : 0);
+              }, 0);
+              const coll = periodColl.filter(c => c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
+              if (coll === 0) return null;
+              const t85 = t100 * 0.85;
+              const pct = t85 > 0 ? Math.round((coll / t85) * 100) : 0;
+              return { sec, t85, coll, pct };
+            }).filter((r): r is NonNullable<typeof r> => r !== null);
+            if (secRows.length === 0) return null;
+            const ttlColl = secRows.reduce((s, r) => s + r.coll, 0);
+            const ttlT85  = secRows.reduce((s, r) => s + r.t85, 0);
+            const ttlPct  = ttlT85 > 0 ? Math.round((ttlColl / ttlT85) * 100) : 0;
+            const plumCfg = cfgMap["horim"] ?? { ...NEUTRAL_CFG, label: "הורים" };
+            return (
+              <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "16px" }}>
+                <div style={{ padding: "14px 22px", borderBottom: "1px solid #F4F1EC", borderRight: "4px solid #8B2F6E", display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ background: plumCfg.bg, color: plumCfg.textColor, borderRadius: "8px", padding: "3px 10px", fontSize: "12.5px", fontWeight: 700 }}>{plumCfg.label}</span>
+                  <span style={{ fontWeight: 700, fontSize: "14px", color: "#1A1A1A" }}>גבייה בתקופה לפי סעיף</span>
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead style={{ background: "#FAF5F9" }}>
+                    <tr>
+                      <th style={th}>סעיף</th>
+                      <th style={thL}>יעד 85% (שנתי)</th>
+                      <th style={thL}>נגבה בתקופה</th>
+                      <th style={{ ...thL, minWidth: "140px" }}>% מהיעד השנתי</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {secRows.map((r) => (
+                      <tr key={r.sec.id}>
+                        <td style={{ ...td, fontWeight: 600 }}>{r.sec.name}</td>
+                        <td style={tdL}>{fmt(r.t85)}</td>
+                        <td style={{ ...tdL, color: "#8B2F6E", fontWeight: 600 }}>{fmt(r.coll)}</td>
+                        <td style={tdL}><div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "2px" }}>{r.pct}%</div><PctBar pct={r.pct} color="#8B2F6E" /></td>
+                      </tr>
+                    ))}
+                    <tr style={{ background: "#F7F4EF" }}>
+                      <td style={{ ...td, fontWeight: 700 }}>סה״כ גבייה בתקופה</td>
+                      <td style={{ ...tdL, fontWeight: 700 }}>{fmt(ttlT85)}</td>
+                      <td style={{ ...tdL, fontWeight: 700, color: "#8B2F6E" }}>{fmt(ttlColl)}</td>
+                      <td style={tdL}><div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "2px" }}>{ttlPct}%</div><PctBar pct={ttlPct} color="#8B2F6E" /></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
       )}
 
