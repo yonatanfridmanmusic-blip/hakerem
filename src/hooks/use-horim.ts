@@ -222,6 +222,21 @@ export async function syncHorimBudgetCategory(
   }
 }
 
+/**
+ * Sync ALL horim sections to budget_categories at once.
+ * Call this on page load to ensure budget planning always reflects current amounts
+ * even if data was entered before the per-section sync was introduced.
+ */
+export async function syncAllHorimBudgetCategories(
+  sections: ParentSection[],
+): Promise<void> {
+  const yearId = await getActiveYearId();
+  if (!yearId || sections.length === 0) return;
+  for (const section of sections) {
+    await syncHorimBudgetCategory(yearId, section.id, section.name);
+  }
+}
+
 // Upsert grade_section_amount (set amount_per_student for a grade+section)
 export function useUpsertGradeSectionAmount() {
   const queryClient = useQueryClient();

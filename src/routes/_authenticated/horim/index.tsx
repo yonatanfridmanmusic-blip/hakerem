@@ -12,6 +12,7 @@ import {
   useAddParentCollection,
   useAddParentSection,
   useToggleParentSection,
+  syncAllHorimBudgetCategories,
   computeTarget,
   type Grade,
   type ParentSection,
@@ -588,6 +589,16 @@ export default function HorimPage() {
   const animTarget    = useCountUp(grandTarget);
   const animPct       = useAnimatedPct(hasTarget ? Math.min(grandPct, 100) : 0);
 
+  // Auto-sync horim amounts → budget_categories once per mount
+  // (ensures budget planning reflects current planned amounts even for pre-existing data)
+  const didAutoSync = useRef(false);
+  useEffect(() => {
+    if (didAutoSync.current) return;
+    if (sections.length === 0 || !gsaList.some((r) => r.amount_per_student > 0)) return;
+    didAutoSync.current = true;
+    syncAllHorimBudgetCategories(sections).catch(() => {});
+  }, [sections, gsaList]);
+
   const openAddCollection = (gradeId?: string) => {
     if (grades.length === 0) {
       setGuardMsg("יש להגדיר שכבות לימוד תחילה בדף ההגדרות → שכבות וכיתות");
@@ -799,56 +810,117 @@ export default function HorimPage() {
           </div>
         )}
 
-        {/* Per-section summary cards */}
+        {/* Per-section, per-grade breakdown */}
         {!isLoading && sections.length > 0 && grades.length > 0 && (() => {
-          const sectionCards = sections.map((s) => {
-            let total100 = 0;
-            let collected = 0;
-            grades.forEach((g) => {
-              const key = `${g.id}:${s.id}`;
-              const gsa = gsaMap.get(key);
-              if (gsa) total100 += gsa.amount_per_student * g.student_count;
-              collected += collectionsMap.get(key) ?? 0;
-            });
-            const total85 = total100 * 0.85;
-            const pct = total85 > 0 ? Math.round((collected / total85) * 100) : 0;
-            return { section: s, total100, total85, collected, pct };
-          }).filter(c => c.total100 > 0);
-          if (sectionCards.length === 0) return null;
+          const sectionsWithData = sections.filter((sec) =>
+            grades.some((g) => (gsaMap.get(`${g.id}:${sec.id}`)?.amount_per_student ?? 0) > 0)
+          );
+          if (sectionsWithData.length === 0) return null;
           return (
             <div>
-              <div style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "10px" }}>
-                סיכום לפי סעיף
+              <div style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "12px" }}>
+                פירוט גבייה לפי שכבה וסעיף
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "10px" }}>
-                {sectionCards.map(({ section: s, total100, total85, collected, pct }) => (
-                  <div key={s.id} style={{
-                    background: "#fff", border: "1px solid #EAE5DE", borderRadius: "12px",
-                    padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px",
-                  }}>
-                    <div style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
-                        <span style={{ color: "#AAA099" }}>85% גבייה</span>
-                        <span className="num" style={{ color: "#8B2F6E", fontWeight: "500" }}>{fmt(total85)}</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                {sectionsWithData.map((sec) => {
+                  const gradeRows = grades.map((g) => {
+                    const gsa = gsaMap.get(`${g.id}:${sec.id}`);
+                    if (!gsa || gsa.amount_per_student === 0) return null;
+                    const target100 = gsa.amount_per_student * g.student_count;
+                    const target85  = target100 * 0.85;
+                    const collected = collectionsMap.get(`${g.id}:${sec.id}`) ?? 0;
+                    const remaining = Math.max(0, target85 - collected);
+                    const pct       = target85 > 0 ? Math.round((collected / target85) * 100) : 0;
+                    return { grade: g, target100, target85, collected, remaining, pct };
+                  }).filter((r): r is NonNullable<typeof r> => r !== null);
+
+                  const ttl100 = gradeRows.reduce((s, r) => s + r.target100, 0);
+                  const ttl85  = gradeRows.reduce((s, r) => s + r.target85, 0);
+                  const ttlColl = gradeRows.reduce((s, r) => s + r.collected, 0);
+                  const ttlRem  = Math.max(0, ttl85 - ttlColl);
+                  const ttlPct  = ttl85 > 0 ? Math.round((ttlColl / ttl85) * 100) : 0;
+
+                  return (
+                    <div key={sec.id} style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden" }}>
+                      {/* Section header */}
+                      <div style={{
+                        padding: "12px 16px",
+                        background: "linear-gradient(135deg, #FAF0F7 0%, #F5E8F2 100%)",
+                        borderBottom: "1px solid #EAE5DE",
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                      }}>
+                        <div style={{ fontSize: "13px", fontWeight: "600", color: "#8B2F6E" }}>{sec.name}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <span className="num" style={{ fontSize: "12px", color: "#888079" }}>
+                            נגבה {fmt(ttlColl)} מתוך {fmt(ttl85)} (85%)
+                          </span>
+                          <span style={{
+                            fontSize: "12px", fontWeight: "700",
+                            color: ttlPct >= 85 ? "#2D6644" : "#8B2F6E",
+                            padding: "2px 8px", borderRadius: "6px",
+                            background: ttlPct >= 85 ? "rgba(45,102,68,0.1)" : "rgba(139,47,110,0.1)",
+                          }}>{ttlPct}%</span>
+                        </div>
                       </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
-                        <span style={{ color: "#AAA099" }}>100% גבייה</span>
-                        <span className="num" style={{ color: "#1A1A1A", fontWeight: "500" }}>{fmt(total100)}</span>
-                      </div>
-                      <div style={{ height: "1px", background: "#F0EBE4", margin: "2px 0" }} />
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
-                        <span style={{ color: "#AAA099" }}>נגבה בפועל</span>
-                        <span className="num" style={{ color: collected > 0 ? "#2D6644" : "#AAA099", fontWeight: "600" }}>{fmt(collected)}</span>
+                      {/* Grade rows table */}
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
+                          <thead>
+                            <tr style={{ background: "#FAFAF9" }}>
+                              {["שכבה", "תלמידים", "יעד 100%", "יעד 85%", "נגבה", "נותר", "התקדמות"].map((h) => (
+                                <th key={h} style={{ padding: "8px 12px", fontWeight: "600", color: "#6B6560", fontSize: "11px", borderBottom: "1px solid #F0EBE4", whiteSpace: "nowrap", textAlign: h === "שכבה" ? "right" : "left" }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {gradeRows.map((r, idx) => (
+                              <tr key={r.grade.id} style={{ background: idx % 2 === 0 ? "#fff" : "#FAFAF9" }}>
+                                <td style={{ padding: "9px 12px", fontWeight: "500", color: "#1A1A1A", textAlign: "right" }}>{r.grade.name}</td>
+                                <td style={{ padding: "9px 12px", color: "#888079", textAlign: "left" }}>{r.grade.student_count}</td>
+                                <td className="num" style={{ padding: "9px 12px", color: "#888079", textAlign: "left" }}>{fmt(r.target100)}</td>
+                                <td className="num" style={{ padding: "9px 12px", color: "#8B2F6E", fontWeight: "500", textAlign: "left" }}>{fmt(r.target85)}</td>
+                                <td className="num" style={{ padding: "9px 12px", color: r.collected > 0 ? "#2D6644" : "#C0BAB4", fontWeight: r.collected > 0 ? 600 : 400, textAlign: "left" }}>{fmt(r.collected)}</td>
+                                <td className="num" style={{ padding: "9px 12px", color: r.remaining <= 0 ? "#2D6644" : "#B5472A", fontWeight: "500", textAlign: "left" }}>
+                                  {r.remaining <= 0 ? "✓ שולם" : fmt(r.remaining)}
+                                </td>
+                                <td style={{ padding: "9px 12px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <div style={{ width: "52px", height: "4px", background: "#F0EBE4", borderRadius: "2px", overflow: "hidden" }}>
+                                      <div style={{ height: "100%", width: `${Math.min(r.pct, 100)}%`, background: r.pct >= 85 ? "#2D6644" : "#8B2F6E", borderRadius: "2px" }} />
+                                    </div>
+                                    <span style={{ fontSize: "11px", color: r.pct >= 85 ? "#2D6644" : "#8B2F6E", fontWeight: "600", minWidth: "30px" }}>{r.pct}%</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          {gradeRows.length > 1 && (
+                            <tfoot>
+                              <tr style={{ background: "linear-gradient(135deg, #F0E8EE 0%, #EBE0EA 100%)", fontWeight: "700" }}>
+                                <td style={{ padding: "9px 12px", color: "#1A1A1A", textAlign: "right" }}>סה"כ</td>
+                                <td style={{ padding: "9px 12px" }} />
+                                <td className="num" style={{ padding: "9px 12px", color: "#888079", textAlign: "left" }}>{fmt(ttl100)}</td>
+                                <td className="num" style={{ padding: "9px 12px", color: "#8B2F6E", textAlign: "left" }}>{fmt(ttl85)}</td>
+                                <td className="num" style={{ padding: "9px 12px", color: ttlColl > 0 ? "#2D6644" : "#C0BAB4", textAlign: "left" }}>{fmt(ttlColl)}</td>
+                                <td className="num" style={{ padding: "9px 12px", color: ttlRem <= 0 ? "#2D6644" : "#B5472A", textAlign: "left" }}>
+                                  {ttlRem <= 0 ? "✓ שולם" : fmt(ttlRem)}
+                                </td>
+                                <td style={{ padding: "9px 12px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <div style={{ width: "52px", height: "4px", background: "rgba(139,47,110,0.2)", borderRadius: "2px", overflow: "hidden" }}>
+                                      <div style={{ height: "100%", width: `${Math.min(ttlPct, 100)}%`, background: ttlPct >= 85 ? "#2D6644" : "#8B2F6E", borderRadius: "2px" }} />
+                                    </div>
+                                    <span style={{ fontSize: "11px", color: ttlPct >= 85 ? "#2D6644" : "#8B2F6E", fontWeight: "700", minWidth: "30px" }}>{ttlPct}%</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
                       </div>
                     </div>
-                    {/* Progress bar */}
-                    <div style={{ height: "4px", background: "#F0EBE4", borderRadius: "2px", overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${Math.min(pct, 100)}%`, background: pct >= 85 ? "#2D6644" : "#8B2F6E", borderRadius: "2px", transition: "width 0.4s" }} />
-                    </div>
-                    <div style={{ fontSize: "10px", color: "#AAA099", textAlign: "left" }}>{pct}% נגבה מיעד 85%</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );

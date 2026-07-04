@@ -16,23 +16,51 @@ export const Route = createFileRoute("/_authenticated/dashboard/")({
   component: DashboardPage,
 });
 
-// ─── Source config (colors only) ─────────────────────────────────────────────
+// ─── Source config ────────────────────────────────────────────────────────────
 
 const SOURCE_CONFIG: Record<string, { color: string; barGradient: string; accentGradient: string }> = {
+  gefen:  { color: "#2D6644", barGradient: "linear-gradient(90deg, #5AA674, #2D6644)", accentGradient: "linear-gradient(90deg, #5AA674, #2D6644)" },
+  iriyah: { color: "#B5472A", barGradient: "linear-gradient(90deg, #D46A42, #B5472A)", accentGradient: "linear-gradient(90deg, #D46A42, #9C3A20)" },
+  horim:  { color: "#8B2F6E", barGradient: "linear-gradient(90deg, #B04A90, #8B2F6E)", accentGradient: "linear-gradient(90deg, #B04A90, #6E235A)" },
+};
+
+// Hero card color themes per source (dark gradient cards matching the main green hero)
+const SOURCE_HERO: Record<string, {
+  bg: string; glow: string; shadow: string;
+  barGradient: string; pctGradient: string;
+  subtleText: string; secondaryText: string; tertiaryText: string;
+}> = {
   gefen: {
-    color: "#2D6644",
-    barGradient: "linear-gradient(90deg, #5AA674, #2D6644)",
-    accentGradient: "linear-gradient(90deg, #5AA674, #2D6644)",
+    bg: "linear-gradient(135deg, #2D6644 0%, #1A3D2B 55%, #0D2118 100%)",
+    glow: "radial-gradient(ellipse 70% 60% at 20% 10%, rgba(90,166,116,0.18) 0%, transparent 70%)",
+    shadow: "0 16px 56px rgba(13,33,24,0.4), 0 1px 0 rgba(255,255,255,0.08) inset",
+    barGradient: "linear-gradient(90deg, rgba(255,255,255,0.45), rgba(255,255,255,0.85))",
+    pctGradient: "linear-gradient(135deg, #7EE8A6 0%, #4DC483 100%)",
+    subtleText: "rgba(122,170,142,0.85)", secondaryText: "#7AAA8E", tertiaryText: "rgba(122,170,142,0.6)",
   },
   iriyah: {
-    color: "#B5472A",
-    barGradient: "linear-gradient(90deg, #D46A42, #B5472A)",
-    accentGradient: "linear-gradient(90deg, #D46A42, #9C3A20)",
+    bg: "linear-gradient(135deg, #B5472A 0%, #7C2C15 55%, #4A1508 100%)",
+    glow: "radial-gradient(ellipse 70% 60% at 20% 10%, rgba(212,106,66,0.22) 0%, transparent 70%)",
+    shadow: "0 16px 56px rgba(74,21,8,0.4), 0 1px 0 rgba(255,255,255,0.08) inset",
+    barGradient: "linear-gradient(90deg, rgba(255,200,160,0.45), rgba(255,200,160,0.85))",
+    pctGradient: "linear-gradient(135deg, #F9C09A 0%, #E07040 100%)",
+    subtleText: "rgba(212,160,130,0.85)", secondaryText: "#D49070", tertiaryText: "rgba(212,160,130,0.6)",
   },
   horim: {
-    color: "#8B2F6E",
-    barGradient: "linear-gradient(90deg, #B04A90, #8B2F6E)",
-    accentGradient: "linear-gradient(90deg, #B04A90, #6E235A)",
+    bg: "linear-gradient(135deg, #8B2F6E 0%, #5E1F4A 55%, #3A1230 100%)",
+    glow: "radial-gradient(ellipse 70% 60% at 20% 10%, rgba(176,74,144,0.22) 0%, transparent 70%)",
+    shadow: "0 16px 56px rgba(58,18,48,0.4), 0 1px 0 rgba(255,255,255,0.08) inset",
+    barGradient: "linear-gradient(90deg, rgba(220,160,200,0.45), rgba(220,160,200,0.85))",
+    pctGradient: "linear-gradient(135deg, #ECA8D8 0%, #C060A0 100%)",
+    subtleText: "rgba(200,140,180,0.85)", secondaryText: "#C080A8", tertiaryText: "rgba(200,140,180,0.6)",
+  },
+  _default: {
+    bg: "linear-gradient(135deg, #6B6560 0%, #4A4540 55%, #2E2A28 100%)",
+    glow: "radial-gradient(ellipse 70% 60% at 20% 10%, rgba(170,160,153,0.18) 0%, transparent 70%)",
+    shadow: "0 16px 56px rgba(46,42,40,0.4), 0 1px 0 rgba(255,255,255,0.08) inset",
+    barGradient: "linear-gradient(90deg, rgba(210,205,200,0.45), rgba(210,205,200,0.85))",
+    pctGradient: "linear-gradient(135deg, #D4CFC9 0%, #B0A8A0 100%)",
+    subtleText: "rgba(180,170,165,0.85)", secondaryText: "#B0A8A0", tertiaryText: "rgba(180,170,165,0.6)",
   },
 };
 
@@ -87,116 +115,88 @@ function Bar({ pct, gradient }: { pct: number; gradient: string }) {
 }
 
 function SourceCard({ s }: { s: SourceSummary }) {
-  const cfg = SOURCE_CONFIG[s.source] ?? { color: "#6B6560", barGradient: "linear-gradient(90deg,#AAA099,#6B6560)", accentGradient: "linear-gradient(90deg,#AAA099,#6B6560)" };
-  // Cash / income side
   const animCashBalance = useCountUp(s.cashBalance);
   const animIncome      = useCountUp(s.income);
   const animUsed        = useCountUp(s.used);
-  const animCashPct     = useAnimatedPct(s.cashPct, 80);
-  // Budget side (for progress bar when planned > 0)
   const animPlanned     = useCountUp(s.planned);
   const animBudgetPct   = useAnimatedPct(s.pct, 80);
+  const animCashPct     = useAnimatedPct(s.cashPct, 80);
 
-  const cashLabel = s.isIncomeBased
-    ? (s.source === "horim" ? "יתרה מגבייה" : "יתרה מהכנסות")
-    : "יתרה תקציבית";
-
+  const cashLabel   = s.isIncomeBased ? (s.source === "horim" ? "יתרה מגבייה" : "יתרה מהכנסות") : "יתרה תקציבית";
   const incomeLabel = s.source === "horim" ? "גבייה" : "הכנסות";
 
-  // Status pill: if no income & no budget but has expenses → force "חריגה" (not "תקין")
-  const displayPct =
-    !s.isIncomeBased && s.planned === 0 && s.used > 0
-      ? 100
-      : s.isIncomeBased ? s.cashPct : s.pct;
+  const displayPct = !s.isIncomeBased && s.planned === 0 && s.used > 0 ? 100 : s.isIncomeBased ? s.cashPct : s.pct;
+  void animCashPct;
+
+  const hero = SOURCE_HERO[s.source] ?? SOURCE_HERO["_default"];
 
   return (
     <div style={{
-      background: "linear-gradient(160deg, #ffffff 0%, #F8F4EF 100%)",
-      border: "1px solid #EAE5DE",
-      borderRadius: "16px",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.06), 0 8px 32px rgba(0,0,0,0.05), 0 1px 0 rgba(255,255,255,0.8) inset",
-      overflow: "hidden",
+      background: hero.bg,
+      borderRadius: "20px", padding: "32px 36px",
+      display: "flex", justifyContent: "space-between", alignItems: "flex-end",
+      flexWrap: "wrap", gap: "24px",
+      boxShadow: hero.shadow,
+      position: "relative", overflow: "hidden",
     }}>
-      <div style={{ height: "4px", background: cfg.accentGradient }} />
-      <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: "16px" }}>
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: hero.glow }} />
 
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: cfg.color, flexShrink: 0 }} />
-            <span style={{ fontSize: "15px", fontWeight: "500", color: "#1A1A1A" }}>{s.label}</span>
-          </div>
-          <StatusPill pct={displayPct} />
+      {/* Left: label + balance + details */}
+      <div style={{ position: "relative" }}>
+        <div style={{ fontSize: "12px", color: hero.subtleText, fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px" }}>
+          {s.label} — {cashLabel}
         </div>
-
-        {/* ── Section A: Cash balance ── */}
-        <div>
-          <div style={{ fontSize: "11px", color: "#AAA099", fontWeight: "500", marginBottom: "4px", letterSpacing: "0.02em" }}>
-            {cashLabel}
-          </div>
-          <div className="num" style={{
-            fontSize: "30px", fontWeight: "300", lineHeight: 1, letterSpacing: "-1px",
-            color: s.cashBalance < 0 ? "#C2501A" : "#1A1A1A",
-          }}>
-            {fmt(animCashBalance)}
-          </div>
-          {/* Income vs used sub-row */}
-          {(s.income > 0 || s.used > 0) && (
-            <div style={{ marginTop: "6px", display: "flex", gap: "12px", fontSize: "11.5px", color: "#888079" }}>
-              {s.income > 0 && (
-                <span>
-                  {incomeLabel}: <span className="num" style={{ color: "#2D6644", fontWeight: "500" }}>{fmt(animIncome)}</span>
-                </span>
-              )}
-              {s.used > 0 && (
-                <span>
-                  הוצ׳: <span className="num" style={{ color: "#B5472A", fontWeight: "500" }}>{fmt(animUsed)}</span>
-                </span>
-              )}
-            </div>
-          )}
+        <div className="num" style={{ fontSize: "52px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
+          {fmt(animCashBalance)}
         </div>
-
-        {/* ── Divider: Budget utilization ── */}
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-            <div style={{ flex: 1, height: "1px", background: "#EAE5DE" }} />
-            <span style={{ fontSize: "10px", fontWeight: "600", color: "#C0BAB4", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-              ניצול תקציב
+        <div style={{ marginTop: "12px", fontSize: "13px", color: hero.secondaryText, display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          {s.income > 0 && (
+            <span>
+              <span className="num">{fmt(animIncome)}</span>
+              <span style={{ color: hero.tertiaryText, marginRight: "4px" }}> {incomeLabel}</span>
             </span>
-            <div style={{ flex: 1, height: "1px", background: "#EAE5DE" }} />
-          </div>
-
-          {s.planned > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <Bar pct={s.pct} gradient={cfg.barGradient} />
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontSize: "11.5px", color: "#888079" }}>
-                  <span className="num">{fmt(animUsed)}</span>
-                  {" "}מתוך{" "}
-                  <span className="num">{fmt(animPlanned)}</span>
-                  {" "}מתוכנן
-                </span>
-                <span className="num" style={{ fontSize: "11.5px", fontWeight: "600", color: cfg.color }}>
-                  {animBudgetPct}%
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div style={{
-              display: "flex", alignItems: "center", gap: "6px",
-              padding: "7px 10px", borderRadius: "7px",
-              background: s.used > 0 ? "#FDF1EA" : "#F8F6F3",
-              border: `1px solid ${s.used > 0 ? "#F0C4A8" : "#EAE5DE"}`,
-            }}>
-              {s.used > 0 && <AlertTriangle size={11} style={{ color: "#C2501A", flexShrink: 0 }} />}
-              <span style={{ fontSize: "11.5px", color: s.used > 0 ? "#7C3010" : "#AAA099" }}>
-                {s.used > 0 ? "אין תקציב מאושר — יש הוצאות" : "לא הוגדר תקציב מאושר"}
-              </span>
-            </div>
+          )}
+          {s.income > 0 && s.used > 0 && <span style={{ color: hero.tertiaryText }}>·</span>}
+          {s.used > 0 && (
+            <span>
+              <span className="num">{fmt(animUsed)}</span>
+              <span style={{ color: hero.tertiaryText, marginRight: "4px" }}> הוצאות</span>
+            </span>
           )}
         </div>
 
+        {/* Budget bar */}
+        {s.planned > 0 ? (
+          <div style={{ marginTop: "18px", minWidth: "220px", maxWidth: "360px" }}>
+            <Bar pct={s.pct} gradient={hero.barGradient} />
+            <div style={{ marginTop: "6px", fontSize: "12px", color: hero.subtleText }}>
+              <span className="num">{fmt(animUsed)}</span>
+              <span style={{ color: hero.tertiaryText, margin: "0 4px" }}>מתוך</span>
+              <span className="num">{fmt(animPlanned)}</span>
+              <span style={{ color: hero.tertiaryText, marginRight: "4px" }}>מתוכנן</span>
+            </div>
+          </div>
+        ) : s.used > 0 ? (
+          <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "6px" }}>
+            <AlertTriangle size={12} style={{ color: "rgba(255,200,150,0.8)", flexShrink: 0 }} />
+            <span style={{ fontSize: "12px", color: "rgba(255,200,150,0.7)" }}>אין תקציב מאושר — יש הוצאות</span>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Right: big pct */}
+      <div style={{ textAlign: "left", position: "relative" }}>
+        <div className="num" style={{
+          fontSize: "64px", fontWeight: "200",
+          background: hero.pctGradient,
+          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+          letterSpacing: "-3px", lineHeight: 1,
+        }}>
+          {s.planned > 0 || s.used > 0 ? `${animBudgetPct}%` : "—"}
+        </div>
+        <div style={{ fontSize: "11px", color: hero.tertiaryText, marginTop: "4px", textAlign: "center" }}>
+          {s.planned > 0 ? "מהתקציב נוצל" : displayPct > 0 ? "מהתקציב נוצל" : "טרם הוגדר תקציב"}
+        </div>
       </div>
     </div>
   );
@@ -205,12 +205,10 @@ function SourceCard({ s }: { s: SourceSummary }) {
 function SkeletonCard() {
   return (
     <div style={{
-      background: "#fff", border: "1px solid #EAE5DE",
-      borderRadius: "16px", overflow: "hidden", height: "220px",
+      background: "linear-gradient(135deg, #E8E4DF 0%, #D8D4CE 55%, #C8C4BE 100%)",
+      borderRadius: "20px", height: "180px",
       animation: "pulse 1.5s ease-in-out infinite",
-    }}>
-      <div style={{ height: "4px", background: "#EAE5DE" }} />
-    </div>
+    }} />
   );
 }
 
@@ -1333,8 +1331,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Source cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: "16px" }}>
+      {/* Source cards — large hero style, one per row */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {isLoading
           ? [1, 2, 3].map((i) => <SkeletonCard key={i} />)
           : (data?.sources ?? []).map((s) => <SourceCard key={s.source} s={s} />)
