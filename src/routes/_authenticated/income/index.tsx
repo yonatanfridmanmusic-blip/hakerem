@@ -456,17 +456,23 @@ export default function IncomePage() {
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
   const defaultSource = sources[0]?.slug ?? "gefen";
 
-  const { data: income, isLoading } = useIncome(filter);
-  const { data: allIncome } = useIncome("all");
+  // Single fetch — filter + totals computed client-side to avoid double network request
+  const { data: allIncome, isLoading } = useIncome("all");
+
+  const filteredBySource = filter === "all"
+    ? (allIncome ?? [])
+    : (allIncome ?? []).filter((i) => i.source === filter);
 
   const q = search.trim().toLowerCase();
   const visibleIncome = q
-    ? (income ?? []).filter((inc) =>
+    ? filteredBySource.filter((inc) =>
         [inc.payer, inc.description, inc.budget_categories?.name, inc.payment_method, inc.notes]
           .some((f) => f?.toLowerCase().includes(q))
       )
-    : (income ?? []);
+    : filteredBySource;
 
+  // For display: "N הכנסות" counts against source-filtered list (before text search)
+  const income = filteredBySource;
   const total = visibleIncome.reduce((sum, e) => sum + e.amount, 0);
   const sourceTotals: Record<string, number> = {};
   (allIncome ?? []).forEach((i) => { sourceTotals[i.source] = (sourceTotals[i.source] ?? 0) + i.amount; });

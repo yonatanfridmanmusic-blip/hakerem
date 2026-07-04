@@ -318,20 +318,26 @@ export default function ExpensesPage() {
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
   const defaultSource = sources[0]?.slug ?? "gefen";
 
-  const { data: expenses, isLoading } = useExpenses(filter);
-  const { data: allExpenses } = useExpenses("all");
+  // Single fetch — filter + totals computed client-side to avoid double network request
+  const { data: allExpenses, isLoading } = useExpenses("all");
+
+  const filteredBySource = filter === "all"
+    ? (allExpenses ?? [])
+    : (allExpenses ?? []).filter((e) => e.source === filter);
 
   const q = search.trim().toLowerCase();
   const visibleExpenses = q
-    ? (expenses ?? []).filter((e) =>
+    ? filteredBySource.filter((e) =>
         [e.supplier, e.description, e.budget_categories?.name]
           .some((f) => f?.toLowerCase().includes(q))
       )
-    : (expenses ?? []);
+    : filteredBySource;
 
+  // For display: "N הוצאות" counts against the source-filtered list (before text search)
+  const expenses = filteredBySource;
   const total = visibleExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-  // Dynamic source totals
+  // Dynamic source totals (always from all data)
   const sourceTotals: Record<string, number> = {};
   (allExpenses ?? []).forEach((e) => {
     sourceTotals[e.source] = (sourceTotals[e.source] ?? 0) + e.amount;

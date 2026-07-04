@@ -747,6 +747,16 @@ export function AiChatPanel() {
     }
   }, [send.isPending]);
 
+  // Close panel on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, close]);
+
   const handleSend = (text?: string, e?: FormEvent) => {
     e?.preventDefault();
     const msg = (text ?? input).trim();

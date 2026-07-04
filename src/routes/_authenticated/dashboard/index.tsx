@@ -252,30 +252,44 @@ function InlineAmountEdit({ catId, current, color, onSave }: {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(String(current || ""));
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   if (editing) {
     const save = async () => {
       const n = Number(val);
       if (isNaN(n) || n < 0) { setEditing(false); return; }
       setSaving(true);
-      try { await onSave(n); } catch { /* silent */ }
-      setSaving(false);
-      setEditing(false);
+      setSaveError(null);
+      try {
+        await onSave(n);
+        setEditing(false);
+      } catch (err) {
+        setSaveError(err instanceof Error ? err.message : "שגיאה בשמירה");
+      } finally {
+        setSaving(false);
+      }
     };
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-        <input autoFocus type="number" min="0" value={val}
-          onChange={e => setVal(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-          style={{ width: "80px", padding: "3px 7px", border: `1.5px solid ${color}`, borderRadius: "6px", fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none", direction: "ltr", textAlign: "right" }} />
-        <button onClick={save} disabled={saving}
-          style={{ padding: "3px 8px", borderRadius: "6px", border: "none", background: color, color: "#fff", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
-          {saving ? "..." : "שמור"}
-        </button>
-        <button onClick={() => setEditing(false)}
-          style={{ padding: "3px 6px", borderRadius: "6px", border: "1px solid #E8E2D9", background: "#fff", color: "#888", fontSize: "12px", cursor: "pointer", fontFamily: "Rubik, sans-serif" }}>
-          ✕
-        </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+          <input autoFocus type="number" min="0" value={val}
+            onChange={e => { setVal(e.target.value); setSaveError(null); }}
+            onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+            style={{ width: "80px", padding: "3px 7px", border: `1.5px solid ${saveError ? "#DC2626" : color}`, borderRadius: "6px", fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none", direction: "ltr", textAlign: "right" }} />
+          <button onClick={save} disabled={saving}
+            style={{ padding: "3px 8px", borderRadius: "6px", border: "none", background: color, color: "#fff", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+            {saving ? "..." : "שמור"}
+          </button>
+          <button onClick={() => { setEditing(false); setSaveError(null); }}
+            style={{ padding: "3px 6px", borderRadius: "6px", border: "1px solid #E8E2D9", background: "#fff", color: "#888", fontSize: "12px", cursor: "pointer", fontFamily: "Rubik, sans-serif" }}>
+            ✕
+          </button>
+        </div>
+        {saveError && (
+          <div style={{ fontSize: "11px", color: "#DC2626", fontFamily: "Rubik, sans-serif" }}>
+            {saveError}
+          </div>
+        )}
       </div>
     );
   }

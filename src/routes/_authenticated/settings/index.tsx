@@ -499,7 +499,7 @@ const PRESET_COLORS = [
   { color: "#0E7490", bg: "#ECFEFF" },
   { color: "#9A3412", bg: "#FFF7ED" },
   { color: "#1E40AF", bg: "#EFF6FF" },
-  { color: "#6B21A8", bg: "#FDF4FF" },
+  { color: "#0F766E", bg: "#F0FDFA" },
   { color: "#065F46", bg: "#ECFDF5" },
 ];
 
@@ -882,6 +882,11 @@ function TeamTab() {
   const { data: members = [], isLoading } = useOrgMembers();
   const updateStatus = useUpdateMemberStatus();
   const removeMember = useRemoveMember();
+  // Controlled role select — keyed by member id, avoids document.getElementById
+  const [roleMap, setRoleMap] = useState<Record<string, "viewer" | "admin">>({});
+  const getRoleFor = (memberId: string): "viewer" | "admin" => roleMap[memberId] ?? "viewer";
+  const setRoleFor = (memberId: string, role: "viewer" | "admin") =>
+    setRoleMap((prev) => ({ ...prev, [memberId]: role }));
 
   const isOwner = membership?.role === "owner";
 
@@ -955,8 +960,8 @@ function TeamTab() {
                 </div>
                 <Row>
                   <select
-                    id={`role-${m.id}`}
-                    defaultValue="viewer"
+                    value={getRoleFor(m.id)}
+                    onChange={(e) => setRoleFor(m.id, e.target.value as "viewer" | "admin")}
                     style={{
                       padding: "6px 10px", borderRadius: "8px",
                       border: "1.5px solid #E8E2D9", fontSize: "13px",
@@ -971,10 +976,7 @@ function TeamTab() {
                     type="button"
                     style={btnPrimary}
                     disabled={updateStatus.isPending}
-                    onClick={() => {
-                      const sel = document.getElementById(`role-${m.id}`) as HTMLSelectElement;
-                      updateStatus.mutate({ memberId: m.id, status: "active", role: (sel?.value as "viewer" | "admin") ?? "viewer" });
-                    }}
+                    onClick={() => updateStatus.mutate({ memberId: m.id, status: "active", role: getRoleFor(m.id) })}
                   >
                     אשר
                   </button>
@@ -1047,8 +1049,8 @@ function TeamTab() {
                   <div style={{ fontSize: "12px", color: "var(--hk-ink-3)" }}>{m.profiles?.email}</div>
                 </div>
                 <select
-                  id={`rej-role-${m.id}`}
-                  defaultValue="viewer"
+                  value={getRoleFor(m.id)}
+                  onChange={(e) => setRoleFor(m.id, e.target.value as "viewer" | "admin")}
                   style={{
                     padding: "6px 10px", borderRadius: "8px",
                     border: "1.5px solid #E8E2D9", fontSize: "13px",
@@ -1062,10 +1064,7 @@ function TeamTab() {
                 <button
                   type="button"
                   style={{ ...btnOutline, fontSize: "12px", padding: "6px 12px" }}
-                  onClick={() => {
-                    const sel = document.getElementById(`rej-role-${m.id}`) as HTMLSelectElement;
-                    updateStatus.mutate({ memberId: m.id, status: "active", role: (sel?.value as "viewer" | "admin") ?? "viewer" });
-                  }}
+                  onClick={() => updateStatus.mutate({ memberId: m.id, status: "active", role: getRoleFor(m.id) })}
                 >
                   אשר בכל זאת
                 </button>

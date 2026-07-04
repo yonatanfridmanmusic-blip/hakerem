@@ -488,6 +488,7 @@ export default function HorimPage() {
   const [showSectionsModal, setShowSectionsModal] = useState(false);
   const [preGradeId, setPreGradeId] = useState<string | undefined>();
   const [basis, setBasis] = useState<85 | 100>(85);
+  const [guardMsg, setGuardMsg] = useState<string | null>(null);
 
   const { data: grades = [], isLoading: gradesLoading } = useGrades();
   const { data: sections = [], isLoading: sectionsLoading } = useParentSections();
@@ -537,13 +538,14 @@ export default function HorimPage() {
 
   const openAddCollection = (gradeId?: string) => {
     if (grades.length === 0) {
-      alert("יש להגדיר שכבות לימוד תחילה בדף ההגדרות → שכבות וכיתות");
+      setGuardMsg("יש להגדיר שכבות לימוד תחילה בדף ההגדרות → שכבות וכיתות");
       return;
     }
     if (sections.length === 0) {
-      alert("יש להגדיר סעיפי גבייה תחילה — לחצו על כפתור 'סעיפים'");
+      setGuardMsg("יש להגדיר סעיפי גבייה תחילה — לחצו על כפתור 'סעיפים'");
       return;
     }
+    setGuardMsg(null);
     setPreGradeId(gradeId);
     setShowModal(true);
   };
@@ -563,6 +565,23 @@ export default function HorimPage() {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+
+        {/* Guard message banner (replaces alert()) */}
+        {guardMsg && (
+          <div style={{
+            background: "#FEF3C7", border: "1px solid #F59E0B", borderRadius: "10px",
+            padding: "12px 16px", display: "flex", alignItems: "center", gap: "10px",
+            fontSize: "13.5px", color: "#92400E",
+          }}>
+            <span style={{ flexShrink: 0, fontSize: "16px" }}>⚠</span>
+            <span style={{ flex: 1 }}>{guardMsg}</span>
+            <button
+              type="button"
+              onClick={() => setGuardMsg(null)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#92400E", fontSize: "16px", padding: "0 4px" }}
+            >✕</button>
+          </div>
+        )}
 
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>

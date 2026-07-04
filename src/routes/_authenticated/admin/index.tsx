@@ -261,7 +261,7 @@ function useGenerateCode() {
       const { data, error } = await supabase.rpc("generate_license_code", {
         p_organization_id: orgId,
         p_expires_at: new Date(expiresAt).toISOString(),
-        p_notes: undefined,
+        p_notes: undefined, // intentionally omitted — optional field
       });
       if (error) throw error;
       return data as { code: string; expires_at: string };

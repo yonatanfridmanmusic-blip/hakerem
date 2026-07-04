@@ -192,11 +192,12 @@ function AppSidebar() {
               padding: "8px 10px",
               borderRadius: "8px",
               fontSize: "13px",
-              color: "rgba(255,255,255,0.45)",
+              color: isActive("/settings") ? "#fff" : "rgba(255,255,255,0.45)",
+              background: isActive("/settings") ? "rgba(255,255,255,0.1)" : "transparent",
               textDecoration: "none",
             }}
           >
-            <Settings size={14} style={{ color: "rgba(255,255,255,0.3)" }} />
+            <Settings size={14} style={{ color: isActive("/settings") ? "#7AAA8E" : "rgba(255,255,255,0.3)" }} />
             הגדרות
           </Link>
         )}
