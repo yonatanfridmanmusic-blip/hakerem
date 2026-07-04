@@ -41,7 +41,8 @@ const fmt = (n: number) =>
   new Intl.NumberFormat("he-IL", {
     style: "currency",
     currency: "ILS",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(n);
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -461,20 +462,24 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
     setGradeCount("0");
   };
 
-  const saveCellToDb = async (gradeId: string, sectionName: string, amountStr: string | undefined) => {
+  const saveCellToDb = async (gradeId: string, sectionName: string, amountStr: string | undefined, secIdx?: number) => {
     if (savingCellRef.current) return;
     savingCellRef.current = true;
     // "na" = not applicable for this grade — save 0 to DB (section exists but amount is 0)
     const effectiveStr = amountStr === "na" ? "0" : amountStr;
     const n = Number(effectiveStr ?? "");
+    // Only clear editingCell if we're still on the same cell that triggered the save
+    const clearCell = () => setEditingCell(prev =>
+      (prev?.gradeId === gradeId && (secIdx === undefined || prev?.secIdx === secIdx)) ? null : prev
+    );
     if (!effectiveStr || isNaN(n) || n < 0 || !yearId) {
-      setEditingCell(null);
+      clearCell();
       savingCellRef.current = false;
       return;
     }
     try { await horimAmountMutation.mutateAsync({ yearId, gradeId, amount: n, sectionName }); }
     catch { /* non-blocking */ }
-    setEditingCell(null);
+    clearCell();
     savingCellRef.current = false;
   };
 
@@ -487,7 +492,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   };
 
   const handleAddCustomCat = async () => {
-    if (!catCustom.trim()) return;
+    if (!catCustom.trim() || addCategory.isPending) return;
     const name = catCustom.trim();
     const result = await addCategory.mutateAsync({ name, source: effectiveCatSrc, plannedAmount: 0 });
     if (result?.id) {
@@ -824,13 +829,13 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                                           ...prev,
                                           [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: e.target.value },
                                         }))}
-                                        onBlur={() => saveCellToDb(g.id, sec.name, gAmts[secIdx])}
+                                        onBlur={() => saveCellToDb(g.id, sec.name, gAmts[secIdx], secIdx)}
                                         onKeyDown={e => {
-                                          if (e.key === "Enter") saveCellToDb(g.id, sec.name, gAmts[secIdx]);
+                                          if (e.key === "Enter") saveCellToDb(g.id, sec.name, gAmts[secIdx], secIdx);
                                           if (e.key === "Escape") setEditingCell(null);
                                           if (e.key === "Tab") {
                                             e.preventDefault();
-                                            saveCellToDb(g.id, sec.name, gAmts[secIdx]);
+                                            saveCellToDb(g.id, sec.name, gAmts[secIdx], secIdx);
                                             if (secIdx < wizardSections.length - 1) setEditingCell({ gradeId: g.id, secIdx: secIdx + 1 });
                                             else if (gIdx < grades.length - 1) setEditingCell({ gradeId: grades[gIdx + 1].id, secIdx: 0 });
                                           }
@@ -852,7 +857,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                                           ...prev,
                                           [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: "na" },
                                         }));
-                                        saveCellToDb(g.id, sec.name, "na");
+                                        saveCellToDb(g.id, sec.name, "na", secIdx);
                                       }}
                                       style={{ fontSize: "10px", color: "#B0A8A4", background: "none", border: "none", cursor: "pointer", padding: "0", lineHeight: 1.2, fontFamily: "Rubik, sans-serif" }}
                                     >לא רלוונטי</button>
@@ -898,7 +903,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                                       <>
                                         <span style={{ fontSize: "10px", color: "#8B2F6E" }}>₪</span>
                                         <span style={{ fontSize: "12px", fontWeight: "600", color: "#8B2F6E" }}>
-                                          {Number(cellVal).toLocaleString("he-IL")}
+                                          {Number(cellVal).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                                         </span>
                                       </>
                                     ) : (
@@ -1072,9 +1077,9 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                 <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
                   <input style={{ ...inputSt, flex: 1 }} value={catCustom} onChange={e => setCatCustom(e.target.value)}
                     placeholder="קטגוריה מותאמת אישית..." onKeyDown={e => { if (e.key === "Enter") handleAddCustomCat(); }} />
-                  <button type="button" onClick={handleAddCustomCat} disabled={!catCustom.trim()}
-                    style={{ padding: "10px 18px", background: catCustom.trim() ? c.grad : "#E8E2D9", color: catCustom.trim() ? "#fff" : "#AAA099", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: catCustom.trim() ? "pointer" : "not-allowed", fontWeight: "500" }}>
-                    הוסף
+                  <button type="button" onClick={handleAddCustomCat} disabled={!catCustom.trim() || addCategory.isPending}
+                    style={{ padding: "10px 18px", background: (catCustom.trim() && !addCategory.isPending) ? c.grad : "#E8E2D9", color: (catCustom.trim() && !addCategory.isPending) ? "#fff" : "#AAA099", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: (catCustom.trim() && !addCategory.isPending) ? "pointer" : "not-allowed", fontWeight: "500" }}>
+                    {addCategory.isPending ? "..." : "הוסף"}
                   </button>
                 </div>
               );

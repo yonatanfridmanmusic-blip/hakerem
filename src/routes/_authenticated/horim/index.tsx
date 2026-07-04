@@ -24,7 +24,7 @@ export const Route = createFileRoute("/_authenticated/horim/")({
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
-  new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 0 }).format(n);
+  new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
 
 const today = () => new Date().toISOString().split("T")[0];
 
@@ -120,7 +120,7 @@ function AmountPerStudentCell({
       {current > 0 ? (
         <>
           <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#8B2F6E" }}>
-            {new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(current)}
+            {new Intl.NumberFormat("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(current)}
           </span>
           <span style={{ fontSize: "10.5px", color: "#B060A0", opacity: 0.75 }}>/תלמיד</span>
           <Pencil size={9} color="#C080A8" style={{ marginRight: "2px", flexShrink: 0 }} />
