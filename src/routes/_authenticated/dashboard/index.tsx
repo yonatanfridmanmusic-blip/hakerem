@@ -376,9 +376,20 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   const [addingSection, setAddingSection] = useState(false);
   const [newSecName, setNewSecName] = useState("");
   // wizardGSA[gradeId][sectionIndex] = amountString
+  // wizardGSA[gradeId][sectionIndex] = amountString | "na" (not applicable)
   const [wizardGSA, setWizardGSA] = useState<Record<string, Record<number, string>>>({});
   const [editingCell, setEditingCell] = useState<{ gradeId: string; secIdx: number } | null>(null);
   const savingCellRef = useRef(false); // guard against double-save (Enter → blur)
+  const cellInputRef = useRef<HTMLInputElement>(null); // for reliable focus on cell edit
+
+  // Reliable focus whenever editingCell changes
+  useEffect(() => {
+    if (!editingCell) return;
+    requestAnimationFrame(() => {
+      cellInputRef.current?.focus();
+      cellInputRef.current?.select();
+    });
+  }, [editingCell?.gradeId, editingCell?.secIdx]);
 
   // Org sources (loaded dynamically — wizard shows ALL sources including custom)
   const { data: orgSources = FALLBACK_SOURCES } = useOrgBudgetSources();
@@ -453,8 +464,10 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   const saveCellToDb = async (gradeId: string, sectionName: string, amountStr: string | undefined) => {
     if (savingCellRef.current) return;
     savingCellRef.current = true;
-    const n = Number(amountStr ?? "");
-    if (!amountStr || isNaN(n) || n < 0 || !yearId) {
+    // "na" = not applicable for this grade — save 0 to DB (section exists but amount is 0)
+    const effectiveStr = amountStr === "na" ? "0" : amountStr;
+    const n = Number(effectiveStr ?? "");
+    if (!effectiveStr || isNaN(n) || n < 0 || !yearId) {
       setEditingCell(null);
       savingCellRef.current = false;
       return;
@@ -728,142 +741,192 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                   )}
                 </div>
 
-                {/* Matrix table */}
-                <div style={{ border: "1px solid #E8E2D9", borderRadius: "10px", overflow: "hidden" }}>
-                  {/* Table header: Grade | Section1 | Section2 | ... | Total */}
-                  <div style={{
-                    display: "grid",
-                    gridTemplateColumns: `140px repeat(${wizardSections.length}, 1fr) 100px`,
-                    padding: "8px 14px", background: "#F5F3F0", borderBottom: "1px solid #E8E2D9",
-                  }}>
-                    <span style={{ fontSize: "11px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.04em" }}>שכבה</span>
-                    {wizardSections.map((sec, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: "3px", justifyContent: "center" }}>
-                        <span style={{ fontSize: "11px", fontWeight: "600", color: "#AAA099" }}>{sec.name}</span>
-                        {wizardSections.length > 1 && (
-                          <button type="button" onClick={() => {
-                            setWizardSections(prev => prev.filter((_, j) => j !== i));
-                            setWizardGSA(prev => {
-                              const next = { ...prev };
-                              Object.keys(next).forEach(gId => {
-                                const updated: Record<number, string> = {};
-                                Object.entries(next[gId] ?? {}).forEach(([k, v]) => {
-                                  const ki = Number(k);
-                                  if (ki < i) updated[ki] = v;
-                                  else if (ki > i) updated[ki - 1] = v;
+                {/* Matrix table — scrollable horizontally when many sections */}
+                <div style={{ border: "1px solid #E8E2D9", borderRadius: "10px", overflowX: "auto", overflowY: "visible" }}>
+                  {/* min total width so columns never get too narrow */}
+                  <div style={{ minWidth: `${120 + wizardSections.length * 100 + 88}px` }}>
+                    {/* Table header: Grade | Section1 | Section2 | ... | Total */}
+                    <div style={{
+                      display: "grid",
+                      gridTemplateColumns: `120px repeat(${wizardSections.length}, minmax(96px, 1fr)) 88px`,
+                      padding: "8px 12px", background: "#F5F3F0", borderBottom: "1px solid #E8E2D9",
+                    }}>
+                      <span style={{ fontSize: "11px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.04em" }}>שכבה</span>
+                      {wizardSections.map((sec, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: "3px", justifyContent: "center" }}>
+                          <span style={{ fontSize: "11px", fontWeight: "600", color: "#6B6560", maxWidth: "80px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sec.name}>{sec.name}</span>
+                          {wizardSections.length > 1 && (
+                            <button type="button" onClick={() => {
+                              setWizardSections(prev => prev.filter((_, j) => j !== i));
+                              setWizardGSA(prev => {
+                                const next = { ...prev };
+                                Object.keys(next).forEach(gId => {
+                                  const updated: Record<number, string> = {};
+                                  Object.entries(next[gId] ?? {}).forEach(([k, v]) => {
+                                    const ki = Number(k);
+                                    if (ki < i) updated[ki] = v;
+                                    else if (ki > i) updated[ki - 1] = v;
+                                  });
+                                  next[gId] = updated;
                                 });
-                                next[gId] = updated;
+                                return next;
                               });
-                              return next;
-                            });
-                          }} style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", padding: "0", display: "flex", lineHeight: 1 }}>
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    <span style={{ fontSize: "11px", fontWeight: "600", color: "#1A1A1A", textAlign: "center", letterSpacing: "0.04em" }}>סה"כ/תלמיד</span>
-                  </div>
-
-                  {/* Grade rows */}
-                  {grades.map((g, gIdx) => {
-                    const gAmts = wizardGSA[g.id] ?? {};
-                    const total = wizardSections.reduce((s, _, i) => s + (Number(gAmts[i]) || 0), 0);
-                    return (
-                      <div key={g.id} style={{
-                        display: "grid",
-                        gridTemplateColumns: `140px repeat(${wizardSections.length}, 1fr) 100px`,
-                        padding: "10px 14px", alignItems: "center",
-                        borderBottom: gIdx < grades.length - 1 ? "1px solid #F3EEE8" : "none",
-                        background: "#fff",
-                      }}>
-                        {/* Grade name */}
-                        <div>
-                          <div style={{ fontSize: "13px", color: "#1A1A1A", fontWeight: "500" }}>{g.name}</div>
-                          <div style={{ fontSize: "11px", color: "#AAA099" }}>{g.student_count} תלמידים</div>
-                        </div>
-
-                        {/* Amount cell per section */}
-                        {wizardSections.map((sec, secIdx) => (
-                          <div key={secIdx} style={{ display: "flex", justifyContent: "center" }}>
-                            {editingCell?.gradeId === g.id && editingCell?.secIdx === secIdx ? (
-                              <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-                                <span style={{ fontSize: "11px", color: "#8B2F6E", fontWeight: "500" }}>₪</span>
-                                <input
-                                  autoFocus type="number" min="0"
-                                  value={gAmts[secIdx] ?? ""}
-                                  onChange={e => setWizardGSA(prev => ({
-                                    ...prev,
-                                    [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: e.target.value },
-                                  }))}
-                                  onBlur={() => saveCellToDb(g.id, sec.name, gAmts[secIdx])}
-                                  onKeyDown={e => {
-                                    if (e.key === "Enter") saveCellToDb(g.id, sec.name, gAmts[secIdx]);
-                                    if (e.key === "Escape") setEditingCell(null);
-                                    if (e.key === "Tab") {
-                                      e.preventDefault();
-                                      saveCellToDb(g.id, sec.name, gAmts[secIdx]);
-                                      if (secIdx < wizardSections.length - 1) setEditingCell({ gradeId: g.id, secIdx: secIdx + 1 });
-                                      else if (gIdx < grades.length - 1) setEditingCell({ gradeId: grades[gIdx + 1].id, secIdx: 0 });
-                                    }
-                                  }}
-                                  style={{
-                                    width: "62px", padding: "3px 6px",
-                                    border: "1.5px solid #C080A8", borderRadius: "6px",
-                                    fontSize: "12px", fontFamily: "Rubik, sans-serif",
-                                    direction: "ltr", textAlign: "right", outline: "none",
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <div
-                                onClick={() => setEditingCell({ gradeId: g.id, secIdx })}
-                                title="לחץ/י לעריכה"
-                                onMouseEnter={e => { e.currentTarget.style.background = "#F0E0ED"; e.currentTarget.style.borderColor = "#B060A0"; }}
-                                onMouseLeave={e => {
-                                  const hv = gAmts[secIdx] && Number(gAmts[secIdx]) > 0;
-                                  e.currentTarget.style.background = hv ? "#FAF0F8" : "#FCF7FB";
-                                  e.currentTarget.style.borderColor = hv ? "#DDB8D4" : "#D4B8CC";
-                                }}
-                                style={{
-                                  display: "inline-flex", alignItems: "center", gap: "4px",
-                                  padding: "5px 9px", borderRadius: "7px", cursor: "pointer",
-                                  border: gAmts[secIdx] && Number(gAmts[secIdx]) > 0
-                                    ? "1px solid #DDB8D4" : "1.5px dashed #D4B8CC",
-                                  background: gAmts[secIdx] && Number(gAmts[secIdx]) > 0
-                                    ? "#FAF0F8" : "#FCF7FB",
-                                  minWidth: "68px", justifyContent: "center", transition: "all 0.12s",
-                                }}
-                              >
-                                <span style={{ fontSize: "11px", color: "#8B2F6E", fontWeight: "500" }}>₪</span>
-                                {gAmts[secIdx] && Number(gAmts[secIdx]) > 0 ? (
-                                  <span style={{ fontSize: "12px", fontWeight: "500", color: "#8B2F6E" }}>
-                                    {Number(gAmts[secIdx]).toLocaleString("he-IL")}
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: "11px", color: "#C0A0BE", fontStyle: "italic" }}>הגדר</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-
-                        {/* Total */}
-                        <div style={{ textAlign: "center" }}>
-                          {total > 0 ? (
-                            <>
-                              <div style={{ fontSize: "13px", fontWeight: "600", color: "#1A1A1A" }}>
-                                ₪{total.toLocaleString("he-IL")}
-                              </div>
-                              <div style={{ fontSize: "10px", color: "#AAA099" }}>לתלמיד</div>
-                            </>
-                          ) : (
-                            <span style={{ fontSize: "11px", color: "#C0BAB4" }}>—</span>
+                            }} style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", padding: "0 1px", display: "flex", lineHeight: 1, flexShrink: 0 }}>
+                              ✕
+                            </button>
                           )}
                         </div>
-                      </div>
-                    );
-                  })}
+                      ))}
+                      <span style={{ fontSize: "11px", fontWeight: "600", color: "#1A1A1A", textAlign: "center", letterSpacing: "0.04em" }}>סה"כ/תלמיד</span>
+                    </div>
+
+                    {/* Grade rows */}
+                    {grades.map((g, gIdx) => {
+                      const gAmts = wizardGSA[g.id] ?? {};
+                      const total = wizardSections.reduce((s, _, i) => {
+                        const v = gAmts[i];
+                        if (!v || v === "na") return s;
+                        return s + (Number(v) || 0);
+                      }, 0);
+                      return (
+                        <div key={g.id} style={{
+                          display: "grid",
+                          gridTemplateColumns: `120px repeat(${wizardSections.length}, minmax(96px, 1fr)) 88px`,
+                          padding: "8px 12px", alignItems: "center",
+                          borderBottom: gIdx < grades.length - 1 ? "1px solid #F3EEE8" : "none",
+                          background: gIdx % 2 === 0 ? "#fff" : "#FDFCFB",
+                        }}>
+                          {/* Grade name */}
+                          <div>
+                            <div style={{ fontSize: "13px", color: "#1A1A1A", fontWeight: "500" }}>{g.name}</div>
+                            <div style={{ fontSize: "11px", color: "#AAA099" }}>{g.student_count} תלמידים</div>
+                          </div>
+
+                          {/* Amount cell per section */}
+                          {wizardSections.map((sec, secIdx) => {
+                            const cellVal = gAmts[secIdx];
+                            const isNA = cellVal === "na";
+                            const isEditing = editingCell?.gradeId === g.id && editingCell?.secIdx === secIdx;
+                            const hasValue = !isNA && cellVal && Number(cellVal) > 0;
+
+                            return (
+                              <div key={secIdx} style={{ display: "flex", justifyContent: "center" }}>
+                                {isEditing ? (
+                                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                                      <span style={{ fontSize: "11px", color: "#8B2F6E", fontWeight: "500" }}>₪</span>
+                                      <input
+                                        ref={cellInputRef}
+                                        type="number" min="0"
+                                        value={isNA ? "" : (cellVal ?? "")}
+                                        onFocus={e => e.target.select()}
+                                        onChange={e => setWizardGSA(prev => ({
+                                          ...prev,
+                                          [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: e.target.value },
+                                        }))}
+                                        onBlur={() => saveCellToDb(g.id, sec.name, gAmts[secIdx])}
+                                        onKeyDown={e => {
+                                          if (e.key === "Enter") saveCellToDb(g.id, sec.name, gAmts[secIdx]);
+                                          if (e.key === "Escape") setEditingCell(null);
+                                          if (e.key === "Tab") {
+                                            e.preventDefault();
+                                            saveCellToDb(g.id, sec.name, gAmts[secIdx]);
+                                            if (secIdx < wizardSections.length - 1) setEditingCell({ gradeId: g.id, secIdx: secIdx + 1 });
+                                            else if (gIdx < grades.length - 1) setEditingCell({ gradeId: grades[gIdx + 1].id, secIdx: 0 });
+                                          }
+                                        }}
+                                        style={{
+                                          width: "58px", padding: "3px 6px",
+                                          border: "1.5px solid #C080A8", borderRadius: "6px",
+                                          fontSize: "12px", fontFamily: "Rubik, sans-serif",
+                                          direction: "ltr", textAlign: "right", outline: "none",
+                                        }}
+                                      />
+                                    </div>
+                                    {/* N/A toggle */}
+                                    <button
+                                      type="button"
+                                      onMouseDown={e => {
+                                        e.preventDefault(); // prevent blur before click
+                                        setWizardGSA(prev => ({
+                                          ...prev,
+                                          [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: "na" },
+                                        }));
+                                        saveCellToDb(g.id, sec.name, "na");
+                                      }}
+                                      style={{ fontSize: "10px", color: "#B0A8A4", background: "none", border: "none", cursor: "pointer", padding: "0", lineHeight: 1.2, fontFamily: "Rubik, sans-serif" }}
+                                    >לא רלוונטי</button>
+                                  </div>
+                                ) : isNA ? (
+                                  // N/A cell — click to re-enable
+                                  <div
+                                    onClick={() => {
+                                      setWizardGSA(prev => ({
+                                        ...prev,
+                                        [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: "" },
+                                      }));
+                                      setEditingCell({ gradeId: g.id, secIdx });
+                                    }}
+                                    title="לחץ/י לעריכה"
+                                    style={{
+                                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                      padding: "5px 10px", borderRadius: "7px", cursor: "pointer",
+                                      border: "1px dashed #DDD8D4", background: "#F8F6F3",
+                                      minWidth: "64px", transition: "all 0.12s",
+                                    }}
+                                  >
+                                    <span style={{ fontSize: "12px", color: "#CCC4BC" }}>—</span>
+                                  </div>
+                                ) : (
+                                  <div
+                                    onClick={() => setEditingCell({ gradeId: g.id, secIdx })}
+                                    title="לחץ/י לעריכה"
+                                    onMouseEnter={e => { e.currentTarget.style.background = "#F0E0ED"; (e.currentTarget.style as CSSStyleDeclaration).borderColor = "#B060A0"; }}
+                                    onMouseLeave={e => {
+                                      e.currentTarget.style.background = hasValue ? "#FAF0F8" : "#FCF7FB";
+                                      (e.currentTarget.style as CSSStyleDeclaration).borderColor = hasValue ? "#DDB8D4" : "#D4B8CC";
+                                    }}
+                                    style={{
+                                      display: "inline-flex", alignItems: "center", gap: "3px",
+                                      padding: "5px 10px", borderRadius: "7px", cursor: "pointer",
+                                      border: hasValue ? "1px solid #DDB8D4" : "1.5px dashed #D4B8CC",
+                                      background: hasValue ? "#FAF0F8" : "#FCF7FB",
+                                      minWidth: "64px", justifyContent: "center", transition: "all 0.12s",
+                                    }}
+                                  >
+                                    {hasValue ? (
+                                      <>
+                                        <span style={{ fontSize: "10px", color: "#8B2F6E" }}>₪</span>
+                                        <span style={{ fontSize: "12px", fontWeight: "600", color: "#8B2F6E" }}>
+                                          {Number(cellVal).toLocaleString("he-IL")}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span style={{ fontSize: "11px", color: "#C0A0BE", fontStyle: "italic" }}>הגדר</span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                          {/* Total */}
+                          <div style={{ textAlign: "center" }}>
+                            {total > 0 ? (
+                              <>
+                                <div style={{ fontSize: "13px", fontWeight: "600", color: "#1A1A1A" }}>
+                                  ₪{total.toLocaleString("he-IL")}
+                                </div>
+                                <div style={{ fontSize: "10px", color: "#AAA099" }}>לתלמיד</div>
+                              </>
+                            ) : (
+                              <span style={{ fontSize: "11px", color: "#C0BAB4" }}>—</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
