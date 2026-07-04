@@ -9,10 +9,11 @@ import {
   type Grade, type ParentSection, type GradeSectionAmount, type ParentCollection,
 } from "@/hooks/use-horim";
 import {
-  usePeriodicReport, useActiveSchoolYearMeta,
+  usePeriodicReport, usePeriodicCategoryReport, useActiveSchoolYearMeta,
   getMonthRanges, getQuarterRanges,
-  type PeriodicSummary, type DateRange,
+  type PeriodicSummary, type PeriodicCategory, type DateRange,
 } from "@/hooks/use-periodic-report";
+import { useAllBudgetCategoriesWithSpend, type CategoryReport } from "@/hooks/use-budget-plan";
 
 export const Route = createFileRoute("/_authenticated/reports/")({
   component: ReportsPage,
@@ -150,7 +151,7 @@ const PRINT_CSS = `
 
 // ─── HTML builders ────────────────────────────────────────────────────────────
 
-function buildAnnualHTML(data: DashboardSummary, cfgMap: SourceCfgMap): string {
+function buildAnnualHTML(data: DashboardSummary, cfgMap: SourceCfgMap, categories: CategoryReport[]): string {
   const { schoolYear, sources, totals, incomeTotals } = data;
   const yearName = schoolYear?.name ?? "";
   const sourceRows = sources.map((s) => {
@@ -160,6 +161,22 @@ function buildAnnualHTML(data: DashboardSummary, cfgMap: SourceCfgMap): string {
     const barColor = pct > 100 ? "#C0392B" : pct > 80 ? "#E67E22" : cfg.color;
     return `<tr><td><span class="badge" style="background:${cfg.bg};color:${cfg.textColor}">${cfg.label}</span></td><td class="l">${fmt(s.planned)}</td><td class="l green" style="font-weight:600">${fmt(s.income)}</td><td class="l">${fmt(s.used)}</td><td class="l" style="font-weight:700;color:${balance >= 0 ? "#2D6644" : "#B5472A"}">${fmt(balance)}</td><td class="l" style="min-width:110px"><div class="bar-label">${pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(pct, 100)}%;background:${barColor}"></div></div></td></tr>`;
   }).join("");
+
+  // Per-source category tables for PDF
+  const catBySource = sources.map((s) => {
+    const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.label };
+    const cats = categories.filter((c) => c.source === s.source);
+    if (cats.length === 0) return "";
+    const catRows = cats.map((c) => {
+      const pct = c.planned > 0 ? Math.round((c.spent / c.planned) * 100) : 0;
+      const barColor = pct > 100 ? "#C0392B" : pct > 80 ? "#E67E22" : cfg.color;
+      return `<tr><td>${c.name}</td><td class="l">${fmt(c.planned)}</td><td class="l rust">${fmt(c.spent)}</td><td class="l" style="font-weight:700;color:${c.remaining >= 0 ? "#2D6644" : "#B5472A"}">${fmt(c.remaining)}</td><td class="l" style="min-width:100px"><div class="bar-label">${pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(pct, 100)}%;background:${barColor}"></div></div></td></tr>`;
+    }).join("");
+    return `<h2 style="border-right:4px solid ${cfg.color};padding-right:10px;margin-top:22px">${cfg.label} — פירוט קטגוריות</h2>
+    <table><thead><tr><th>קטגוריה</th><th class="l">תוכנן</th><th class="l">הוצאות</th><th class="l">נותר</th><th class="l">ניצול</th></tr></thead>
+    <tbody>${catRows}</tbody></table>`;
+  }).join("");
+
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח שנתי – ${yearName}</title><style>${PRINT_CSS}</style></head><body>
   <div class="print-bar">
     <div><div class="print-bar-title">📋 דוח שנתי — ${yearName}</div><div class="print-bar-hint">לחצו על "ייצוא PDF" כדי לשמור את הדוח</div></div>
@@ -177,9 +194,10 @@ function buildAnnualHTML(data: DashboardSummary, cfgMap: SourceCfgMap): string {
       <div class="kpi-card" style="border-color:#C6E8D0"><div class="kpi-label">הכנסות שנרשמו</div><div class="kpi-value green">${fmt(incomeTotals.grand)}</div><div class="kpi-sub">כולל גבייה</div></div>
       <div class="kpi-card" style="border-color:${totals.balance >= 0 ? "#C6E8D0" : "#EDCFC6"}"><div class="kpi-label">יתרת תקציב</div><div class="kpi-value ${totals.balance >= 0 ? "green" : "rust"}">${fmt(totals.balance)}</div><div class="kpi-sub">${totals.balance >= 0 ? "עודף" : "גרעון"}</div></div>
     </div>
-    <h2>פירוט לפי מקור תקציב</h2>
+    <h2>סיכום לפי מקור תקציב</h2>
     <table><thead><tr><th>מקור</th><th class="l">מתוכנן</th><th class="l">הכנסות</th><th class="l">הוצאות</th><th class="l">יתרה</th><th class="l">ניצול</th></tr></thead>
     <tbody>${sourceRows}<tr class="total-row"><td>סה"כ</td><td class="l">${fmt(totals.planned)}</td><td class="l green">${fmt(incomeTotals.grand)}</td><td class="l">${fmt(totals.used)}</td><td class="l" style="color:${totals.balance >= 0 ? "#2D6644" : "#B5472A"}">${fmt(totals.balance)}</td><td class="l"><div class="bar-label">${totals.pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totals.pct, 100)}%;background:#2D6644"></div></div></td></tr></tbody></table>
+    ${catBySource}
     <hr class="divider">
     <h2>פירוט הכנסות</h2>
     <div class="income-grid">
@@ -207,6 +225,24 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
   const tR = tT - tC;
   const tP = tT > 0 ? Math.round((tC / tT) * 100) : 0;
   const tS = grades.reduce((s, g) => s + g.student_count, 0);
+
+  // Per-section summary rows
+  const secRows = sections.map((sec) => {
+    let total100 = 0;
+    let collected = 0;
+    grades.forEach((g) => {
+      const a = amounts.find((a) => a.grade_id === g.id && a.parent_section_id === sec.id);
+      if (a) total100 += a.amount_per_student * g.student_count;
+      collected += collections.filter((c) => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
+    });
+    if (total100 === 0) return "";
+    const total85 = total100 * 0.85;
+    const remaining85 = Math.max(0, total85 - collected);
+    const pct = total85 > 0 ? Math.round((collected / total85) * 100) : 0;
+    const barColor = pct >= 100 ? "#2D6644" : pct > 80 ? "#E67E22" : "#8B2F6E";
+    return `<tr><td style="font-weight:600">${sec.name}</td><td class="l">${fmt(total100)}</td><td class="l" style="color:#8B2F6E">${fmt(total85)}</td><td class="l green" style="font-weight:600">${fmt(collected)}</td><td class="l" style="font-weight:700;color:${remaining85 <= 0 ? "#2D6644" : "#B5472A"}">${remaining85 <= 0 ? '<span class="done-badge">✓ הושלם</span>' : fmt(remaining85)}</td><td class="l" style="min-width:100px"><div class="bar-label">${pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(pct, 100)}%;background:${barColor}"></div></div></td></tr>`;
+  }).join("");
+
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>גבייה מהורים – ${yearName}</title><style>${PRINT_CSS}</style></head><body>
   <div class="print-bar">
     <div><div class="print-bar-title">📋 גבייה מהורים — ${yearName}</div><div class="print-bar-hint">לחצו על "ייצוא PDF" כדי לשמור את הדוח</div></div>
@@ -218,11 +254,15 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
   <div class="page-header"><div><div class="sub">הכרם · ניהול פיננסי בית ספרי</div><h1>דוח גבייה מהורים</h1><div class="sub" style="margin-top:2px">${yearName}</div></div><div class="meta"><div>תאריך הפקה</div><div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:2px">${toDate()}</div></div></div>
   <div class="content">
     <h2>סיכום גבייה</h2>
-    <div class="kpi-grid kpi-3">
-      <div class="kpi-card"><div class="kpi-label">יעד גבייה</div><div class="kpi-value">${fmt(tT)}</div><div class="kpi-sub">${tS} תלמידים</div></div>
+    <div class="kpi-grid kpi-4">
+      <div class="kpi-card"><div class="kpi-label">יעד גבייה (100%)</div><div class="kpi-value">${fmt(tT)}</div><div class="kpi-sub">${tS} תלמידים</div></div>
+      <div class="kpi-card" style="border-color:#DDD0E8"><div class="kpi-label">יעד גבייה (85%)</div><div class="kpi-value plum">${fmt(tT * 0.85)}</div></div>
       <div class="kpi-card" style="background:#EDFBF3;border-color:#C6E8D0"><div class="kpi-label">נגבה עד כה</div><div class="kpi-value green">${fmt(tC)}</div><div style="margin-top:8px"><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(tP, 100)}%;background:#2D6644"></div></div><div style="font-size:10px;color:#4A6656;margin-top:3px;font-weight:500">${tP}% מהיעד</div></div></div>
       <div class="kpi-card" style="background:${tR <= 0 ? "#EDFBF3" : "#FDF1EA"};border-color:${tR <= 0 ? "#C6E8D0" : "#EDCFC6"}"><div class="kpi-label">טרם נגבה</div><div class="kpi-value ${tR <= 0 ? "green" : "rust"}">${fmt(tR)}</div></div>
     </div>
+    ${secRows ? `<h2>גבייה לפי סעיף</h2>
+    <table><thead><tr><th>סעיף</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה</th><th class="l">נותר (מ-85%)</th><th class="l">התקדמות</th></tr></thead>
+    <tbody>${secRows}</tbody></table>` : ""}
     <h2>פירוט לפי שכבה</h2>
     <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד</th><th class="l">נגבה</th><th class="l">טרם נגבה</th><th class="l">התקדמות</th></tr></thead>
     <tbody>${rows}<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${tS}</td><td class="l">${fmt(tT)}</td><td class="l green">${fmt(tC)}</td><td class="l" style="color:${tR <= 0 ? "#2D6644" : "#B5472A"}">${fmt(tR)}</td><td class="l"><div class="bar-label">${tP}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(tP, 100)}%;background:#8B2F6E"></div></div></td></tr></tbody></table>
@@ -231,13 +271,37 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
 </body></html>`;
 }
 
-function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName: string, cfgMap: SourceCfgMap): string {
+function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName: string, cfgMap: SourceCfgMap, categories: PeriodicCategory[]): string {
   const { sources, totals } = data;
   const sourceRows = sources.map((s) => {
     const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.source };
     const barColor = s.expenses > s.income ? "#B5472A" : cfg.color;
     return `<tr><td><span class="badge" style="background:${cfg.bg};color:${cfg.textColor}">${cfg.label}</span></td><td class="l green" style="font-weight:600">${fmt(s.income)}</td><td class="l">${fmt(s.expenses)}</td><td class="l" style="font-weight:700;color:${s.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(s.net)}</td></tr>`;
+    void barColor;
   }).join("");
+
+  // Per-source category detail for PDF
+  const catDetail = sources.map((s) => {
+    const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.source };
+    const cats = categories.filter((c) => c.source === s.source);
+    if (cats.length === 0) return "";
+    const catRows = cats.map((c) => {
+      const pctYtd = c.planned_annual > 0 ? Math.round((c.spent_ytd / c.planned_annual) * 100) : 0;
+      const barColor = pctYtd > 100 ? "#C0392B" : pctYtd > 80 ? "#E67E22" : cfg.color;
+      return `<tr>
+        <td>${c.name}</td>
+        <td class="l rust">${fmt(c.spent_in_period)}</td>
+        <td class="l rust">${fmt(c.spent_ytd)}</td>
+        <td class="l">${fmt(c.planned_annual)}</td>
+        <td class="l" style="font-weight:700;color:${c.remaining_annual >= 0 ? "#2D6644" : "#B5472A"}">${fmt(c.remaining_annual)}</td>
+        <td class="l" style="min-width:100px"><div class="bar-label">${pctYtd}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(pctYtd, 100)}%;background:${barColor}"></div></div></td>
+      </tr>`;
+    }).join("");
+    return `<h2 style="border-right:4px solid ${cfg.color};padding-right:10px;margin-top:22px">${cfg.label} — פירוט קטגוריות</h2>
+    <table><thead><tr><th>קטגוריה</th><th class="l">הוצאה בתקופה</th><th class="l">הוצאה מצטברת</th><th class="l">תוכנן שנתי</th><th class="l">נותר שנתי</th><th class="l">ניצול</th></tr></thead>
+    <tbody>${catRows}</tbody></table>`;
+  }).join("");
+
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח תקופתי – ${periodLabel}</title><style>${PRINT_CSS}</style></head><body>
   <div class="print-bar">
     <div><div class="print-bar-title">📋 דוח תקופתי — ${periodLabel}</div><div class="print-bar-hint">לחצו על "ייצוא PDF" כדי לשמור את הדוח</div></div>
@@ -255,9 +319,10 @@ function buildPeriodicHTML(data: PeriodicSummary, periodLabel: string, yearName:
       <div class="kpi-card" style="border-color:#EDCFC6"><div class="kpi-label">הוצאות בתקופה</div><div class="kpi-value rust">${fmt(totals.expenses)}</div></div>
       <div class="kpi-card" style="border-color:${totals.net >= 0 ? "#C6E8D0" : "#EDCFC6"}"><div class="kpi-label">מאזן תקופה</div><div class="kpi-value ${totals.net >= 0 ? "green" : "rust"}">${fmt(totals.net)}</div><div class="kpi-sub">${totals.net >= 0 ? "עודף" : "גרעון"}</div></div>
     </div>
-    <h2>פירוט לפי מקור</h2>
+    <h2>סיכום לפי מקור</h2>
     <table><thead><tr><th>מקור</th><th class="l">הכנסות</th><th class="l">הוצאות</th><th class="l">מאזן</th></tr></thead>
     <tbody>${sourceRows}<tr class="total-row"><td>סה"כ</td><td class="l green">${fmt(totals.totalIncome)}</td><td class="l">${fmt(totals.expenses)}</td><td class="l" style="color:${totals.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(totals.net)}</td></tr></tbody></table>
+    ${catDetail}
     <div class="footer">הכרם — מערכת ניהול פיננסי לבתי ספר · נוצר אוטומטית ${toDate()}</div>
   </div>
 </body></html>`;
@@ -317,6 +382,8 @@ function ReportsPage() {
   const periodicFrom = periodType === "custom" ? (customFrom || null) : (selectedRange?.from ?? null);
   const periodicTo   = periodType === "custom" ? (customTo   || null) : (selectedRange?.to   ?? null);
   const { data: periodicData, isLoading: periodicLoading } = usePeriodicReport(periodicFrom, periodicTo);
+  const { data: allCategories } = useAllBudgetCategoriesWithSpend();
+  const { data: periodicCategories } = usePeriodicCategoryReport(periodicFrom, periodicTo);
 
   const monthRanges   = yearMeta?.start_date && yearMeta.end_date ? getMonthRanges(yearMeta.start_date, yearMeta.end_date)   : [];
   const quarterRanges = yearMeta?.start_date                       ? getQuarterRanges(yearMeta.start_date)                    : [];
@@ -324,7 +391,7 @@ function ReportsPage() {
   function handlePrint() {
     if (tab === "annual") {
       if (!annualQuery.data) return;
-      openPrint(buildAnnualHTML(annualQuery.data, cfgMap));
+      openPrint(buildAnnualHTML(annualQuery.data, cfgMap, allCategories ?? []));
     } else if (tab === "horim") {
       openPrint(buildHorimHTML(
         gradesQuery.data   ?? [],
@@ -337,7 +404,7 @@ function ReportsPage() {
       const label = periodType === "custom"
         ? `${customFrom} — ${customTo}`
         : (selectedRange?.label ?? "תקופה נבחרת");
-      openPrint(buildPeriodicHTML(periodicData, label, annualQuery.data?.schoolYear?.name ?? "", cfgMap));
+      openPrint(buildPeriodicHTML(periodicData, label, annualQuery.data?.schoolYear?.name ?? "", cfgMap, periodicCategories ?? []));
     }
   }
 
@@ -374,7 +441,7 @@ function ReportsPage() {
         ))}
       </div>
 
-      {tab === "annual"   && <AnnualReport   data={annualQuery.data} isLoading={annualQuery.isLoading} cfgMap={cfgMap} />}
+      {tab === "annual"   && <AnnualReport   data={annualQuery.data} isLoading={annualQuery.isLoading} cfgMap={cfgMap} categories={allCategories ?? []} />}
       {tab === "horim"    && <HorimReport    grades={gradesQuery.data ?? []} sections={sectionsQuery.data ?? []} amounts={amountsQuery.data ?? []} collections={collectQuery.data ?? []} isLoading={gradesQuery.isLoading} />}
       {tab === "periodic" && (
         <PeriodicReport
@@ -392,6 +459,7 @@ function ReportsPage() {
           isLoading={periodicLoading}
           hasQuery={!!(periodicFrom && periodicTo)}
           cfgMap={cfgMap}
+          categories={periodicCategories ?? []}
         />
       )}
     </div>
@@ -400,7 +468,7 @@ function ReportsPage() {
 
 // ─── Annual Report ────────────────────────────────────────────────────────────
 
-function AnnualReport({ data, isLoading, cfgMap }: { data: DashboardSummary | undefined; isLoading: boolean; cfgMap: SourceCfgMap }) {
+function AnnualReport({ data, isLoading, cfgMap, categories }: { data: DashboardSummary | undefined; isLoading: boolean; cfgMap: SourceCfgMap; categories: CategoryReport[] }) {
   if (isLoading) return <Loader />;
   if (!data?.schoolYear) return <EmptyState text="אין שנת לימודים פעילה" />;
   const { sources, totals, incomeTotals } = data;
@@ -451,7 +519,7 @@ function AnnualReport({ data, isLoading, cfgMap }: { data: DashboardSummary | un
           </tbody>
         </table>
       </div>
-      <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+      <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.05)", marginBottom: "18px" }}>
         <div style={{ fontWeight: 700, fontSize: "14px", color: "#1A1A1A", marginBottom: "14px" }}>פירוט הכנסות</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px" }}>
           {[
@@ -466,6 +534,53 @@ function AnnualReport({ data, isLoading, cfgMap }: { data: DashboardSummary | un
           ))}
         </div>
       </div>
+
+      {/* Per-source category breakdown tables */}
+      {sources.map((s) => {
+        const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.label };
+        const cats = categories.filter((c) => c.source === s.source);
+        if (cats.length === 0) return null;
+        return (
+          <div key={s.source} style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "16px" }}>
+            <div style={{ padding: "14px 22px", borderBottom: "1px solid #F4F1EC", borderRight: `4px solid ${cfg.color}`, display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ background: cfg.bg, color: cfg.textColor, borderRadius: "8px", padding: "3px 10px", fontSize: "12.5px", fontWeight: 700 }}>{cfg.label}</span>
+              <span style={{ fontWeight: 700, fontSize: "14px", color: "#1A1A1A" }}>פירוט קטגוריות</span>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead style={{ background: "#FAFAF8" }}>
+                <tr>
+                  <th style={th}>קטגוריה</th>
+                  <th style={thL}>תוכנן</th>
+                  <th style={thL}>הוצאות</th>
+                  <th style={thL}>נותר</th>
+                  <th style={{ ...thL, minWidth: "140px" }}>ניצול</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cats.map((c) => {
+                  const pct = c.planned > 0 ? Math.round((c.spent / c.planned) * 100) : 0;
+                  return (
+                    <tr key={c.id}>
+                      <td style={{ ...td, fontWeight: 500 }}>{c.name}</td>
+                      <td style={tdL}>{fmt(c.planned)}</td>
+                      <td style={{ ...tdL, color: "#B5472A" }}>{fmt(c.spent)}</td>
+                      <td style={{ ...tdL, fontWeight: 700, color: c.remaining >= 0 ? "#2D6644" : "#B5472A" }}>{fmt(c.remaining)}</td>
+                      <td style={tdL}><div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "2px" }}>{pct}%</div><PctBar pct={pct} color={cfg.color} /></td>
+                    </tr>
+                  );
+                })}
+                <tr style={{ background: "#F7F4EF" }}>
+                  <td style={{ ...td, fontWeight: 700 }}>סה״כ {cfg.label}</td>
+                  <td style={{ ...tdL, fontWeight: 700 }}>{fmt(cats.reduce((a, c) => a + c.planned, 0))}</td>
+                  <td style={{ ...tdL, fontWeight: 700, color: "#B5472A" }}>{fmt(cats.reduce((a, c) => a + c.spent, 0))}</td>
+                  <td style={{ ...tdL, fontWeight: 700, color: "#2D6644" }}>{fmt(cats.reduce((a, c) => a + c.remaining, 0))}</td>
+                  <td style={tdL} />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -487,21 +602,78 @@ function HorimReport({ grades, sections, amounts, collections, isLoading }: { gr
   const tC = rows.reduce((s, r) => s + r.collected, 0);
   const tR = tT - tC;
   const tP = tT > 0 ? Math.round((tC / tT) * 100) : 0;
+  const tT85 = tT * 0.85;
+
+  // Per-section summary
+  const sectionSummary = sections.map((sec) => {
+    let total100 = 0;
+    let secCollected = 0;
+    grades.forEach((g) => {
+      const a = amounts.find((am) => am.grade_id === g.id && am.parent_section_id === sec.id);
+      if (a) total100 += a.amount_per_student * g.student_count;
+      secCollected += collections.filter((c) => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
+    });
+    if (total100 === 0) return null;
+    const total85 = total100 * 0.85;
+    const remaining85 = Math.max(0, total85 - secCollected);
+    const pct = total85 > 0 ? Math.round((secCollected / total85) * 100) : 0;
+    return { sec, total100, total85, secCollected, remaining85, pct };
+  }).filter(Boolean) as { sec: typeof sections[0]; total100: number; total85: number; secCollected: number; remaining85: number; pct: number }[];
+
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px", marginBottom: "20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" }}>
         {[
-          { label: "יעד גבייה", value: tT, color: "#1A1A1A", bg: "#FAFAF8", border: "#EEE9E2", extra: null },
-          { label: "נגבה",      value: tC, color: "#2D6644", bg: "#EDFBF3", border: "#C6E8D0", extra: tP },
-          { label: "טרם נגבה",  value: tR, color: tR > 0 ? "#B5472A" : "#2D6644", bg: tR > 0 ? "#FDF1EA" : "#EDFBF3", border: tR > 0 ? "#EDCFC6" : "#C6E8D0", extra: null },
+          { label: "יעד גבייה (100%)", value: tT,   color: "#1A1A1A", bg: "#FAFAF8", border: "#EEE9E2",  sub: null },
+          { label: "יעד גבייה (85%)", value: tT85,  color: "#8B2F6E", bg: "#F7F0F5", border: "#DDD0E8",  sub: null },
+          { label: "נגבה",            value: tC,    color: "#2D6644", bg: "#EDFBF3", border: "#C6E8D0",  sub: tP },
+          { label: "טרם נגבה",        value: tR,    color: tR > 0 ? "#B5472A" : "#2D6644", bg: tR > 0 ? "#FDF1EA" : "#EDFBF3", border: tR > 0 ? "#EDCFC6" : "#C6E8D0", sub: null },
         ].map((c) => (
           <div key={c.label} style={{ background: c.bg, borderRadius: "14px", border: `1px solid ${c.border}`, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
             <div style={{ fontSize: "11px", color: "#6B7A72", fontWeight: 500, marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.03em" }}>{c.label}</div>
             <div style={{ fontSize: "24px", fontWeight: 700, color: c.color }}>{fmt(c.value)}</div>
-            {c.extra !== null && <div style={{ marginTop: "9px" }}><PctBar pct={tP} color="#2D6644" /><div style={{ fontSize: "11px", color: "#4A6656", marginTop: "4px", fontWeight: 500 }}>{tP}% מהיעד</div></div>}
+            {c.sub !== null && <div style={{ marginTop: "9px" }}><PctBar pct={tP} color="#2D6644" /><div style={{ fontSize: "11px", color: "#4A6656", marginTop: "4px", fontWeight: 500 }}>{tP}% מהיעד</div></div>}
           </div>
         ))}
       </div>
+
+      {/* Per-section summary table */}
+      {sectionSummary.length > 0 && (
+        <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "18px" }}>
+          <div style={{ padding: "16px 22px", borderBottom: "1px solid #F4F1EC", borderRight: "4px solid #8B2F6E" }}>
+            <div style={{ fontWeight: 700, fontSize: "14.5px", color: "#1A1A1A" }}>סיכום גבייה לפי סעיף</div>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead style={{ background: "#FAF5F9" }}>
+              <tr>
+                <th style={th}>סעיף</th>
+                <th style={thL}>יעד 100%</th>
+                <th style={thL}>יעד 85%</th>
+                <th style={thL}>נגבה</th>
+                <th style={thL}>נותר (מ-85%)</th>
+                <th style={{ ...thL, minWidth: "140px" }}>התקדמות</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sectionSummary.map(({ sec, total100, total85, secCollected, remaining85, pct }) => (
+                <tr key={sec.id}>
+                  <td style={{ ...td, fontWeight: 600 }}>{sec.name}</td>
+                  <td style={tdL}>{fmt(total100)}</td>
+                  <td style={{ ...tdL, color: "#8B2F6E", fontWeight: 500 }}>{fmt(total85)}</td>
+                  <td style={{ ...tdL, color: "#2D6644", fontWeight: 600 }}>{fmt(secCollected)}</td>
+                  <td style={{ ...tdL, fontWeight: 700, color: remaining85 <= 0 ? "#2D6644" : "#B5472A" }}>
+                    {remaining85 <= 0
+                      ? <span style={{ background: "#EDFBF3", color: "#2D6644", borderRadius: "6px", padding: "2px 8px", fontSize: "12px", fontWeight: 600 }}>✓ הושלם</span>
+                      : fmt(remaining85)}
+                  </td>
+                  <td style={tdL}><div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "3px" }}>{pct}%</div><PctBar pct={pct} color="#8B2F6E" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
         <div style={{ padding: "16px 22px", borderBottom: "1px solid #F4F1EC" }}><div style={{ fontWeight: 700, fontSize: "14.5px", color: "#1A1A1A" }}>גבייה לפי שכבה</div></div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -541,7 +713,7 @@ function PeriodicReport({
   monthRanges, quarterRanges,
   selectedRange, onSelectRange,
   customFrom, customTo, onCustomFrom, onCustomTo,
-  data, isLoading, hasQuery, cfgMap,
+  data, isLoading, hasQuery, cfgMap, categories,
 }: {
   periodType: PeriodType; onPeriodType: (pt: PeriodType) => void;
   monthRanges: DateRange[]; quarterRanges: DateRange[];
@@ -549,7 +721,7 @@ function PeriodicReport({
   customFrom: string; customTo: string;
   onCustomFrom: (v: string) => void; onCustomTo: (v: string) => void;
   data: PeriodicSummary | null; isLoading: boolean; hasQuery: boolean;
-  cfgMap: SourceCfgMap;
+  cfgMap: SourceCfgMap; categories: PeriodicCategory[];
 }) {
   const periodTypeOptions: { key: PeriodType; label: string; emoji: string }[] = [
     { key: "monthly",   label: "חודשי",           emoji: "📅" },
@@ -724,7 +896,7 @@ function PeriodicReport({
           </div>
 
           {/* Per-source table */}
-          <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+          <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "18px" }}>
             <div style={{ padding: "16px 22px", borderBottom: "1px solid #F4F1EC" }}><div style={{ fontWeight: 700, fontSize: "14.5px", color: "#1A1A1A" }}>פירוט לפי מקור</div></div>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead style={{ background: "#FAFAF8" }}>
@@ -756,6 +928,56 @@ function PeriodicReport({
               </tbody>
             </table>
           </div>
+
+          {/* Per-source category detail tables */}
+          {data.sources.map((s) => {
+            const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.source };
+            const cats = categories.filter((c) => c.source === s.source);
+            if (cats.length === 0) return null;
+            return (
+              <div key={s.source} style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "16px" }}>
+                <div style={{ padding: "14px 22px", borderBottom: "1px solid #F4F1EC", borderRight: `4px solid ${cfg.color}`, display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ background: cfg.bg, color: cfg.textColor, borderRadius: "8px", padding: "3px 10px", fontSize: "12.5px", fontWeight: 700 }}>{cfg.label}</span>
+                  <span style={{ fontWeight: 700, fontSize: "14px", color: "#1A1A1A" }}>פירוט קטגוריות — הוצאות ותקציב</span>
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead style={{ background: "#FAFAF8" }}>
+                    <tr>
+                      <th style={th}>קטגוריה</th>
+                      <th style={thL}>הוצאה בתקופה</th>
+                      <th style={thL}>הוצאה מצטברת</th>
+                      <th style={thL}>תוכנן שנתי</th>
+                      <th style={thL}>נותר שנתי</th>
+                      <th style={{ ...thL, minWidth: "140px" }}>ניצול שנתי</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cats.map((c) => {
+                      const pctYtd = c.planned_annual > 0 ? Math.round((c.spent_ytd / c.planned_annual) * 100) : 0;
+                      return (
+                        <tr key={c.id}>
+                          <td style={{ ...td, fontWeight: 500 }}>{c.name}</td>
+                          <td style={{ ...tdL, color: "#B5472A" }}>{fmt(c.spent_in_period)}</td>
+                          <td style={{ ...tdL, color: "#B5472A", fontWeight: 600 }}>{fmt(c.spent_ytd)}</td>
+                          <td style={tdL}>{fmt(c.planned_annual)}</td>
+                          <td style={{ ...tdL, fontWeight: 700, color: c.remaining_annual >= 0 ? "#2D6644" : "#B5472A" }}>{fmt(c.remaining_annual)}</td>
+                          <td style={tdL}><div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "2px" }}>{pctYtd}%</div><PctBar pct={pctYtd} color={cfg.color} /></td>
+                        </tr>
+                      );
+                    })}
+                    <tr style={{ background: "#F7F4EF" }}>
+                      <td style={{ ...td, fontWeight: 700 }}>סה״כ {cfg.label}</td>
+                      <td style={{ ...tdL, fontWeight: 700, color: "#B5472A" }}>{fmt(cats.reduce((a, c) => a + c.spent_in_period, 0))}</td>
+                      <td style={{ ...tdL, fontWeight: 700, color: "#B5472A" }}>{fmt(cats.reduce((a, c) => a + c.spent_ytd, 0))}</td>
+                      <td style={{ ...tdL, fontWeight: 700 }}>{fmt(cats.reduce((a, c) => a + c.planned_annual, 0))}</td>
+                      <td style={{ ...tdL, fontWeight: 700, color: "#2D6644" }}>{fmt(cats.reduce((a, c) => a + c.remaining_annual, 0))}</td>
+                      <td style={tdL} />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
         </div>
       )}
 

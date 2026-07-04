@@ -168,6 +168,82 @@ export function usePeriodicReport(from: string | null, to: string | null) {
   });
 }
 
+// ─── Per-category periodic report ────────────────────────────────────────────
+
+export interface PeriodicCategory {
+  id: string;
+  name: string;
+  source: string;
+  source_label: string;
+  planned_annual: number;   // annual budget
+  spent_in_period: number;  // spent within [from, to]
+  spent_ytd: number;        // spent from year start to `to`
+  remaining_annual: number; // planned - spent_ytd
+}
+
+export function usePeriodicCategoryReport(from: string | null, to: string | null) {
+  return useQuery<PeriodicCategory[]>({
+    queryKey: ["periodic-category-report", from, to],
+    queryFn: async () => {
+      if (!from || !to) return [];
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return [];
+      const { data: mem } = await supabase
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", session.user.id)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!mem?.organization_id) return [];
+      const orgId = mem.organization_id;
+
+      const [yearRes, orgSrcRes] = await Promise.all([
+        supabase.from("school_years").select("id,start_date").eq("organization_id", orgId).eq("is_active", true).maybeSingle(),
+        supabase.from("org_budget_sources").select("slug,label").eq("org_id", orgId).order("order_index"),
+      ]);
+      if (!yearRes.data?.id) return [];
+      const yearId = yearRes.data.id;
+      const yearStart = yearRes.data.start_date ?? from;
+
+      const FALLBACK: Record<string, string> = { gefen: "גפן", iriyah: "עירייה", horim: "הורים" };
+      const srcLabels: Record<string, string> = {};
+      (orgSrcRes.data ?? []).forEach((s) => { srcLabels[s.slug] = s.label; });
+      const getLabel = (slug: string) => srcLabels[slug] ?? FALLBACK[slug] ?? slug;
+
+      const [catRes, periodRes, ytdRes] = await Promise.all([
+        supabase.from("budget_categories").select("id,name,source,planned_amount,order_index").eq("school_year_id", yearId).order("source").order("order_index"),
+        supabase.from("expenses").select("budget_category_id,amount").eq("school_year_id", yearId).gte("expense_date", from).lte("expense_date", to),
+        supabase.from("expenses").select("budget_category_id,amount").eq("school_year_id", yearId).gte("expense_date", yearStart).lte("expense_date", to),
+      ]);
+
+      const periodMap: Record<string, number> = {};
+      for (const e of (periodRes.data ?? [])) {
+        if (e.budget_category_id) periodMap[e.budget_category_id] = (periodMap[e.budget_category_id] ?? 0) + Number(e.amount);
+      }
+      const ytdMap: Record<string, number> = {};
+      for (const e of (ytdRes.data ?? [])) {
+        if (e.budget_category_id) ytdMap[e.budget_category_id] = (ytdMap[e.budget_category_id] ?? 0) + Number(e.amount);
+      }
+
+      return (catRes.data ?? [])
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          source: c.source,
+          source_label: getLabel(c.source),
+          planned_annual: Number(c.planned_amount),
+          spent_in_period: periodMap[c.id] ?? 0,
+          spent_ytd: ytdMap[c.id] ?? 0,
+          remaining_annual: Number(c.planned_amount) - (ytdMap[c.id] ?? 0),
+        }))
+        .filter((c) => c.planned_annual > 0 || c.spent_in_period > 0);
+    },
+    enabled: !!from && !!to,
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
 // ─── Date range helpers ───────────────────────────────────────────────────────
 
 export interface DateRange { from: string; to: string; label: string }

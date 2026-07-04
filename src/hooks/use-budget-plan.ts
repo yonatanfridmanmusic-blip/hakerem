@@ -210,3 +210,48 @@ export function useCopyBudgetCategories() {
     },
   });
 }
+
+// ─── Annual category report (all sources, all categories, with YTD spend) ──────
+
+export interface CategoryReport {
+  id: string;
+  name: string;
+  source: string;
+  planned: number;
+  spent: number;
+  remaining: number;
+  pct: number;
+}
+
+export function useAllBudgetCategoriesWithSpend() {
+  return useQuery<CategoryReport[]>({
+    queryKey: ["all-budget-categories-with-spend"],
+    queryFn: async () => {
+      const yearId = await getActiveYearId();
+      if (!yearId) return [];
+      const [catRes, expRes] = await Promise.all([
+        supabase
+          .from("budget_categories")
+          .select("id,name,source,planned_amount,order_index")
+          .eq("school_year_id", yearId)
+          .order("source")
+          .order("order_index"),
+        supabase
+          .from("expenses")
+          .select("budget_category_id,amount")
+          .eq("school_year_id", yearId),
+      ]);
+      const spentMap: Record<string, number> = {};
+      for (const e of (expRes.data ?? [])) {
+        if (e.budget_category_id)
+          spentMap[e.budget_category_id] = (spentMap[e.budget_category_id] ?? 0) + Number(e.amount);
+      }
+      return (catRes.data ?? []).map((c) => {
+        const planned = Number(c.planned_amount);
+        const spent = spentMap[c.id] ?? 0;
+        return { id: c.id, name: c.name, source: c.source, planned, spent, remaining: planned - spent, pct: planned > 0 ? Math.round((spent / planned) * 100) : 0 };
+      });
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+}

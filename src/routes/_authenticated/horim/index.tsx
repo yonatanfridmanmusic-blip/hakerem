@@ -431,10 +431,60 @@ function GradeRow({
         </button>
       </div>
 
-      {/* Expanded: collection history + add button */}
+      {/* Expanded: per-section breakdown + collection history */}
       {expanded && (
         <div style={{ background: "#FAFAF8", borderBottom: "1px solid #EAE5DE", padding: "0 20px 16px" }}>
-          <div style={{ paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div style={{ paddingTop: "14px", display: "flex", flexDirection: "column", gap: "16px" }}>
+
+            {/* Per-section table */}
+            {sections.some((s) => {
+              const gsa = gsaMap.get(`${grade.id}:${s.id}`);
+              return gsa && gsa.amount_per_student > 0;
+            }) && (
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: "600", color: "#8B2F6E", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "8px" }}>
+                  פירוט לפי סעיף — {grade.name}
+                </div>
+                <div style={{ border: "1px solid #E8DEED", borderRadius: "10px", overflow: "hidden" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
+                    <thead>
+                      <tr style={{ background: "#F4EBF2" }}>
+                        <th style={{ padding: "7px 12px", textAlign: "right", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>סעיף</th>
+                        <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>יעד ({Math.round(multiplier * 100)}%)</th>
+                        <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>נגבה</th>
+                        <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>נותר</th>
+                        <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sections.map((s) => {
+                        const key = `${grade.id}:${s.id}`;
+                        const gsa = gsaMap.get(key);
+                        if (!gsa || gsa.amount_per_student === 0) return null;
+                        const planned = gsa.amount_per_student * grade.student_count * multiplier;
+                        const collected = collectionsMap.get(key) ?? 0;
+                        const remaining = planned - collected;
+                        const pct = planned > 0 ? Math.round((collected / planned) * 100) : 0;
+                        const done = remaining <= 0;
+                        return (
+                          <tr key={s.id} style={{ borderTop: "1px solid #EAE5DE" }}>
+                            <td style={{ padding: "8px 12px", fontWeight: "500", color: "#1A1A1A" }}>{s.name}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "left", color: "#555", fontVariantNumeric: "tabular-nums" }}>{fmt(planned)}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "left", color: "#2D6644", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{fmt(collected)}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "left", fontWeight: "600", color: done ? "#2D6644" : "#B5472A", fontVariantNumeric: "tabular-nums" }}>
+                              {done ? <span style={{ background: "#EDFBF3", color: "#2D6644", borderRadius: "5px", padding: "1px 7px", fontSize: "11px" }}>✓</span> : fmt(remaining)}
+                            </td>
+                            <td style={{ padding: "8px 12px", textAlign: "left", fontWeight: "600", color: pct >= 85 ? "#2D6644" : pct >= 60 ? "#B5472A" : "#8B2F6E" }}>{pct}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
               <span style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.04em", textTransform: "uppercase" }}>
                 היסטוריית גבייה
@@ -476,6 +526,7 @@ function GradeRow({
               })
             )}
           </div>
+          </div>{/* closes gap:16px flex */}
         </div>
       )}
     </>
