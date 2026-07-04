@@ -28,12 +28,13 @@ import {
   FALLBACK_SOURCES,
 } from "@/hooks/use-budget-sources";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/settings/")({
   component: SettingsPage,
 });
 
-type Tab = "years" | "grades" | "categories" | "sources" | "team";
+type Tab = "years" | "grades" | "categories" | "sources" | "team" | "license";
 
 // ─── Source config (matches rest of app) ──────────────────────────────────
 
@@ -114,6 +115,7 @@ function SettingsPage() {
     { key: "categories", label: "קטגוריות תקציב" },
     { key: "sources",    label: "מקורות תקציב" },
     { key: "team",       label: "צוות" },
+    { key: "license",    label: "רישיון" },
   ];
 
   return (
@@ -174,6 +176,7 @@ function SettingsPage() {
       {tab === "categories" && <CategoriesTab />}
       {tab === "sources"    && <SourcesTab />}
       {tab === "team"       && <TeamTab />}
+      {tab === "license"    && <LicenseTab />}
     </div>
   );
 }
@@ -1157,5 +1160,124 @@ function Row({ children }: { children: React.ReactNode }) {
 
 function Loader() {
   return <div style={{ color: "var(--hk-ink-3)", padding: "24px", fontSize: "14px" }}>טוען...</div>;
+}
+
+// ─── License tab ──────────────────────────────────────────────────────────────
+
+function LicenseTab() {
+  const { data: membership } = useOrganization();
+  const org = membership?.organization;
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const expiresAt = org?.plan_expires_at ? new Date(org.plan_expires_at) : null;
+  const isActive = expiresAt ? expiresAt > new Date() : false;
+  const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / 86400000) : 0;
+
+  const handleRedeem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = code.trim().toUpperCase();
+    if (!trimmed) return;
+    setLoading(true);
+    setErrMsg(null);
+    setSuccess(null);
+    try {
+      const { data, error } = await supabase.rpc("redeem_license_code", { p_code: trimmed });
+      if (error) throw error;
+      const result = data as { success?: boolean; message?: string; expires_at?: string };
+      if (result?.success === false) {
+        setErrMsg(result.message ?? "קוד לא תקין");
+      } else {
+        setSuccess(result.message ?? "הרישיון הופעל בהצלחה!");
+        setCode("");
+        toast.success("הרישיון הופעל בהצלחה");
+      }
+    } catch (err) {
+      setErrMsg(err instanceof Error ? err.message : "שגיאה בהפעלת הקוד");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputSt: React.CSSProperties = {
+    flex: 1, padding: "10px 14px",
+    border: "1.5px solid #E8E2D9", borderRadius: "10px",
+    fontSize: "15px", fontFamily: "monospace",
+    direction: "ltr", textAlign: "center", letterSpacing: "0.15em",
+    outline: "none", textTransform: "uppercase",
+  };
+
+  return (
+    <div style={{ maxWidth: "560px", display: "flex", flexDirection: "column", gap: "20px" }}>
+      {/* Current status */}
+      <div style={{
+        background: isActive ? "linear-gradient(135deg, #1A3D2B, #0F2419)" : "#F5F3F0",
+        borderRadius: "14px", padding: "20px 24px",
+        border: isActive ? "none" : "1px solid #E8E2D9",
+      }}>
+        <div style={{ fontSize: "12px", color: isActive ? "rgba(255,255,255,0.5)" : "#AAA099", marginBottom: "4px", letterSpacing: "0.05em" }}>
+          מצב רישיון
+        </div>
+        <div style={{ fontSize: "20px", fontWeight: "600", color: isActive ? "#fff" : "#1A1A1A" }}>
+          {isActive ? "פעיל" : "לא פעיל"}
+        </div>
+        {expiresAt && (
+          <div style={{ marginTop: "6px", fontSize: "13px", color: isActive ? "rgba(255,255,255,0.6)" : "#888" }}>
+            {isActive
+              ? `תוקף עד ${expiresAt.toLocaleDateString("he-IL")} · עוד ${daysLeft} ימים`
+              : `פג תוקף ב-${expiresAt.toLocaleDateString("he-IL")}`}
+          </div>
+        )}
+        {!expiresAt && (
+          <div style={{ marginTop: "6px", fontSize: "13px", color: "#AAA099" }}>לא הוזן קוד רישיון</div>
+        )}
+      </div>
+
+      {/* Redeem form */}
+      <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", padding: "24px" }}>
+        <div style={{ fontSize: "16px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>הפעלת קוד רישיון</div>
+        <div style={{ fontSize: "13px", color: "#888079", marginBottom: "18px" }}>
+          הכנס את הקוד שקיבלת מהכרם להפעלת המנוי
+        </div>
+        <form onSubmit={handleRedeem} style={{ display: "flex", gap: "10px" }}>
+          <input
+            type="text"
+            value={code}
+            onChange={(e) => { setCode(e.target.value.toUpperCase()); setErrMsg(null); setSuccess(null); }}
+            placeholder="XXXX-XXXX-XXXX"
+            style={inputSt}
+            maxLength={20}
+            autoComplete="off"
+          />
+          <button
+            type="submit"
+            disabled={loading || !code.trim()}
+            style={{
+              padding: "10px 20px", border: "none", borderRadius: "10px",
+              background: code.trim() && !loading ? "linear-gradient(135deg, #2D6644, #1A3D2B)" : "#E8E2D9",
+              color: code.trim() && !loading ? "#fff" : "#AAA099",
+              fontSize: "14px", fontWeight: "500", cursor: code.trim() && !loading ? "pointer" : "not-allowed",
+              fontFamily: "var(--font-sans)", whiteSpace: "nowrap",
+            }}
+          >
+            {loading ? "מפעיל..." : "הפעל"}
+          </button>
+        </form>
+
+        {errMsg && (
+          <div style={{ marginTop: "12px", padding: "10px 14px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "8px", fontSize: "13px", color: "#B91C1C" }}>
+            {errMsg}
+          </div>
+        )}
+        {success && (
+          <div style={{ marginTop: "12px", padding: "10px 14px", background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: "8px", fontSize: "13px", color: "#065F46" }}>
+            ✓ {success}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 

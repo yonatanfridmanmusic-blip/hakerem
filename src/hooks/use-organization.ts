@@ -12,6 +12,7 @@ export interface Organization {
   city: string | null;
   plan: string;
   created_at: string;
+  plan_expires_at?: string | null;
 }
 
 export interface OrgMembership {
@@ -50,7 +51,7 @@ export function useOrganization() {
           role,
           status,
           joined_at,
-          organizations (id, name, city, plan, created_at)
+          organizations (id, name, city, plan, created_at, plan_expires_at)
         `)
         .eq("user_id", session.user.id)
         .eq("status", "active")

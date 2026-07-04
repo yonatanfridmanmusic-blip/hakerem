@@ -362,8 +362,8 @@ function GradeRow({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: `180px repeat(${sections.length}, 1fr) 120px 120px 80px 44px`,
-          padding: "14px 20px", gap: "12px", alignItems: "center",
+          gridTemplateColumns: `180px repeat(${sections.length}, minmax(110px, 1fr)) 120px 120px 80px 44px`,
+          padding: "12px 20px", gap: "8px", alignItems: "center",
           borderBottom: "1px solid #F3EEE8",
           transition: "background 0.1s",
           cursor: "pointer",
@@ -704,40 +704,104 @@ export default function HorimPage() {
           <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>טוען...</div>
         ) : (
           <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
-            {/* Table header */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: `180px repeat(${sections.length}, 1fr) 120px 120px 80px 44px`,
-              padding: "12px 20px", borderBottom: "1px solid #EAE5DE",
-              fontSize: "11px", fontWeight: "600", color: "#AAA099",
-              letterSpacing: "0.04em", textTransform: "uppercase", gap: "12px",
-            }}>
-              <span>שכבה</span>
-              {sections.map((s) => <span key={s.id}>{s.name}</span>)}
-              <span>יעד</span>
-              <span>נגבה</span>
-              <span>ניצול</span>
-              <span />
-            </div>
+            {/* Horizontal scroll wrapper */}
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: `${180 + sections.length * 120 + 120 + 120 + 80 + 44}px` }}>
+                {/* Table header */}
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: `180px repeat(${sections.length}, minmax(110px, 1fr)) 120px 120px 80px 44px`,
+                  padding: "10px 20px", borderBottom: "1px solid #EAE5DE",
+                  fontSize: "11px", fontWeight: "600", color: "#AAA099",
+                  letterSpacing: "0.04em", gap: "8px", background: "#FAFAF8",
+                }}>
+                  <span>שכבה</span>
+                  {sections.map((s) => (
+                    <span key={s.id} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.name}>
+                      {s.name}
+                    </span>
+                  ))}
+                  <span>יעד ({basis}%)</span>
+                  <span>נגבה</span>
+                  <span>%</span>
+                  <span />
+                </div>
 
-            {/* Grade rows */}
-            {grades.length === 0 ? (
-              <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>אין שכבות מוגדרות</div>
-            ) : (
-              grades.map((g) => (
-                <GradeRow
-                  key={g.id}
-                  grade={g}
-                  sections={sections}
-                  gsaMap={gsaMap}
-                  collectionsMap={collectionsMap}
-                  onAddCollection={openAddCollection}
-                  multiplier={multiplier}
-                />
-              ))
-            )}
+                {/* Grade rows */}
+                {grades.length === 0 ? (
+                  <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>אין שכבות מוגדרות</div>
+                ) : (
+                  grades.map((g) => (
+                    <GradeRow
+                      key={g.id}
+                      grade={g}
+                      sections={sections}
+                      gsaMap={gsaMap}
+                      collectionsMap={collectionsMap}
+                      onAddCollection={openAddCollection}
+                      multiplier={multiplier}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         )}
+
+        {/* Per-section summary cards */}
+        {!isLoading && sections.length > 0 && grades.length > 0 && (() => {
+          const sectionCards = sections.map((s) => {
+            let total100 = 0;
+            let collected = 0;
+            grades.forEach((g) => {
+              const key = `${g.id}:${s.id}`;
+              const gsa = gsaMap.get(key);
+              if (gsa) total100 += gsa.amount_per_student * g.student_count;
+              collected += collectionsMap.get(key) ?? 0;
+            });
+            const total85 = total100 * 0.85;
+            const pct = total85 > 0 ? Math.round((collected / total85) * 100) : 0;
+            return { section: s, total100, total85, collected, pct };
+          }).filter(c => c.total100 > 0);
+          if (sectionCards.length === 0) return null;
+          return (
+            <div>
+              <div style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "10px" }}>
+                סיכום לפי סעיף
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "10px" }}>
+                {sectionCards.map(({ section: s, total100, total85, collected, pct }) => (
+                  <div key={s.id} style={{
+                    background: "#fff", border: "1px solid #EAE5DE", borderRadius: "12px",
+                    padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px",
+                  }}>
+                    <div style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                        <span style={{ color: "#AAA099" }}>85% גבייה</span>
+                        <span className="num" style={{ color: "#8B2F6E", fontWeight: "500" }}>{fmt(total85)}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                        <span style={{ color: "#AAA099" }}>100% גבייה</span>
+                        <span className="num" style={{ color: "#1A1A1A", fontWeight: "500" }}>{fmt(total100)}</span>
+                      </div>
+                      <div style={{ height: "1px", background: "#F0EBE4", margin: "2px 0" }} />
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                        <span style={{ color: "#AAA099" }}>נגבה בפועל</span>
+                        <span className="num" style={{ color: collected > 0 ? "#2D6644" : "#AAA099", fontWeight: "600" }}>{fmt(collected)}</span>
+                      </div>
+                    </div>
+                    {/* Progress bar */}
+                    <div style={{ height: "4px", background: "#F0EBE4", borderRadius: "2px", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${Math.min(pct, 100)}%`, background: pct >= 85 ? "#2D6644" : "#8B2F6E", borderRadius: "2px", transition: "width 0.4s" }} />
+                    </div>
+                    <div style={{ fontSize: "10px", color: "#AAA099", textAlign: "left" }}>{pct}% נגבה מיעד 85%</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Help text */}
         {!isLoading && grades.length > 0 && (
