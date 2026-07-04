@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { useDashboardSummary, type DashboardSummary } from "@/hooks/use-dashboard-summary";
 import { useOrgBudgetSources, FALLBACK_SOURCES } from "@/hooks/use-budget-sources";
 import {
@@ -269,7 +270,7 @@ function openPrint(html: string) {
   const win = window.open("", "_blank", "width=1040,height=820,menubar=no,toolbar=no,scrollbars=yes");
   if (!win) {
     // Popup was blocked — fall back to current-page print with a warning
-    alert("הדפדפן חסם את חלון הדוח.\nאנא אפשר חלונות קופצים לאתר זה ונסה שוב.");
+    toast.error("הדפדפן חסם את חלון הדוח — אנא אפשר חלונות קופצים לאתר זה ונסה שוב.");
     return;
   }
   win.document.open();

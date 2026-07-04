@@ -24,7 +24,7 @@ export function useGrades(yearId?: string | null) {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: yearId !== undefined,
+    enabled: yearId !== null,  // null = explicitly disabled; undefined = use active year
     staleTime: 1000 * 60 * 5,
   });
 }

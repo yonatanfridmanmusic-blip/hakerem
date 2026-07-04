@@ -1,4 +1,5 @@
 import { getActiveYearId } from "@/lib/active-year";
+import { useGrades as _useGradesCanonical } from "@/hooks/use-grades";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -43,22 +44,9 @@ export interface ParentCollection {
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
+// Delegates to the canonical useGrades hook (use-grades.ts) using active year
 export function useGrades() {
-  return useQuery<Grade[]>({
-    queryKey: ["grades"],
-    queryFn: async () => {
-      const yearId = await getActiveYearId();
-      if (!yearId) return [];
-      const { data, error } = await supabase
-        .from("grades")
-        .select("id, name, student_count, order_index")
-        .eq("school_year_id", yearId)
-        .order("order_index");
-      if (error) throw error;
-      return data ?? [];
-    },
-    staleTime: 1000 * 60 * 5,
-  });
+  return _useGradesCanonical(undefined);
 }
 
 export function useParentSections() {

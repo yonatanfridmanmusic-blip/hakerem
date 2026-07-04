@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { getActiveYearId } from "@/lib/active-year";
 import type { BudgetSource } from "@/types/budget";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -70,8 +69,26 @@ export function usePeriodicReport(from: string | null, to: string | null) {
     queryFn: async () => {
       if (!from || !to) return null;
 
-      const yearId = await getActiveYearId();
-      if (!yearId) return null;
+      // Single auth round-trip — orgId and yearId both derived here, reused below
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return null;
+      const { data: mem } = await supabase
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", session.user.id)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!mem?.organization_id) return null;
+      const orgId = mem.organization_id;
+
+      const { data: yearRow } = await supabase
+        .from("school_years")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (!yearRow?.id) return null;
+      const yearId = yearRow.id;
 
       const [expRes, incRes, colRes] = await Promise.all([
         supabase
@@ -103,16 +120,12 @@ export function usePeriodicReport(from: string | null, to: string | null) {
 
       const parentCollTotal = collections.reduce((s, c) => s + Number(c.amount), 0);
 
-      // Resolve org sources dynamically (same pattern as useDashboardSummary)
-      const { data: { session: sess2 } } = await supabase.auth.getSession();
-      const { data: mem2 } = sess2
-        ? await supabase.from("organization_members").select("organization_id")
-            .eq("user_id", sess2.user.id).eq("status", "active").maybeSingle()
-        : { data: null };
-      const { data: orgSrcRows } = mem2?.organization_id
-        ? await supabase.from("org_budget_sources").select("slug, label")
-            .eq("org_id", mem2.organization_id).order("order_index")
-        : { data: null };
+      // Resolve org sources — reuse orgId, no second auth call needed
+      const { data: orgSrcRows } = await supabase
+        .from("org_budget_sources")
+        .select("slug, label")
+        .eq("org_id", orgId)
+        .order("order_index");
       const allOrgSources: { slug: string; label: string }[] = orgSrcRows?.length
         ? orgSrcRows
         : [{ slug: "gefen", label: "גפן" }, { slug: "iriyah", label: "עירייה" }, { slug: "horim", label: "הורים" }];

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowDownLeft, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDashboardSummary, type SourceSummary } from "@/hooks/use-dashboard-summary";
 import { useOrganization } from "@/hooks/use-organization";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
@@ -403,6 +404,17 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
     });
   }, []);
 
+  // ── Mutation hook wrapping direct Supabase helper ─────────────────────────
+  const queryClient = useQueryClient();
+  const horimAmountMutation = useMutation({
+    mutationFn: ({ yearId: yId, gradeId, amount, sectionName }: { yearId: string; gradeId: string; amount: number; sectionName: string }) =>
+      setGradeHorimAmount(yId, gradeId, amount, sectionName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grade-section-amounts"] });
+      queryClient.invalidateQueries({ queryKey: ["horim"] });
+    },
+  });
+
   // ── Step handlers ─────────────────────────────────────────────────────────
 
   const handleCreateYear = async () => {
@@ -436,7 +448,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
       savingCellRef.current = false;
       return;
     }
-    try { await setGradeHorimAmount(yearId, gradeId, n, sectionName); }
+    try { await horimAmountMutation.mutateAsync({ yearId, gradeId, amount: n, sectionName }); }
     catch { /* non-blocking */ }
     setEditingCell(null);
     savingCellRef.current = false;
@@ -465,6 +477,9 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   const STEP_LABELS = ["שנת לימודים","שכבות","קטגוריות","סיום"];
   const progress = [0,1,2,3].indexOf(step);
   const pct = ((progress) / 3) * 100;
+  // On the "done" step (3), all dots should show as completed (green check)
+  const dotDone = (i: number) => step === 3 || i < progress;
+  const dotActive = (i: number) => step !== 3 && i === progress;
 
   const inputSt: React.CSSProperties = {
     width: "100%", padding: "10px 13px", border: "1.5px solid #E8E2D9",
@@ -517,18 +532,18 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                 <div key={label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
                   <div style={{
                     width: "28px", height: "28px", borderRadius: "50%",
-                    background: i < progress ? "#4DC483" : i === progress ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.15)",
+                    background: dotDone(i) ? "#4DC483" : dotActive(i) ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.15)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     transition: "all 0.4s",
-                    boxShadow: i === progress ? "0 0 0 3px rgba(255,255,255,0.25)" : "none",
+                    boxShadow: dotActive(i) ? "0 0 0 3px rgba(255,255,255,0.25)" : "none",
                   }}>
-                    {i < progress ? (
+                    {dotDone(i) ? (
                       <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#1A3D2B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     ) : (
-                      <span style={{ fontSize: "11px", fontWeight: "600", color: i === progress ? "#1A3D2B" : "rgba(255,255,255,0.5)" }}>{i + 1}</span>
+                      <span style={{ fontSize: "11px", fontWeight: "600", color: dotActive(i) ? "#1A3D2B" : "rgba(255,255,255,0.5)" }}>{i + 1}</span>
                     )}
                   </div>
-                  <span style={{ fontSize: "10px", color: i <= progress ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.35)", whiteSpace: "nowrap" }}>{label}</span>
+                  <span style={{ fontSize: "10px", color: (dotDone(i) || i <= progress) ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.35)", whiteSpace: "nowrap" }}>{label}</span>
                 </div>
               ))}
             </div>

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/expired")({
@@ -62,10 +62,18 @@ function ExpiredPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const lastAttemptRef = useRef<number>(0);
+  const RATE_LIMIT_MS = 3000;
 
   const handleRedeem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim()) return;
+    const now = Date.now();
+    if (now - lastAttemptRef.current < RATE_LIMIT_MS) {
+      setError("אנא המתן מספר שניות בין ניסיון לניסיון");
+      return;
+    }
+    lastAttemptRef.current = now;
     setLoading(true);
     setError(null);
 

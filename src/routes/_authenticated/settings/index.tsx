@@ -347,6 +347,7 @@ function GradesTab() {
   const [count, setCount]         = useState("0");
   const [editId, setEditId]       = useState<string | null>(null);
   const [editVals, setEditVals]   = useState({ name: "", count: "0" });
+  const [confirmDeleteGradeId, setConfirmDeleteGradeId] = useState<string | null>(null);
 
   const GRADE_LETTERS = ["א", "ב", "ג", "ד", "ה", "ו", "ז", "ח"];
   const resolvedName = customName.trim() || (selectedLetter ? `שכבה ${selectedLetter}'` : "");
@@ -408,7 +409,23 @@ function GradesTab() {
               </div>
               <Row>
                 <button type="button" style={btnOutline} onClick={() => { setEditId(g.id); setEditVals({ name: g.name, count: String(g.student_count) }); }}>ערוך</button>
-                <button type="button" style={btnDanger} onClick={() => { if (window.confirm(`למחוק את שכבה "${g.name}"? פעולה זו תמחק גם את כל הכיתות ונתוני הגבייה של שכבה זו.`)) deleteGrade.mutate(g.id); }}>מחק</button>
+                {confirmDeleteGradeId === g.id ? (
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "5px 10px" }}>
+                    <span style={{ fontSize: "12px", color: "#991B1B" }}>למחוק את "{g.name}"?</span>
+                    <button type="button"
+                      onClick={async () => { await deleteGrade.mutateAsync(g.id); setConfirmDeleteGradeId(null); }}
+                      disabled={deleteGrade.isPending}
+                      style={{ padding: "3px 10px", borderRadius: "6px", border: "none", background: "#B91C1C", color: "#fff", fontSize: "11px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                      {deleteGrade.isPending ? "..." : "מחק"}
+                    </button>
+                    <button type="button" onClick={() => setConfirmDeleteGradeId(null)}
+                      style={{ padding: "3px 8px", borderRadius: "6px", border: "1px solid #E8E2D9", background: "#fff", fontSize: "11px", fontFamily: "Rubik, sans-serif", cursor: "pointer", color: "#888" }}>
+                      בטל
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" style={btnDanger} onClick={() => setConfirmDeleteGradeId(g.id)}>מחק</button>
+                )}
               </Row>
             </div>
           )}
