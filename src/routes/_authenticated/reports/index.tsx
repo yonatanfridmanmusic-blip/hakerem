@@ -142,10 +142,21 @@ const PRINT_CSS = `
   .divider { border:none; border-top:1px solid #EEE9E2; margin:18px 0; }
   .footer { margin-top:24px; padding-top:10px; border-top:1px solid #E8EDE9; font-size:9px; color:#B0BAB4; text-align:center; }
 
+  /* ── Section page breaks (print only) ── */
+  .section-break { break-before: page; page-break-before: always; }
+
   @media print {
-    @page { margin:12mm 14mm; size:A4; }
+    @page { margin:15mm 18mm; size:A4; }
     body { font-size:11px; }
     .kpi-value { font-size:15px; }
+    /* Cover page: header fills the first page */
+    .page-header {
+      min-height: 220mm;
+      justify-content: center;
+      break-after: page;
+      page-break-after: always;
+    }
+    .section-break { padding-top: 8px; }
   }
 `;
 
@@ -181,9 +192,9 @@ function buildAnnualHTML(
       const barColor = pct > 100 ? "#C0392B" : pct > 80 ? "#E67E22" : cfg.color;
       return `<tr><td>${c.name}</td><td class="l">${fmt(c.planned)}</td><td class="l rust">${fmt(c.spent)}</td><td class="l" style="font-weight:700;color:${c.remaining >= 0 ? "#2D6644" : "#B5472A"}">${fmt(c.remaining)}</td><td class="l" style="min-width:100px"><div class="bar-label">${pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(pct, 100)}%;background:${barColor}"></div></div></td></tr>`;
     }).join("");
-    return `<h2 style="border-right:4px solid ${cfg.color};padding-right:10px;margin-top:22px">${cfg.label} — פירוט קטגוריות</h2>
+    return `<div class="section-break"><h2 style="border-right:4px solid ${cfg.color};padding-right:10px">${cfg.label} — פירוט קטגוריות</h2>
     <table><thead><tr><th>קטגוריה</th><th class="l">תוכנן</th><th class="l">הוצאות</th><th class="l">נותר</th><th class="l">ניצול</th></tr></thead>
-    <tbody>${catRows}</tbody></table>`;
+    <tbody>${catRows}</tbody></table></div>`;
   }).join("");
 
   // Horim: per-section then per-grade breakdown
@@ -208,9 +219,9 @@ function buildAnnualHTML(
       `<tr><td style="font-weight:600">${r.g.name}</td><td class="l" style="color:#6B7A72">${r.g.student_count}</td><td class="l">${fmt(r.t100)}</td><td class="l" style="color:#8B2F6E">${fmt(r.t85)}</td><td class="l green" style="font-weight:600">${fmt(r.coll)}</td><td class="l" style="font-weight:700;color:${r.rem <= 0 ? "#2D6644" : "#B5472A"}">${r.rem <= 0 ? '<span class="done-badge">✓ הושלם</span>' : fmt(r.rem)}</td><td class="l" style="min-width:90px"><div class="bar-label">${r.pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(r.pct, 100)}%;background:#8B2F6E"></div></div></td></tr>`
     ).join("");
     const footRow = gradeData.length > 1 ? `<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${gradeData.reduce((s,r)=>s+r.g.student_count,0)}</td><td class="l">${fmt(totT100)}</td><td class="l" style="color:#8B2F6E">${fmt(totT85)}</td><td class="l green">${fmt(totColl)}</td><td class="l" style="color:${totRem<=0?"#2D6644":"#B5472A"}">${totRem<=0?'<span class="done-badge">✓</span>':fmt(totRem)}</td><td class="l"><div class="bar-label">${totPct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totPct,100)}%;background:#8B2F6E"></div></div></td></tr>` : "";
-    return `<h2 style="border-right:4px solid #8B2F6E;padding-right:10px;margin-top:22px">הורים · ${sec.name} — פירוט לפי שכבה</h2>
+    return `<div class="section-break"><h2 style="border-right:4px solid #8B2F6E;padding-right:10px">הורים · ${sec.name} — פירוט לפי שכבה</h2>
     <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה</th><th class="l">נותר</th><th class="l">התקדמות</th></tr></thead>
-    <tbody>${gradeRowsHtml}${footRow}</tbody></table>`;
+    <tbody>${gradeRowsHtml}${footRow}</tbody></table></div>`;
   }).join("");
 
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח שנתי – ${yearName}</title><style>${PRINT_CSS}</style></head><body>
@@ -322,9 +333,9 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
         `<tr><td style="font-weight:600">${r.g.name}</td><td class="l" style="color:#6B7A72">${r.g.student_count}</td><td class="l">${fmt(r.t100)}</td><td class="l" style="color:#8B2F6E">${fmt(r.t85)}</td><td class="l green" style="font-weight:600">${fmt(r.coll)}</td><td class="l" style="font-weight:700;color:${r.rem <= 0 ? "#2D6644" : "#B5472A"}">${r.rem <= 0 ? '<span class="done-badge">✓ הושלם</span>' : fmt(r.rem)}</td><td class="l" style="min-width:90px"><div class="bar-label">${r.pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(r.pct, 100)}%;background:#8B2F6E"></div></div></td></tr>`
       ).join("");
       const footRow = gradeData.length > 1 ? `<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${gradeData.reduce((s,r)=>s+r.g.student_count,0)}</td><td class="l">${fmt(totT100)}</td><td class="l" style="color:#8B2F6E">${fmt(totT85)}</td><td class="l green">${fmt(totColl)}</td><td class="l" style="color:${totRem<=0?"#2D6644":"#B5472A"}">${totRem<=0?'<span class="done-badge">✓</span>':fmt(totRem)}</td><td class="l"><div class="bar-label">${totPct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totPct,100)}%;background:#8B2F6E"></div></div></td></tr>` : "";
-      return `<h2 style="border-right:4px solid #8B2F6E;padding-right:10px;margin-top:22px">${sec.name} — פירוט לפי שכבה</h2>
+      return `<div class="section-break"><h2 style="border-right:4px solid #8B2F6E;padding-right:10px">${sec.name} — פירוט לפי שכבה</h2>
     <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה</th><th class="l">נותר</th><th class="l">התקדמות</th></tr></thead>
-    <tbody>${gradeRows}${footRow}</tbody></table>`;
+    <tbody>${gradeRows}${footRow}</tbody></table></div>`;
     }).join("")}
     <h2>פירוט לפי שכבה</h2>
     <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד</th><th class="l">נגבה</th><th class="l">טרם נגבה</th><th class="l">התקדמות</th></tr></thead>
@@ -373,9 +384,9 @@ function buildPeriodicHTML(
         <td class="l" style="min-width:100px"><div class="bar-label">${pctYtd}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(pctYtd, 100)}%;background:${barColor}"></div></div></td>
       </tr>`;
     }).join("");
-    return `<h2 style="border-right:4px solid ${cfg.color};padding-right:10px;margin-top:22px">${cfg.label} — פירוט קטגוריות</h2>
+    return `<div class="section-break"><h2 style="border-right:4px solid ${cfg.color};padding-right:10px">${cfg.label} — פירוט קטגוריות</h2>
     <table><thead><tr><th>קטגוריה</th><th class="l">הוצאה בתקופה</th><th class="l">הוצאה מצטברת</th><th class="l">תוכנן שנתי</th><th class="l">נותר שנתי</th><th class="l">ניצול</th></tr></thead>
-    <tbody>${catRows}</tbody></table>`;
+    <tbody>${catRows}</tbody></table></div>`;
   }).join("");
 
   // Horim: period-filtered collections per section per grade
@@ -407,9 +418,9 @@ function buildPeriodicHTML(
     const footRow   = gradeData.length > 1
       ? `<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${gradeData.reduce((s,r)=>s+r.g.student_count,0)}</td><td class="l">${fmt(gradeData.reduce((s,r)=>s+r.t100,0))}</td><td class="l" style="color:#8B2F6E">${fmt(totT85)}</td><td class="l green">${fmt(totPeriod)}</td><td class="l green">${fmt(totYtd)}</td><td class="l"><div class="bar-label">${totPct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totPct,100)}%;background:#8B2F6E"></div></div></td></tr>`
       : "";
-    return `<h2 style="border-right:4px solid #8B2F6E;padding-right:10px;margin-top:22px">הורים · ${sec.name} — גבייה בתקופה</h2>
+    return `<div class="section-break"><h2 style="border-right:4px solid #8B2F6E;padding-right:10px">הורים · ${sec.name} — גבייה בתקופה</h2>
     <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה בתקופה</th><th class="l">נגבה מצטבר</th><th class="l">התקדמות</th></tr></thead>
-    <tbody>${gradeRowsHtml}${footRow}</tbody></table>`;
+    <tbody>${gradeRowsHtml}${footRow}</tbody></table></div>`;
   }).join("");
 
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>דוח תקופתי – ${periodLabel}</title><style>${PRINT_CSS}</style></head><body>

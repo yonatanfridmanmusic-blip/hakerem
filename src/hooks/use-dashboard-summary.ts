@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getViewAsOrg } from "@/lib/view-as";
 
 export interface SourceSummary {
   source: string;
@@ -24,8 +25,10 @@ export interface DashboardSummary {
 }
 
 export function useDashboardSummary() {
+  const viewAsOrgId = getViewAsOrg()?.orgId ?? null;
+
   return useQuery<DashboardSummary>({
-    queryKey: ["dashboard", "summary"],
+    queryKey: ["dashboard", "summary", viewAsOrgId],
     queryFn: async () => {
       const empty: DashboardSummary = {
         schoolYear: null,
@@ -34,18 +37,22 @@ export function useDashboardSummary() {
         incomeTotals: { fromIncome: 0, fromParentCollections: 0, grand: 0 },
       };
 
-      // 0. Resolve current user's org (explicit filter — super_admin sees all orgs otherwise)
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return empty;
-      const { data: mem } = await supabase
-        .from("organization_members")
-        .select("organization_id")
-        .eq("user_id", session.user.id)
-        .eq("status", "active")
-        .maybeSingle();
-      if (!mem?.organization_id) return empty;
-
-      const orgId = mem.organization_id;
+      // 0. Resolve org — super_admin "View As" override takes priority
+      let orgId: string;
+      if (viewAsOrgId) {
+        orgId = viewAsOrgId;
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return empty;
+        const { data: mem } = await supabase
+          .from("organization_members")
+          .select("organization_id")
+          .eq("user_id", session.user.id)
+          .eq("status", "active")
+          .maybeSingle();
+        if (!mem?.organization_id) return empty;
+        orgId = mem.organization_id;
+      }
 
       // 1. Active school year (filtered to this org)
       const { data: yearData, error: yearError } = await supabase

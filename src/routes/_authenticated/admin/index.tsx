@@ -741,7 +741,7 @@ function OrgCard({ org, expanded, isDuplicate, onToggle, onGenerateCode, onDeepD
 
           <button type="button" onClick={(e) => { e.stopPropagation(); setViewAsOrg(org.id, org.name, org.city); window.open("/dashboard", "_blank"); }}
             style={{ background: "linear-gradient(135deg, #7C2D12, #B45309)", color: "#fff", border: "none", borderRadius: "8px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "Rubik, sans-serif", whiteSpace: "nowrap" as const, display: "flex", alignItems: "center", gap: "5px" }}>
-            👁 צפה כ...
+            👁 צפה
           </button>
 
           <button type="button" onClick={(e) => { e.stopPropagation(); onGenerateCode(); }}
