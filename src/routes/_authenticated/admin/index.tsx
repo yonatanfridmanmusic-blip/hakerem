@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { setViewAsOrg } from "@/lib/view-as";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
   ssr: false,
@@ -492,7 +493,8 @@ function useDeleteOrg() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (orgId: string) => {
-      const { error } = await supabase.from("organizations").delete().eq("id", orgId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.rpc as any)("admin_delete_org", { p_org_id: orgId });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-orgs"] }),
@@ -526,37 +528,116 @@ const DIAG_CFG = {
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
+type SortFilter = "all" | "active" | "trial" | "expired" | "free";
+
+function getOrgCategory(org: OrgRow): SortFilter {
+  if (!org.plan_expires_at) return "free";
+  const diff = Math.ceil((new Date(org.plan_expires_at).getTime() - Date.now()) / 86400000);
+  if (diff < 0) return "expired";
+  if (diff <= 30) return "trial";
+  return "active";
+}
+
 function AdminPage() {
   const { data: orgs = [], isLoading } = useAllOrgs();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId]     = useState<string | null>(null);
   const [codeModalOrg, setCodeModalOrg] = useState<OrgRow | null>(null);
-  const [deepDiveOrg, setDeepDiveOrg] = useState<OrgRow | null>(null);
+  const [deepDiveOrg, setDeepDiveOrg]   = useState<OrgRow | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<OrgRow | null>(null);
+  const [searchTerm, setSearchTerm]     = useState("");
+  const [sortFilter, setSortFilter]     = useState<SortFilter>("all");
+  const [deleteErr, setDeleteErr]       = useState<string | null>(null);
   const pauseSub = usePauseSubscription();
   const deleteOrg = useDeleteOrg();
   const toggle = (id: string) => setExpandedId((prev) => (prev === id ? null : id));
 
+  // Stats
+  const stats: Record<string, number> = { active: 0, trial: 0, expired: 0, free: 0 };
+  for (const o of orgs) { const cat = getOrgCategory(o); stats[cat] = (stats[cat] ?? 0) + 1; }
+
+  // Duplicate detection — names that appear more than once
+  const nameCounts: Record<string, number> = {};
+  for (const o of orgs) {
+    const key = o.name.trim().toLowerCase();
+    nameCounts[key] = (nameCounts[key] ?? 0) + 1;
+  }
+  const duplicateNames = new Set(Object.keys(nameCounts).filter((k) => nameCounts[k] > 1));
+
+  // Filter + search
+  const filteredOrgs = orgs.filter((o) => {
+    const matchSearch = !searchTerm ||
+      o.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (o.city ?? "").toLowerCase().includes(searchTerm.toLowerCase());
+    const matchFilter = sortFilter === "all" || getOrgCategory(o) === sortFilter;
+    return matchSearch && matchFilter;
+  });
+
+  const FILTER_TABS: { key: SortFilter; label: string; color: string; count: number }[] = [
+    { key: "all",     label: "הכל",         color: "#374151", count: orgs.length },
+    { key: "active",  label: "מנוי פעיל",   color: "#166534", count: stats.active  },
+    { key: "trial",   label: "עומד לפוג",   color: "#92400E", count: stats.trial   },
+    { key: "expired", label: "פג תוקף",     color: "#991B1B", count: stats.expired },
+    { key: "free",    label: "חינמי",        color: "#1D4ED8", count: stats.free    },
+  ];
+
   return (
     <div>
       {/* Hero */}
-      <div style={{ background: "linear-gradient(160deg, #0F172A 0%, #1E293B 100%)", borderRadius: "20px", padding: "28px 32px", marginBottom: "28px", boxShadow: "0 8px 32px rgba(15,23,42,0.4)", display: "flex", alignItems: "center", gap: "16px" }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", letterSpacing: "0.1em", marginBottom: "4px" }}>SUPER ADMIN</div>
-          <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, color: "#fff" }}>לוח בקרה — כל בתי הספר</h1>
-          <div style={{ marginTop: "6px", fontSize: "13px", color: "rgba(255,255,255,0.45)" }}>{orgs.length} ארגונים רשומים</div>
+      <div style={{ background: "linear-gradient(160deg, #0F172A 0%, #1E293B 100%)", borderRadius: "20px", padding: "28px 32px", marginBottom: "20px", boxShadow: "0 8px 32px rgba(15,23,42,0.4)" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "16px", marginBottom: "20px" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", letterSpacing: "0.1em", marginBottom: "4px" }}>SUPER ADMIN</div>
+            <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, color: "#fff" }}>לוח בקרה — כל בתי הספר</h1>
+            <div style={{ marginTop: "6px", fontSize: "13px", color: "rgba(255,255,255,0.45)" }}>{orgs.length} ארגונים רשומים</div>
+          </div>
+          {/* Stat chips */}
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" as const }}>
+            {[
+              { label: "פעיל", val: stats.active,  bg: "#166534", fg: "#BBF7D0" },
+              { label: "עומד לפוג", val: stats.trial,  bg: "#92400E", fg: "#FDE68A" },
+              { label: "פג",   val: stats.expired, bg: "#991B1B", fg: "#FCA5A5" },
+              { label: "חינמי",val: stats.free,    bg: "#1D4ED8", fg: "#BFDBFE" },
+            ].map(s => (
+              <div key={s.label} style={{ background: "rgba(255,255,255,0.1)", borderRadius: "10px", padding: "8px 14px", textAlign: "center" as const }}>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: s.fg }}>{s.val}</div>
+                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.45)", marginTop: "1px" }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px 20px", textAlign: "center" }}>
-          <div style={{ fontSize: "28px", fontWeight: 700, color: "#fff" }}>{orgs.length}</div>
-          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.45)", marginTop: "2px" }}>ארגונים</div>
-        </div>
+        {/* Search */}
+        <input
+          type="text"
+          placeholder="🔍 חיפוש לפי שם בית ספר או עיר..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ width: "100%", boxSizing: "border-box" as const, padding: "11px 16px", borderRadius: "10px", border: "none", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: "14px", fontFamily: "Rubik, sans-serif", outline: "none", direction: "rtl" }}
+        />
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap" as const }}>
+        {FILTER_TABS.map(tab => (
+          <button key={tab.key} onClick={() => setSortFilter(tab.key)}
+            style={{ padding: "7px 14px", borderRadius: "20px", border: sortFilter === tab.key ? "none" : "1.5px solid #E5E7EB", background: sortFilter === tab.key ? tab.color : "#fff", color: sortFilter === tab.key ? "#fff" : tab.color, fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "Rubik, sans-serif", display: "flex", alignItems: "center", gap: "5px" }}>
+            {tab.label}
+            <span style={{ background: sortFilter === tab.key ? "rgba(255,255,255,0.25)" : "#F3F4F6", color: sortFilter === tab.key ? "#fff" : "#6B7280", borderRadius: "10px", padding: "1px 7px", fontSize: "11px" }}>{tab.count}</span>
+          </button>
+        ))}
+        {duplicateNames.size > 0 && (
+          <div style={{ marginRight: "auto", padding: "7px 14px", borderRadius: "20px", background: "#FEF3C7", border: "1px solid #FDE68A", color: "#92400E", fontSize: "12px", fontWeight: 600 }}>
+            ⚠️ {duplicateNames.size} שמות כפולים זוהו
+          </div>
+        )}
       </div>
 
       {isLoading && <div style={{ color: "#888", padding: "24px" }}>טוען...</div>}
 
-      {orgs.map((org) => (
+      {filteredOrgs.map((org) => (
         <OrgCard
           key={org.id}
           org={org}
+          isDuplicate={duplicateNames.has(org.name.trim().toLowerCase())}
           expanded={expandedId === org.id}
           onToggle={() => toggle(org.id)}
           onGenerateCode={() => setCodeModalOrg(org)}
@@ -564,12 +645,14 @@ function AdminPage() {
           onPause={() => {
             if (window.confirm(`לעצור את המנוי של "${org.name}"?`)) pauseSub.mutate(org.id);
           }}
-          onDelete={() => setConfirmDelete(org)}
+          onDelete={() => { setDeleteErr(null); setConfirmDelete(org); }}
         />
       ))}
 
-      {!isLoading && orgs.length === 0 && (
-        <div style={{ ...card, textAlign: "center", color: "#888", padding: "48px" }}>אין ארגונים רשומים עדיין</div>
+      {!isLoading && filteredOrgs.length === 0 && (
+        <div style={{ ...card, textAlign: "center", color: "#888", padding: "48px" }}>
+          {searchTerm || sortFilter !== "all" ? "אין תוצאות לחיפוש" : "אין ארגונים רשומים עדיין"}
+        </div>
       )}
 
       {codeModalOrg && <CodeModal org={codeModalOrg} onClose={() => setCodeModalOrg(null)} />}
@@ -577,22 +660,33 @@ function AdminPage() {
 
       {confirmDelete && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}
-          onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
-          <div style={{ background: "#fff", borderRadius: "18px", padding: "32px 28px", maxWidth: "400px", width: "100%", fontFamily: "Rubik, sans-serif", direction: "rtl" }}>
+          onClick={(e) => { if (e.target === e.currentTarget) { setConfirmDelete(null); setDeleteErr(null); } }}>
+          <div style={{ background: "#fff", borderRadius: "18px", padding: "32px 28px", maxWidth: "420px", width: "100%", fontFamily: "Rubik, sans-serif", direction: "rtl" }}>
             <div style={{ fontSize: "20px", fontWeight: 700, color: "#111", marginBottom: "12px" }}>מחיקת ארגון</div>
-            <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "10px", padding: "14px 16px", marginBottom: "20px" }}>
+            <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "10px", padding: "14px 16px", marginBottom: "16px" }}>
               <div style={{ fontWeight: 600, color: "#991B1B", marginBottom: "4px" }}>⚠️ פעולה בלתי הפיכה</div>
               <div style={{ fontSize: "13px", color: "#7F1D1D", lineHeight: 1.6 }}>
-                מחיקת <strong>{confirmDelete.name}</strong> תמחק גם את כל הנתונים שלהם.
+                מחיקת <strong>{confirmDelete.name}</strong> תמחק גם את כל הנתונים שלהם — שנות לימודים, הוצאות, הכנסות, גבייה, וחברי צוות.
               </div>
             </div>
+            {deleteErr && (
+              <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "10px 14px", marginBottom: "16px", fontSize: "13px", color: "#991B1B" }}>
+                שגיאה: {deleteErr}
+              </div>
+            )}
             <div style={{ display: "flex", gap: "10px" }}>
-              <button type="button" onClick={() => setConfirmDelete(null)}
+              <button type="button" onClick={() => { setConfirmDelete(null); setDeleteErr(null); }}
                 style={{ flex: 1, padding: "11px", borderRadius: "9px", border: "1.5px solid #E5E7EB", background: "#fff", color: "#374151", fontSize: "14px", cursor: "pointer", fontFamily: "Rubik, sans-serif" }}>
                 ביטול
               </button>
               <button type="button" disabled={deleteOrg.isPending}
-                onClick={() => deleteOrg.mutate(confirmDelete.id, { onSuccess: () => setConfirmDelete(null) })}
+                onClick={() => {
+                  setDeleteErr(null);
+                  deleteOrg.mutate(confirmDelete.id, {
+                    onSuccess: () => { setConfirmDelete(null); setDeleteErr(null); },
+                    onError: (e) => setDeleteErr(e instanceof Error ? e.message : String(e)),
+                  });
+                }}
                 style={{ flex: 2, padding: "11px", borderRadius: "9px", border: "none", background: "#DC2626", color: "#fff", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "Rubik, sans-serif" }}>
                 {deleteOrg.isPending ? "מוחק..." : `מחק את "${confirmDelete.name}"`}
               </button>
@@ -606,8 +700,8 @@ function AdminPage() {
 
 // ─── Org card ─────────────────────────────────────────────────────────────────
 
-function OrgCard({ org, expanded, onToggle, onGenerateCode, onDeepDive, onPause, onDelete }: {
-  org: OrgRow; expanded: boolean; onToggle: () => void;
+function OrgCard({ org, expanded, isDuplicate, onToggle, onGenerateCode, onDeepDive, onPause, onDelete }: {
+  org: OrgRow; expanded: boolean; isDuplicate?: boolean; onToggle: () => void;
   onGenerateCode: () => void; onDeepDive: () => void;
   onPause: () => void; onDelete: () => void;
 }) {
@@ -627,6 +721,7 @@ function OrgCard({ org, expanded, onToggle, onGenerateCode, onDeepDive, onPause,
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" as const }}>
               <span style={{ fontWeight: 700, fontSize: "15.5px", color: "#111" }}>{org.name}</span>
               {org.plan === "pro" && <span style={chip("#7C3AED", "#EDE9FE")}>PRO</span>}
+              {isDuplicate && <span style={chip("#92400E", "#FEF3C7")}>⚠️ שם כפול</span>}
             </div>
             <div style={{ fontSize: "12.5px", color: "#6B7280", marginTop: "2px" }}>
               {org.city ?? "ללא עיר"}<span style={{ margin: "0 6px", opacity: 0.4 }}>·</span>
@@ -642,6 +737,11 @@ function OrgCard({ org, expanded, onToggle, onGenerateCode, onDeepDive, onPause,
           <button type="button" onClick={(e) => { e.stopPropagation(); onDeepDive(); }}
             style={{ background: "linear-gradient(135deg, #1E293B, #334155)", color: "#fff", border: "none", borderRadius: "8px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "Rubik, sans-serif", whiteSpace: "nowrap" as const, display: "flex", alignItems: "center", gap: "5px" }}>
             🔍 Deep Dive
+          </button>
+
+          <button type="button" onClick={(e) => { e.stopPropagation(); setViewAsOrg(org.id, org.name, org.city); window.open("/dashboard", "_blank"); }}
+            style={{ background: "linear-gradient(135deg, #7C2D12, #B45309)", color: "#fff", border: "none", borderRadius: "8px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "Rubik, sans-serif", whiteSpace: "nowrap" as const, display: "flex", alignItems: "center", gap: "5px" }}>
+            👁 צפה כ...
           </button>
 
           <button type="button" onClick={(e) => { e.stopPropagation(); onGenerateCode(); }}

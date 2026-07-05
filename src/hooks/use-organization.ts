@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getViewAsOrg } from "@/lib/view-as";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,23 @@ export function useOrganization() {
   return useQuery<OrgMembership | null>({
     queryKey: ["organization"],
     queryFn: async () => {
+      // Super-admin "View As" override
+      const viewAs = getViewAsOrg();
+      if (viewAs) {
+        const { data: org } = await supabase
+          .from("organizations")
+          .select("id, name, city, plan, created_at, plan_expires_at")
+          .eq("id", viewAs.orgId)
+          .maybeSingle();
+        if (!org) return null;
+        return {
+          organization: org as Organization,
+          role: "owner" as OrgRole,   // admin sees everything
+          status: "active" as MemberStatus,
+          joined_at: null,
+        };
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return null;
 
