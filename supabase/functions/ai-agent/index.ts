@@ -1,20 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ALLOWED_ORIGINS = ["https://hakerem.app", "https://hakerem.vercel.app", "http://localhost:5173", "http://localhost:3000"];
 const MODEL = "claude-haiku-4-5-20251001";
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
 
-// Returns per-request CORS headers — avoids module-level mutation race conditions
-function makeCors(origin: string): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-  };
-}
-// Module-level cors placeholder; overridden per-request in serve()
-let CORS: Record<string, string> = makeCors("https://hakerem.app");
+// Standard Supabase CORS — function is protected by JWT auth inside the handler
+const CORS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 function json(d: unknown, s = 200) {
   return new Response(JSON.stringify(d), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -496,9 +490,6 @@ async function handleConfirm(
 }
 
 serve(async (req) => {
-  // Set CORS per request (supports localhost in dev + production)
-  const origin = req.headers.get("Origin") ?? "";
-  CORS = makeCors(origin);
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
     const auth = req.headers.get("Authorization");

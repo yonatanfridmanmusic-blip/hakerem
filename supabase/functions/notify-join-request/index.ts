@@ -12,11 +12,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ALLOWED_ORIGINS = ["https://hakerem.app", "https://hakerem.vercel.app", "http://localhost:5173", "http://localhost:3000"];
-let corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "https://hakerem.app",
+// Standard Supabase CORS — function is protected by JWT auth inside the handler
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 function unauth() {
@@ -26,12 +25,6 @@ function unauth() {
 }
 
 serve(async (req) => {
-  const origin = req.headers.get("Origin") ?? "";
-  corsHeaders = {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-  };
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
