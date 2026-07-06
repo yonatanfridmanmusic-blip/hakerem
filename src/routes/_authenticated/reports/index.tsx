@@ -359,11 +359,24 @@ function buildPeriodicHTML(
   periodTo: string | null = null,
 ): string {
   const { sources, totals } = data;
+  // Per-source annual context from categories (aggregate planned + ytd by source)
+  const srcAnnMap: Record<string, { planned: number; ytd: number }> = {};
+  categories.forEach((c) => {
+    if (!srcAnnMap[c.source]) srcAnnMap[c.source] = { planned: 0, ytd: 0 };
+    srcAnnMap[c.source].planned += c.planned_annual;
+    srcAnnMap[c.source].ytd += c.spent_ytd;
+  });
+  const hasAnnPdf = categories.some((c) => c.planned_annual > 0);
+
   const sourceRows = sources.map((s) => {
     const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.source };
-    const barColor = s.expenses > s.income ? "#B5472A" : cfg.color;
-    void barColor;
-    return `<tr><td><span class="badge" style="background:${cfg.bg};color:${cfg.textColor}">${cfg.label}</span></td><td class="l green" style="font-weight:600">${fmt(s.income)}</td><td class="l">${fmt(s.expenses)}</td><td class="l" style="font-weight:700;color:${s.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(s.net)}</td></tr>`;
+    const ann = srcAnnMap[s.source];
+    const pctYtd = ann?.planned && ann.planned > 0 ? Math.round((ann.ytd / ann.planned) * 100) : null;
+    const barColor = pctYtd != null ? (pctYtd > 100 ? "#C0392B" : pctYtd > 80 ? "#E67E22" : cfg.color) : cfg.color;
+    const annCols = hasAnnPdf
+      ? `<td class="l">${ann?.planned ? fmt(ann.planned) : "—"}</td><td class="l" style="min-width:110px">${pctYtd !== null ? `<div class="bar-label">${pctYtd}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(pctYtd, 100)}%;background:${barColor}"></div></div>` : "—"}</td>`
+      : "";
+    return `<tr><td><span class="badge" style="background:${cfg.bg};color:${cfg.textColor}">${cfg.label}</span></td><td class="l green" style="font-weight:600">${fmt(s.income)}</td><td class="l">${fmt(s.expenses)}</td><td class="l" style="font-weight:700;color:${s.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(s.net)}</td>${annCols}</tr>`;
   }).join("");
 
   // Per-source category detail for PDF (skip horim — uses collections, not expenses)
@@ -441,8 +454,8 @@ function buildPeriodicHTML(
       <div class="kpi-card" style="border-color:${totals.net >= 0 ? "#C6E8D0" : "#EDCFC6"}"><div class="kpi-label">מאזן תקופה</div><div class="kpi-value ${totals.net >= 0 ? "green" : "rust"}">${fmt(totals.net)}</div><div class="kpi-sub">${totals.net >= 0 ? "עודף" : "גרעון"}</div></div>
     </div>
     <h2>סיכום לפי מקור</h2>
-    <table><thead><tr><th>מקור</th><th class="l">הכנסות</th><th class="l">הוצאות</th><th class="l">מאזן</th></tr></thead>
-    <tbody>${sourceRows}<tr class="total-row"><td>סה"כ</td><td class="l green">${fmt(totals.totalIncome)}</td><td class="l">${fmt(totals.expenses)}</td><td class="l" style="color:${totals.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(totals.net)}</td></tr></tbody></table>
+    <table><thead><tr><th>מקור</th><th class="l">הכנסות</th><th class="l">הוצאות</th><th class="l">מאזן</th>${hasAnnPdf ? '<th class="l">תוכנן שנתי</th><th class="l">ניצול שנתי</th>' : ''}</tr></thead>
+    <tbody>${sourceRows}<tr class="total-row"><td>סה"כ</td><td class="l green">${fmt(totals.totalIncome)}</td><td class="l">${fmt(totals.expenses)}</td><td class="l" style="color:${totals.net >= 0 ? "#2D6644" : "#B5472A"}">${fmt(totals.net)}</td>${hasAnnPdf ? `<td class="l">${fmt(Object.values(srcAnnMap).reduce((s, a) => s + a.planned, 0))}</td><td class="l"></td>` : ''}</tr></tbody></table>
     ${catDetail}
     ${horimPeriodDetail}
     <div class="footer">הכרם — מערכת ניהול פיננסי לבתי ספר · נוצר אוטומטית ${toDate()}</div>
@@ -1167,39 +1180,58 @@ function PeriodicReport({
             ))}
           </div>
 
-          {/* Per-source table */}
-          <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "18px" }}>
-            <div style={{ padding: "16px 22px", borderBottom: "1px solid #F4F1EC" }}><div style={{ fontWeight: 700, fontSize: "14.5px", color: "#1A1A1A" }}>פירוט לפי מקור</div></div>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead style={{ background: "#FAFAF8" }}>
-                <tr>
-                  <th style={th}>מקור</th>
-                  <th style={thL}>הכנסות</th>
-                  <th style={thL}>הוצאות</th>
-                  <th style={thL}>מאזן</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.sources.map((s) => {
-                  const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.source };
-                  return (
-                    <tr key={s.source}>
-                      <td style={td}><span style={{ background: cfg.bg, color: cfg.textColor, borderRadius: "8px", padding: "3px 10px", fontSize: "12.5px", fontWeight: 600 }}>{cfg.label}</span></td>
-                      <td style={{ ...tdL, color: "#2D6644", fontWeight: 600 }}>{fmt(s.income)}</td>
-                      <td style={tdL}>{fmt(s.expenses)}</td>
-                      <td style={{ ...tdL, fontWeight: 700, color: s.net >= 0 ? "#2D6644" : "#B5472A" }}>{fmt(s.net)}</td>
+          {/* Per-source table with annual context */}
+          {(() => {
+            const srcAnn: Record<string, { planned: number; ytd: number }> = {};
+            categories.forEach((c) => {
+              if (!srcAnn[c.source]) srcAnn[c.source] = { planned: 0, ytd: 0 };
+              srcAnn[c.source].planned += c.planned_annual;
+              srcAnn[c.source].ytd += c.spent_ytd;
+            });
+            const hasAnn = categories.some((c) => c.planned_annual > 0);
+            return (
+              <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "18px" }}>
+                <div style={{ padding: "16px 22px", borderBottom: "1px solid #F4F1EC" }}><div style={{ fontWeight: 700, fontSize: "14.5px", color: "#1A1A1A" }}>פירוט לפי מקור</div></div>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead style={{ background: "#FAFAF8" }}>
+                    <tr>
+                      <th style={th}>מקור</th>
+                      <th style={thL}>הכנסות</th>
+                      <th style={thL}>הוצאות</th>
+                      <th style={thL}>מאזן</th>
+                      {hasAnn && <th style={thL}>תוכנן שנתי</th>}
+                      {hasAnn && <th style={{ ...thL, minWidth: "140px" }}>ניצול שנתי</th>}
                     </tr>
-                  );
-                })}
-                <tr style={{ background: "#F7F4EF" }}>
-                  <td style={{ ...td, fontWeight: 700 }}>סה״כ</td>
-                  <td style={{ ...tdL, fontWeight: 700, color: "#2D6644" }}>{fmt(data.totals.totalIncome)}</td>
-                  <td style={{ ...tdL, fontWeight: 700 }}>{fmt(data.totals.expenses)}</td>
-                  <td style={{ ...tdL, fontWeight: 700, color: data.totals.net >= 0 ? "#2D6644" : "#B5472A" }}>{fmt(data.totals.net)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {data.sources.map((s) => {
+                      const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.source };
+                      const ann = srcAnn[s.source];
+                      const pctYtd = ann?.planned && ann.planned > 0 ? Math.round((ann.ytd / ann.planned) * 100) : null;
+                      return (
+                        <tr key={s.source}>
+                          <td style={td}><span style={{ background: cfg.bg, color: cfg.textColor, borderRadius: "8px", padding: "3px 10px", fontSize: "12.5px", fontWeight: 600 }}>{cfg.label}</span></td>
+                          <td style={{ ...tdL, color: "#2D6644", fontWeight: 600 }}>{fmt(s.income)}</td>
+                          <td style={tdL}>{fmt(s.expenses)}</td>
+                          <td style={{ ...tdL, fontWeight: 700, color: s.net >= 0 ? "#2D6644" : "#B5472A" }}>{fmt(s.net)}</td>
+                          {hasAnn && <td style={tdL}>{ann?.planned ? fmt(ann.planned) : <span style={{ color: "#9BA8A2" }}>—</span>}</td>}
+                          {hasAnn && <td style={tdL}>{pctYtd !== null ? <><div style={{ fontSize: "12px", color: "#6B7A72", marginBottom: "2px" }}>{pctYtd}%</div><PctBar pct={pctYtd} color={cfg.color} /></> : <span style={{ color: "#9BA8A2" }}>—</span>}</td>}
+                        </tr>
+                      );
+                    })}
+                    <tr style={{ background: "#F7F4EF" }}>
+                      <td style={{ ...td, fontWeight: 700 }}>סה״כ</td>
+                      <td style={{ ...tdL, fontWeight: 700, color: "#2D6644" }}>{fmt(data.totals.totalIncome)}</td>
+                      <td style={{ ...tdL, fontWeight: 700 }}>{fmt(data.totals.expenses)}</td>
+                      <td style={{ ...tdL, fontWeight: 700, color: data.totals.net >= 0 ? "#2D6644" : "#B5472A" }}>{fmt(data.totals.net)}</td>
+                      {hasAnn && <td style={{ ...tdL, fontWeight: 700 }}>{fmt(Object.values(srcAnn).reduce((s, a) => s + a.planned, 0))}</td>}
+                      {hasAnn && <td style={tdL} />}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
 
           {/* Per-source category detail tables */}
           {data.sources.map((s) => {
