@@ -188,38 +188,27 @@ export async function syncHorimBudgetCategory(
     return sum + Number(gsa.amount_per_student) * (gradeMap[gsa.grade_id] ?? 0);
   }, 0);
 
-  // Upsert: find existing budget_category by name+source+year, then update or insert
-  const { data: existing } = await supabase
+  // True upsert — relies on UNIQUE (school_year_id, source, name) constraint
+  // We need order_index for new rows; on conflict we only update planned_amount.
+  const { data: maxOrder } = await supabase
     .from("budget_categories")
-    .select("id")
+    .select("order_index")
     .eq("school_year_id", yearId)
     .eq("source", "horim")
-    .eq("name", sectionName)
+    .order("order_index", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
-  if (existing?.id) {
-    await supabase
-      .from("budget_categories")
-      .update({ planned_amount: totalPlanned })
-      .eq("id", existing.id);
-  } else {
-    const { data: maxOrder } = await supabase
-      .from("budget_categories")
-      .select("order_index")
-      .eq("school_year_id", yearId)
-      .eq("source", "horim")
-      .order("order_index", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    await supabase.from("budget_categories").insert({
+  await supabase.from("budget_categories").upsert(
+    {
       school_year_id: yearId,
       name: sectionName,
       source: "horim",
       planned_amount: totalPlanned,
       order_index: (maxOrder?.order_index ?? 0) + 1,
-    });
-  }
+    },
+    { onConflict: "school_year_id,source,name", ignoreDuplicates: false },
+  );
 }
 
 /**

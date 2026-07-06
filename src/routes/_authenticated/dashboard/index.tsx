@@ -7,8 +7,8 @@ import { useOrganization } from "@/hooks/use-organization";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateSchoolYear } from "@/hooks/use-school-years";
-import { useAddGrade, useGrades } from "@/hooks/use-grades";
-import { useAddBudgetCategory, useUpdatePlannedAmount, type BudgetSource } from "@/hooks/use-budget-plan";
+import { useAddGrade, useDeleteGrade, useGrades } from "@/hooks/use-grades";
+import { useAddBudgetCategory, useDeleteBudgetCategory, useUpdatePlannedAmount, type BudgetSource } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, useAddBudgetSource, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { syncHorimBudgetCategory } from "@/hooks/use-horim";
 
@@ -322,9 +322,14 @@ async function setGradeHorimAmount(
   if (existing && existing.length > 0) {
     sectionId = existing[0].id;
   } else {
+    // Use upsert so concurrent calls don't create duplicate sections
+    // (UNIQUE constraint on school_year_id, name)
     const { data: sec, error } = await supabase
       .from("parent_sections")
-      .insert({ school_year_id: yearId, name: sectionName, order_index: 0, is_active: true })
+      .upsert(
+        { school_year_id: yearId, name: sectionName, order_index: 0, is_active: true },
+        { onConflict: "school_year_id,name", ignoreDuplicates: false },
+      )
       .select("id").single();
     if (error) throw error;
     sectionId = sec.id;
@@ -373,7 +378,10 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   const [selLetter, setSelLetter] = useState("");
   const [gradeCount, setGradeCount] = useState("0");
   const addGrade = useAddGrade();
+  const deleteGrade = useDeleteGrade();
   const { data: grades = [] } = useGrades(yearId || undefined);
+  // fill-all: secIdx → fill value being typed
+  const [fillAllState, setFillAllState] = useState<{ secIdx: number; value: string } | null>(null);
   // Wizard: parent-collection sections defined inline
   const [wizardSections, setWizardSections] = useState<Array<{ name: string }>>([{ name: "שכר לימוד" }]);
   const [addingSection, setAddingSection] = useState(false);
@@ -406,6 +414,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   type AddedCat = { id: string; name: string; amount: number };
   const [addedCats, setAddedCats] = useState<Record<string, AddedCat[]>>({});
   const addCategory = useAddBudgetCategory();
+  const deleteCategory = useDeleteBudgetCategory();
   const updatePlannedAmount = useUpdatePlannedAmount();
 
   // "Add source" mini-form (inside wizard step 2)
@@ -436,6 +445,10 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
 
   const handleCreateYear = async () => {
     if (!yName || !yStart || !yEnd) return;
+    if (yStart >= yEnd) {
+      setWizardError("תאריך הסיום חייב להיות אחרי תאריך ההתחלה");
+      return;
+    }
     setWizardError(null);
     try {
       const id = await createYear.mutateAsync({
@@ -503,6 +516,34 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
       setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: [...(prev[effectiveCatSrc] ?? []), { id: result.id, name, amount: 0 }] }));
     }
     setCatCustom("");
+  };
+
+  const handleDeleteCat = async (catId: string, src: string) => {
+    try {
+      await deleteCategory.mutateAsync(catId);
+      setAddedCats(prev => ({ ...prev, [src]: (prev[src] ?? []).filter(c => c.id !== catId) }));
+    } catch { /* non-blocking */ }
+  };
+
+  const handleFillAll = async (secIdx: number, value: string) => {
+    const n = Number(value);
+    if (!value || isNaN(n) || n < 0 || !yearId) return;
+    const sec = wizardSections[secIdx];
+    if (!sec) return;
+    // Update local state and save to DB for each grade
+    const updates: Record<string, Record<number, string>> = {};
+    for (const g of grades) {
+      updates[g.id] = { ...(wizardGSA[g.id] ?? {}), [secIdx]: value };
+      await saveCellToDb(g.id, sec.name, value, secIdx);
+    }
+    setWizardGSA(prev => {
+      const next = { ...prev };
+      for (const g of grades) {
+        next[g.id] = { ...(next[g.id] ?? {}), [secIdx]: value };
+      }
+      return next;
+    });
+    setFillAllState(null);
   };
 
   // ── Shared UI pieces ──────────────────────────────────────────────────────
@@ -762,26 +803,52 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                     }}>
                       <span style={{ fontSize: "11px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.04em" }}>שכבה</span>
                       {wizardSections.map((sec, i) => (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: "3px", justifyContent: "center" }}>
-                          <span style={{ fontSize: "11px", fontWeight: "600", color: "#6B6560", maxWidth: "80px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sec.name}>{sec.name}</span>
-                          {wizardSections.length > 1 && (
-                            <button type="button" onClick={() => {
-                              setWizardSections(prev => prev.filter((_, j) => j !== i));
-                              setWizardGSA(prev => {
-                                const next = { ...prev };
-                                Object.keys(next).forEach(gId => {
-                                  const updated: Record<number, string> = {};
-                                  Object.entries(next[gId] ?? {}).forEach(([k, v]) => {
-                                    const ki = Number(k);
-                                    if (ki < i) updated[ki] = v;
-                                    else if (ki > i) updated[ki - 1] = v;
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: "3px", justifyContent: "center", flexDirection: "column" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                            <span style={{ fontSize: "11px", fontWeight: "600", color: "#6B6560", maxWidth: "80px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sec.name}>{sec.name}</span>
+                            {wizardSections.length > 1 && (
+                              <button type="button" onClick={() => {
+                                setWizardSections(prev => prev.filter((_, j) => j !== i));
+                                setWizardGSA(prev => {
+                                  const next = { ...prev };
+                                  Object.keys(next).forEach(gId => {
+                                    const updated: Record<number, string> = {};
+                                    Object.entries(next[gId] ?? {}).forEach(([k, v]) => {
+                                      const ki = Number(k);
+                                      if (ki < i) updated[ki] = v;
+                                      else if (ki > i) updated[ki - 1] = v;
+                                    });
+                                    next[gId] = updated;
                                   });
-                                  next[gId] = updated;
+                                  return next;
                                 });
-                                return next;
-                              });
-                            }} style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", padding: "0 1px", display: "flex", lineHeight: 1, flexShrink: 0 }}>
-                              ✕
+                              }} style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", padding: "0 1px", display: "flex", lineHeight: 1, flexShrink: 0 }}>
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                          {/* Fill-all for this column */}
+                          {fillAllState?.secIdx === i ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                              <input
+                                autoFocus
+                                type="number" min="0"
+                                value={fillAllState.value}
+                                onChange={e => setFillAllState({ secIdx: i, value: e.target.value })}
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") handleFillAll(i, fillAllState.value);
+                                  if (e.key === "Escape") setFillAllState(null);
+                                }}
+                                onBlur={() => { if (fillAllState.value) handleFillAll(i, fillAllState.value); else setFillAllState(null); }}
+                                style={{ width: "46px", padding: "2px 4px", border: "1.5px solid #C080A8", borderRadius: "5px", fontSize: "11px", fontFamily: "Rubik, sans-serif", direction: "ltr", textAlign: "right", outline: "none" }}
+                              />
+                              <span style={{ fontSize: "9px", color: "#8B2F6E" }}>₪</span>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={() => setFillAllState({ secIdx: i, value: "" })}
+                              title="מלא/י את כל השכבות בסכום זהה"
+                              style={{ fontSize: "9px", color: "#B090C0", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Rubik, sans-serif" }}>
+                              מלא הכל
                             </button>
                           )}
                         </div>
@@ -805,10 +872,20 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                           borderBottom: gIdx < grades.length - 1 ? "1px solid #F3EEE8" : "none",
                           background: gIdx % 2 === 0 ? "#fff" : "#FDFCFB",
                         }}>
-                          {/* Grade name */}
-                          <div>
-                            <div style={{ fontSize: "13px", color: "#1A1A1A", fontWeight: "500" }}>{g.name}</div>
-                            <div style={{ fontSize: "11px", color: "#AAA099" }}>{g.student_count} תלמידים</div>
+                          {/* Grade name + delete */}
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "4px" }}>
+                            <div>
+                              <div style={{ fontSize: "13px", color: "#1A1A1A", fontWeight: "500" }}>{g.name}</div>
+                              <div style={{ fontSize: "11px", color: "#AAA099" }}>{g.student_count} תלמידים</div>
+                            </div>
+                            <button
+                              type="button"
+                              title="הסר שכבה"
+                              onClick={() => deleteGrade.mutateAsync(g.id)}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "#D0C8C4", padding: "2px", lineHeight: 1, flexShrink: 0, fontSize: "13px" }}
+                              onMouseEnter={e => (e.currentTarget.style.color = "#E57373")}
+                              onMouseLeave={e => (e.currentTarget.style.color = "#D0C8C4")}
+                            >✕</button>
                           </div>
 
                           {/* Amount cell per section */}
@@ -1059,11 +1136,19 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                               <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke={c.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                               <span style={{ fontSize: "13px", color: c.color, fontWeight: "500" }}>{cat.name}</span>
                             </div>
-                            <InlineAmountEdit catId={cat.id} current={cat.amount} color={c.color}
-                              onSave={async (n) => {
-                                await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
-                                setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
-                              }} />
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <InlineAmountEdit catId={cat.id} current={cat.amount} color={c.color}
+                                onSave={async (n) => {
+                                  await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
+                                  setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                }} />
+                              <button type="button" onClick={() => handleDeleteCat(cat.id, effectiveCatSrc)}
+                                title="הסר קטגוריה"
+                                style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", padding: "2px", fontSize: "14px", lineHeight: 1 }}
+                                onMouseEnter={e => (e.currentTarget.style.color = "#E57373")}
+                                onMouseLeave={e => (e.currentTarget.style.color = "#C0BAB4")}
+                              >✕</button>
+                            </div>
                           </div>
                         ))}
                       </div>
