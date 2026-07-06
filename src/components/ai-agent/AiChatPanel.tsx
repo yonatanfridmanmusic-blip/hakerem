@@ -741,6 +741,7 @@ export function AiChatPanel() {
   const [pendingDrafts, setPendingDrafts] = useState<Record<string, ActionDraft>>({});
   const [mounted, setMounted] = useState(false);
   const [optimisticMsg, setOptimisticMsg] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -796,6 +797,7 @@ export function AiChatPanel() {
     e?.preventDefault();
     const msg = (text ?? input).trim();
     if (!msg || send.isPending) return;
+    setSendError(null);
     setInput("");
     // Reset textarea height and keep focus
     if (inputRef.current) {
@@ -813,7 +815,22 @@ export function AiChatPanel() {
             setPendingDrafts(prev => ({ ...prev, [data.conversation_id]: data.action_draft! }));
           }
         },
-        onError: () => setOptimisticMsg(null),
+        onError: (err) => {
+          setOptimisticMsg(null);
+          // Restore the message so user can retry
+          setInput(msg);
+          setTimeout(() => {
+            if (inputRef.current) {
+              inputRef.current.style.height = "auto";
+              inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 120)}px`;
+              inputRef.current.focus();
+            }
+          }, 0);
+          const errMsg = err instanceof Error ? err.message : "שגיאה בשליחה";
+          setSendError(errMsg === "שגיאה בשליחה" || errMsg === "Failed to fetch"
+            ? "לא הצלחתי להתחבר לשרת. בדוק חיבור ונסה שוב."
+            : errMsg);
+        },
       },
     );
   };
@@ -830,6 +847,7 @@ export function AiChatPanel() {
     setPendingDrafts({});
     setInput("");
     setOptimisticMsg(null);
+    setSendError(null);
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
@@ -1096,6 +1114,43 @@ export function AiChatPanel() {
               flexShrink: 0,
               background: "rgba(0,0,0,0.12)",
             }}>
+              {/* Error banner */}
+              {sendError && (
+                <div style={{
+                  marginBottom: "8px",
+                  padding: "8px 12px",
+                  borderRadius: "10px",
+                  background: "rgba(239,68,68,0.12)",
+                  border: "1px solid rgba(239,68,68,0.25)",
+                  color: "rgba(252,165,165,0.9)",
+                  fontSize: "12.5px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  direction: "rtl",
+                }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                    <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <circle cx="12" cy="16" r="1" fill="currentColor"/>
+                  </svg>
+                  <span>{sendError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSendError(null)}
+                    style={{
+                      marginRight: "auto",
+                      background: "none",
+                      border: "none",
+                      color: "rgba(252,165,165,0.5)",
+                      cursor: "pointer",
+                      padding: "0 2px",
+                      fontSize: "14px",
+                      lineHeight: 1,
+                    }}
+                  >×</button>
+                </div>
+              )}
               <form
                 onSubmit={e => { e.preventDefault(); handleSend(); }}
                 style={{
@@ -1122,7 +1177,7 @@ export function AiChatPanel() {
                 <textarea
                   ref={inputRef}
                   value={input}
-                  onChange={e => setInput(e.target.value)}
+                  onChange={e => { setInput(e.target.value); if (sendError) setSendError(null); }}
                   onKeyDown={handleKeyDown}
                   placeholder="שאל שאלה או בקש פעולה..."
                   readOnly={send.isPending}
