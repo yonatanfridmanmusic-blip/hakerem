@@ -786,6 +786,7 @@ export type Database = {
           created_at: string | null
           id: string
           invited_by: string | null
+          job_title: string | null
           joined_at: string | null
           organization_id: string
           role: string
@@ -796,6 +797,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           invited_by?: string | null
+          job_title?: string | null
           joined_at?: string | null
           organization_id: string
           role?: string
@@ -806,6 +808,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           invited_by?: string | null
+          job_title?: string | null
           joined_at?: string | null
           organization_id?: string
           role?: string
@@ -854,6 +857,47 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      ownership_transfer_requests: {
+        Row: {
+          created_at: string
+          current_owner_user_id: string
+          id: string
+          org_id: string
+          requested_by_name: string
+          requested_by_user_id: string
+          resolved_at: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          current_owner_user_id: string
+          id?: string
+          org_id: string
+          requested_by_name: string
+          requested_by_user_id: string
+          resolved_at?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          current_owner_user_id?: string
+          id?: string
+          org_id?: string
+          requested_by_name?: string
+          requested_by_user_id?: string
+          resolved_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ownership_transfer_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       parent_collections: {
         Row: {
@@ -1064,6 +1108,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_delete_org: { Args: { p_org_id: string }; Returns: undefined }
       auth_is_super_admin: { Args: never; Returns: boolean }
       auth_org_role_for_year: {
         Args: { p_roles: string[]; p_year_id: string }

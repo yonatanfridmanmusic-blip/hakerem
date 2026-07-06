@@ -22,7 +22,7 @@ export const Route = createFileRoute("/onboarding")({
   component: OnboardingPage,
 });
 
-type Step = "choose" | "create-org" | "sources" | "join-org" | "pending";
+type Step = "choose" | "create-org" | "sources" | "join-org" | "pending" | "transfer-pending";
 
 const f = "Rubik, sans-serif";
 
@@ -455,16 +455,72 @@ function SourcesStep({ orgId, onDone }: { orgId: string; onDone: () => void }) {
 
 // ─── Step: Join Org ───────────────────────────────────────────────────────────
 
-function JoinOrgStep({ onBack, onSuccess }: { onBack: () => void; onSuccess: () => void }) {
+function JoinOrgStep({ onBack, onSuccess, onTransfer }: {
+  onBack: () => void;
+  onSuccess: () => void;
+  onTransfer: () => void;
+}) {
   const { data: orgs = [], isLoading } = useAllOrganizations();
   const [selected, setSelected] = useState<string | null>(null);
+  const [joinType, setJoinType] = useState<"staff" | "transfer">("staff");
+  const [jobTitle, setJobTitle] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const requestJoin = useRequestJoinOrg();
+
+  const selectedOrg = orgs.find(o => o.id === selected);
 
   const handleSubmit = async () => {
     if (!selected) { toast.error("נא לבחור בית ספר"); return; }
+    setSubmitting(true);
     try {
-      await requestJoin.mutateAsync(selected);
-      onSuccess();
+      if (joinType === "staff") {
+        await requestJoin.mutateAsync({ orgId: selected, jobTitle: jobTitle.trim() || undefined });
+        onSuccess();
+      } else {
+        // Ownership transfer: find current owner and create a transfer request
+        const { data: ownerMem } = await supabase
+          .from("organization_members")
+          .select("user_id")
+          .eq("organization_id", selected)
+          .eq("role", "owner")
+          .eq("status", "active")
+          .maybeSingle();
+
+        if (!ownerMem) {
+          toast.error("לא נמצא בעלים לבית הספר הזה. פנה/י לתמיכה.");
+          setSubmitting(false);
+          return;
+        }
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setSubmitting(false); return; }
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        const { error } = await supabase
+          .from("ownership_transfer_requests")
+          .insert({
+            org_id: selected,
+            requested_by_user_id: user.id,
+            requested_by_name: profile?.full_name ?? user.email ?? "משתמש",
+            current_owner_user_id: ownerMem.user_id,
+          });
+
+        if (error) {
+          if (error.message.includes("duplicate") || error.message.includes("unique")) {
+            toast.info("כבר שלחת בקשת העברה לבית ספר זה");
+            onTransfer();
+          } else {
+            toast.error("שגיאה בשליחת הבקשה: " + error.message);
+          }
+        } else {
+          onTransfer();
+        }
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "שגיאה";
       if (msg.includes("duplicate") || msg.includes("unique")) {
@@ -473,6 +529,8 @@ function JoinOrgStep({ onBack, onSuccess }: { onBack: () => void; onSuccess: () 
       } else {
         toast.error(msg);
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -482,22 +540,73 @@ function JoinOrgStep({ onBack, onSuccess }: { onBack: () => void; onSuccess: () 
       <h2 style={{ fontSize: "18px", fontWeight: "500", color: INK, margin: "0 0 6px" }}>
         הצטרפות לבית ספר
       </h2>
-      <p style={{ fontSize: "13px", color: INK2, margin: "0 0 18px", lineHeight: 1.65 }}>
-        בחר/י את בית הספר שלך — מנהל/ת בית הספר תאשר את הבקשה.
+      <p style={{ fontSize: "13px", color: INK2, margin: "0 0 14px", lineHeight: 1.65 }}>
+        בחר/י את בית הספר שלך ואת סוג הכניסה.
       </p>
 
-      {isLoading ? (
-        <div style={{ textAlign: "center", padding: "32px", color: INK3, fontSize: "14px" }}>טוען...</div>
-      ) : orgs.length === 0 ? (
+      {/* Join type selection */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "7px", marginBottom: "16px" }}>
+        {(["staff", "transfer"] as const).map(type => {
+          const active = joinType === type;
+          return (
+            <button
+              key={type}
+              onClick={() => setJoinType(type)}
+              style={{
+                display: "flex", alignItems: "center", gap: "12px",
+                padding: "11px 14px", textAlign: "right", width: "100%",
+                background: active ? "#F4FAF6" : "#fff",
+                border: `1.5px solid ${active ? GREEN : BORDER}`,
+                borderRadius: "10px", cursor: "pointer", fontFamily: f, transition: "all 0.12s",
+              }}
+            >
+              <div style={{
+                width: "18px", height: "18px", borderRadius: "50%", flexShrink: 0,
+                border: `2px solid ${active ? GREEN : BORDER}`,
+                background: active ? GREEN : "transparent",
+                display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s",
+              }}>
+                {active && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><circle cx="4" cy="4" r="2.5" fill="#fff"/></svg>}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "13.5px", fontWeight: "500", color: INK }}>
+                  {type === "staff" ? "הצטרפות כאיש/ת צוות" : "אני מחליפ/ה את המנהל/ת"}
+                </div>
+                <div style={{ fontSize: "11.5px", color: INK2, marginTop: "1px" }}>
+                  {type === "staff" ? "גישה לצפייה ועריכה" : "העברת בעלות מלאה על החשבון"}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Warning for ownership transfer */}
+      {joinType === "transfer" && (
         <div style={{
-          background: "#FFFBEB", border: "1px solid #E9D67A",
-          borderRadius: "10px", padding: "14px 16px",
-          fontSize: "13px", color: "#78600A", lineHeight: 1.65,
+          background: "#FFFBEB", border: "1px solid #F59E0B",
+          borderRadius: "10px", padding: "12px 14px",
+          fontSize: "12.5px", color: "#78350F", lineHeight: 1.65,
+          display: "flex", gap: "10px", alignItems: "flex-start", marginBottom: "14px",
         }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: "1px" }}>
+            <path d="M8 2L14.5 13H1.5L8 2z" stroke="#F59E0B" strokeWidth="1.3" strokeLinejoin="round"/>
+            <path d="M8 6v3" stroke="#F59E0B" strokeWidth="1.4" strokeLinecap="round"/>
+            <circle cx="8" cy="11" r="0.7" fill="#F59E0B"/>
+          </svg>
+          <span>המנהל/ת הנוכחי/ת יקבל/תקבל התראה ויצטרך/תצטרך לאשר. לאחר האישור גישתו/ה תיחסם לחלוטין.</span>
+        </div>
+      )}
+
+      {/* School list */}
+      {isLoading ? (
+        <div style={{ textAlign: "center", padding: "24px", color: INK3, fontSize: "14px" }}>טוען...</div>
+      ) : orgs.length === 0 ? (
+        <div style={{ background: "#FFFBEB", border: "1px solid #E9D67A", borderRadius: "10px", padding: "14px 16px", fontSize: "13px", color: "#78600A", lineHeight: 1.65 }}>
           לא נמצאו בתי ספר רשומים. בקש/י ממנהל/ת בית הספר שלך להירשם תחילה.
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "18px", maxHeight: "260px", overflowY: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "7px", marginBottom: "14px", maxHeight: "200px", overflowY: "auto" }}>
           {orgs.map(org => {
             const active = selected === org.id;
             return (
@@ -506,41 +615,34 @@ function JoinOrgStep({ onBack, onSuccess }: { onBack: () => void; onSuccess: () 
                 onClick={() => setSelected(org.id)}
                 style={{
                   display: "flex", alignItems: "center", gap: "12px",
-                  padding: "13px 14px", textAlign: "right", width: "100%",
+                  padding: "11px 13px", textAlign: "right", width: "100%",
                   background: active ? "#F4FAF6" : "#fff",
                   border: `1.5px solid ${active ? GREEN : BORDER}`,
-                  borderRadius: "10px", cursor: "pointer",
-                  fontFamily: f, transition: "all 0.12s",
+                  borderRadius: "10px", cursor: "pointer", fontFamily: f, transition: "all 0.12s",
                 }}
               >
                 <div style={{
-                  width: "36px", height: "36px", borderRadius: "9px", flexShrink: 0,
+                  width: "34px", height: "34px", borderRadius: "9px", flexShrink: 0,
                   background: active ? "#EDFBF3" : "#F5F5F2",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "background 0.12s",
                 }}>
                   <IconSchool color={active ? GREEN : INK3} />
                 </div>
                 <div style={{ flex: 1, textAlign: "right" }}>
-                  <div style={{ fontSize: "14px", fontWeight: "500", color: INK }}>{org.name}</div>
+                  <div style={{ fontSize: "13.5px", fontWeight: "500", color: INK }}>{org.name}</div>
                   {org.city && (
-                    <div style={{ fontSize: "12px", color: INK3, marginTop: "2px", display: "flex", alignItems: "center", gap: "3px" }}>
+                    <div style={{ fontSize: "11.5px", color: INK3, marginTop: "1px", display: "flex", alignItems: "center", gap: "3px" }}>
                       <IconMapPin /> {org.city}
                     </div>
                   )}
                 </div>
                 <div style={{
-                  width: "20px", height: "20px", borderRadius: "50%", flexShrink: 0,
+                  width: "18px", height: "18px", borderRadius: "50%", flexShrink: 0,
                   border: `2px solid ${active ? GREEN : BORDER}`,
                   background: active ? GREEN : "transparent",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "all 0.12s",
                 }}>
-                  {active && (
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path d="M2 5l2.5 2.5 3.5-4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
+                  {active && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><circle cx="4" cy="4" r="2.5" fill="#fff"/></svg>}
                 </div>
               </button>
             );
@@ -548,19 +650,89 @@ function JoinOrgStep({ onBack, onSuccess }: { onBack: () => void; onSuccess: () 
         </div>
       )}
 
+      {/* Job title — only for staff */}
+      {joinType === "staff" && orgs.length > 0 && (
+        <Field label="תפקיד (טקסט חופשי — אופציונלי)">
+          <input
+            style={inputStyle}
+            value={jobTitle}
+            onChange={e => setJobTitle(e.target.value)}
+            placeholder="לדוגמה: מזכירה, סגן מנהל, רכזת שכבה..."
+          />
+        </Field>
+      )}
+
+      {/* School name reminder */}
+      {selected && selectedOrg && (
+        <div style={{
+          background: "#F4FAF6", border: "1px solid #B6E8C4",
+          borderRadius: "9px", padding: "9px 13px",
+          fontSize: "12px", color: "#166534", marginTop: "10px",
+          display: "flex", alignItems: "center", gap: "8px",
+        }}>
+          <IconCheck color="#16A34A" />
+          <span>
+            {joinType === "staff"
+              ? `בקשת הצטרפות תישלח לבית ספר ${selectedOrg.name}`
+              : `בקשת העברת בעלות תישלח למנהל/ת הנוכחי/ת של ${selectedOrg.name}`}
+          </span>
+        </div>
+      )}
+
       {orgs.length > 0 && (
         <button
           onClick={handleSubmit}
-          disabled={!selected || requestJoin.isPending}
+          disabled={!selected || submitting}
           style={{
-            ...btnPrimary,
-            opacity: !selected ? 0.45 : 1,
-            cursor: !selected ? "not-allowed" : "pointer",
+            ...btnPrimary, marginTop: "14px",
+            opacity: !selected || submitting ? 0.5 : 1,
+            cursor: !selected || submitting ? "not-allowed" : "pointer",
           }}
         >
-          {requestJoin.isPending ? "שולח..." : "שליחת בקשת הצטרפות"}
+          {submitting ? "שולח..." : joinType === "staff" ? "שליחת בקשת הצטרפות" : "שליחת בקשת העברה"}
         </button>
       )}
+    </div>
+  );
+}
+
+// ─── Step: Transfer Pending ───────────────────────────────────────────────────
+
+function TransferPendingStep() {
+  return (
+    <div style={{ textAlign: "center", padding: "8px 0" }}>
+      <div style={{
+        width: "64px", height: "64px", borderRadius: "50%",
+        background: "#EDE9FE", border: "1.5px solid #C4B5FD",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        margin: "0 auto 20px",
+      }}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#5B21B6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7 16l-4-4 4-4M17 8l4 4-4 4M14 4l-4 16"/>
+        </svg>
+      </div>
+
+      <h2 style={{ fontSize: "18px", fontWeight: "500", color: INK, margin: "0 0 10px" }}>
+        בקשת העברה נשלחה
+      </h2>
+      <p style={{ fontSize: "13.5px", color: INK2, lineHeight: 1.7, margin: "0 0 22px" }}>
+        המנהל/ת הנוכחי/ת של בית הספר יקבל/תקבל התראה ויצטרך/תצטרך לאשר.<br/>
+        לאחר אישור — תוכל/י להיכנס כבעלים החדשים.
+      </p>
+
+      <div style={{
+        background: "#FFFBEB", border: "1px solid #FCD34D",
+        borderRadius: "10px", padding: "13px 16px",
+        fontSize: "13px", color: "#78350F", lineHeight: 1.65,
+        display: "flex", gap: "10px", alignItems: "flex-start",
+      }}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: "2px" }}>
+          <path d="M8 2L14.5 13H1.5L8 2z" stroke="#F59E0B" strokeWidth="1.3" strokeLinejoin="round"/>
+          <path d="M8 6v3" stroke="#F59E0B" strokeWidth="1.4" strokeLinecap="round"/>
+          <circle cx="8" cy="11" r="0.7" fill="#F59E0B"/>
+        </svg>
+        <span>ניתן לסגור את הדפדפן. תקבל/י הודעה כשהבקשה תאושר.</span>
+      </div>
     </div>
   );
 }
@@ -681,8 +853,9 @@ function OnboardingPage() {
             onDone={() => navigate({ to: "/dashboard", replace: true })}
           />
         )}
-        {step === "join-org"   && <JoinOrgStep onBack={() => setStep("choose")} onSuccess={() => setStep("pending")} />}
+        {step === "join-org"   && <JoinOrgStep onBack={() => setStep("choose")} onSuccess={() => setStep("pending")} onTransfer={() => setStep("transfer-pending")} />}
         {step === "pending"    && <PendingStep />}
+        {step === "transfer-pending" && <TransferPendingStep />}
       </div>
     </div>
   );

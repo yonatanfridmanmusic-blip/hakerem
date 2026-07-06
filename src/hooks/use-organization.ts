@@ -5,7 +5,7 @@ import { getViewAsOrg } from "@/lib/view-as";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type OrgRole = "owner" | "admin" | "viewer";
-export type MemberStatus = "pending" | "active" | "rejected";
+export type MemberStatus = "pending" | "active" | "rejected" | "blocked";
 
 export interface Organization {
   id: string;
@@ -30,6 +30,7 @@ export interface OrgMember {
   status: MemberStatus;
   joined_at: string | null;
   created_at: string;
+  job_title: string | null;
   profiles: { full_name: string | null; email: string | null } | null;
 }
 
@@ -125,7 +126,7 @@ export function useOrgMembers() {
       const { data, error } = await supabase
         .from("organization_members")
         .select(`
-          id, user_id, role, status, joined_at, created_at,
+          id, user_id, role, status, joined_at, created_at, job_title,
           profiles (full_name, email)
         `)
         .eq("organization_id", orgId!)
@@ -164,17 +165,18 @@ export function useCreateOrganization() {
 export function useRequestJoinOrg() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (organizationId: string) => {
+    mutationFn: async ({ orgId, jobTitle }: { orgId: string; jobTitle?: string }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("לא מחובר");
 
       const { error } = await supabase
         .from("organization_members")
         .insert({
-          organization_id: organizationId,
+          organization_id: orgId,
           user_id: user.id,
           role: "viewer",
           status: "pending",
+          job_title: jobTitle ?? null,
         });
       if (error) throw error;
 
@@ -188,7 +190,7 @@ export function useRequestJoinOrg() {
 
         await supabase.functions.invoke("notify-join-request", {
           body: {
-            organization_id: organizationId,
+            organization_id: orgId,
             requester_name: profile?.full_name ?? null,
             requester_email: profile?.email ?? user.email ?? null,
           },
@@ -252,5 +254,31 @@ export function useRemoveMember() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["org-members"] });
     },
+  });
+}
+
+// ─── Current user's profile ────────────────────────────────────────────────────
+
+export interface UserProfile {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+}
+
+export function useCurrentProfile() {
+  return useQuery<UserProfile | null>({
+    queryKey: ["current-profile"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data as UserProfile | null;
+    },
+    staleTime: 1000 * 60 * 5,
   });
 }

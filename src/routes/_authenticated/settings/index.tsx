@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useSchoolYears,
   useCreateSchoolYear,
@@ -17,6 +18,7 @@ import {
   useOrgMembers,
   useUpdateMemberStatus,
   useRemoveMember,
+  useCurrentProfile,
   type OrgRole,
   type MemberStatus,
 } from "@/hooks/use-organization";
@@ -895,6 +897,7 @@ const STATUS_LABEL: Record<MemberStatus, string> = {
   active:   "פעיל",
   pending:  "ממתין לאישור",
   rejected: "נדחה",
+  blocked:  "חסום",
 };
 
 function TeamTab() {
@@ -902,23 +905,170 @@ function TeamTab() {
   const { data: members = [], isLoading } = useOrgMembers();
   const updateStatus = useUpdateMemberStatus();
   const removeMember = useRemoveMember();
-  // Controlled role select — keyed by member id, avoids document.getElementById
+  const queryClient = useQueryClient();
+
+  // Role selection for pending/rejected members
   const [roleMap, setRoleMap] = useState<Record<string, "viewer" | "admin">>({});
   const getRoleFor = (memberId: string): "viewer" | "admin" => roleMap[memberId] ?? "viewer";
   const setRoleFor = (memberId: string, role: "viewer" | "admin") =>
     setRoleMap((prev) => ({ ...prev, [memberId]: role }));
 
+  // Profile name editing
+  const { data: currentProfile } = useCurrentProfile();
+  const [displayName, setDisplayName] = useState("");
+  const [nameSaving, setNameSaving] = useState(false);
+  useEffect(() => {
+    if (currentProfile?.full_name) setDisplayName(currentProfile.full_name);
+  }, [currentProfile?.full_name]);
+
+  const saveDisplayName = async () => {
+    const trimmed = displayName.trim();
+    if (!trimmed) return;
+    setNameSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("לא מחובר");
+      const { error } = await supabase.from("profiles").update({ full_name: trimmed }).eq("id", user.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["current-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["org-members"] });
+      toast.success("השם עודכן");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "שגיאה בשמירת השם");
+    } finally {
+      setNameSaving(false);
+    }
+  };
+
+  // Ownership transfer requests (visible to owner only)
+  const orgId = membership?.organization?.id;
   const isOwner = membership?.role === "owner";
+
+  const { data: transferRequests = [] } = useQuery({
+    queryKey: ["transfer-requests", orgId],
+    enabled: !!orgId && isOwner,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ownership_transfer_requests")
+        .select("*")
+        .eq("org_id", orgId!)
+        .eq("status", "pending");
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string;
+        requested_by_user_id: string;
+        requested_by_name: string;
+        current_owner_user_id: string;
+        created_at: string;
+      }>;
+    },
+    staleTime: 1000 * 60,
+  });
+
+  const [transferLoading, setTransferLoading] = useState<string | null>(null);
+
+  const handleApproveTransfer = async (req: {
+    id: string;
+    requested_by_user_id: string;
+    requested_by_name: string;
+    current_owner_user_id: string;
+  }) => {
+    setTransferLoading(req.id);
+    try {
+      // 1. Create or update org membership for new owner
+      const existingMember = members.find((m) => m.user_id === req.requested_by_user_id);
+      if (existingMember) {
+        const { error } = await supabase.from("organization_members")
+          .update({ role: "owner", status: "active", joined_at: new Date().toISOString() })
+          .eq("id", existingMember.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("organization_members").insert({
+          organization_id: orgId!,
+          user_id: req.requested_by_user_id,
+          role: "owner",
+          status: "active",
+          joined_at: new Date().toISOString(),
+        });
+        if (error) throw error;
+      }
+      // 2. Block the old owner
+      const oldOwnerMember = members.find(
+        (m) => m.user_id === req.current_owner_user_id && m.role === "owner"
+      );
+      if (oldOwnerMember) {
+        const { error } = await supabase.from("organization_members")
+          .update({ status: "blocked" })
+          .eq("id", oldOwnerMember.id);
+        if (error) throw error;
+      }
+      // 3. Mark transfer approved
+      const { error: tErr } = await supabase.from("ownership_transfer_requests")
+        .update({ status: "approved", resolved_at: new Date().toISOString() })
+        .eq("id", req.id);
+      if (tErr) throw tErr;
+
+      toast.success("הבעלות הועברה בהצלחה");
+      queryClient.invalidateQueries({ queryKey: ["org-members"] });
+      queryClient.invalidateQueries({ queryKey: ["transfer-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["organization"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "שגיאה בהעברת בעלות");
+    } finally {
+      setTransferLoading(null);
+    }
+  };
+
+  const handleRejectTransfer = async (reqId: string) => {
+    setTransferLoading(reqId);
+    try {
+      const { error } = await supabase.from("ownership_transfer_requests")
+        .update({ status: "rejected", resolved_at: new Date().toISOString() })
+        .eq("id", reqId);
+      if (error) throw error;
+      toast.success("הבקשה נדחתה");
+      queryClient.invalidateQueries({ queryKey: ["transfer-requests"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "שגיאה בדחיית בקשה");
+    } finally {
+      setTransferLoading(null);
+    }
+  };
 
   if (isLoading) return <Loader />;
 
-  const pending = members.filter((m) => m.status === "pending");
-  const active  = members.filter((m) => m.status === "active");
+  const pending  = members.filter((m) => m.status === "pending");
+  const active   = members.filter((m) => m.status === "active");
   const rejected = members.filter((m) => m.status === "rejected");
 
   return (
     <div>
-      {/* Org info strip */}
+      {/* ── Profile name edit ───────────────────────────────────────── */}
+      <div style={{ marginBottom: "24px" }}>
+        <SectionTitle>הפרופיל שלי</SectionTitle>
+        <div style={card}>
+          <Label>שם תצוגה</Label>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <input
+              style={inputStyle}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="שם מלא"
+              onKeyDown={(e) => { if (e.key === "Enter") void saveDisplayName(); }}
+            />
+            <button
+              type="button"
+              style={{ ...btnPrimary, whiteSpace: "nowrap" }}
+              disabled={nameSaving || !displayName.trim()}
+              onClick={() => void saveDisplayName()}
+            >
+              {nameSaving ? "שומר..." : "שמור"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Org info strip ──────────────────────────────────────────── */}
       {membership?.organization && (
         <div style={{
           ...card,
@@ -953,7 +1103,76 @@ function TeamTab() {
         </div>
       )}
 
-      {/* Pending requests */}
+      {/* ── Ownership transfer requests ─────────────────────────────── */}
+      {isOwner && transferRequests.length > 0 && (
+        <div style={{ marginBottom: "24px" }}>
+          <SectionTitle>
+            <span style={{
+              background: "#7C3AED", color: "#fff", borderRadius: "50%",
+              width: "20px", height: "20px", display: "inline-flex",
+              alignItems: "center", justifyContent: "center",
+              fontSize: "11px", fontWeight: 700, marginLeft: "6px",
+            }}>
+              {transferRequests.length}
+            </span>
+            בקשות העברת בעלות
+          </SectionTitle>
+          {transferRequests.map((req) => (
+            <div key={req.id} style={{
+              ...card,
+              borderRight: "4px solid #7C3AED",
+              background: "linear-gradient(to left, #F5F3FF, #fff)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{
+                  width: "38px", height: "38px", borderRadius: "50%",
+                  background: "linear-gradient(135deg, #7C3AED, #5B21B6)",
+                  color: "#fff", display: "flex", alignItems: "center",
+                  justifyContent: "center", fontSize: "15px", fontWeight: 700, flexShrink: 0,
+                }}>
+                  {req.requested_by_name?.charAt(0)?.toUpperCase() ?? "?"}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: "14.5px", color: "var(--hk-ink-1)" }}>
+                    {req.requested_by_name}
+                  </div>
+                  <div style={{ fontSize: "12.5px", color: "#7C3AED", marginTop: "2px" }}>
+                    מבקש להחליף אותך כמנהל הראשי
+                  </div>
+                  <div style={{ fontSize: "11.5px", color: "#B5472A", marginTop: "3px", fontWeight: 500 }}>
+                    ⚠️ אם תאשר — הגישה שלך לאפליקציה תיחסם
+                  </div>
+                </div>
+                <Row>
+                  <button
+                    type="button"
+                    style={{
+                      ...btnPrimary,
+                      background: "linear-gradient(135deg, #7C3AED, #5B21B6)",
+                      boxShadow: "0 2px 8px rgba(124,58,237,0.3)",
+                      fontSize: "12.5px",
+                    }}
+                    disabled={transferLoading === req.id}
+                    onClick={() => void handleApproveTransfer(req)}
+                  >
+                    {transferLoading === req.id ? "מעביר..." : "אשר העברה"}
+                  </button>
+                  <button
+                    type="button"
+                    style={btnDanger}
+                    disabled={transferLoading === req.id}
+                    onClick={() => void handleRejectTransfer(req.id)}
+                  >
+                    דחה
+                  </button>
+                </Row>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Pending join requests ────────────────────────────────────── */}
       {isOwner && pending.length > 0 && (
         <div style={{ marginBottom: "24px" }}>
           <SectionTitle>
@@ -974,6 +1193,11 @@ function TeamTab() {
                   <div style={{ fontWeight: 600, fontSize: "14.5px", color: "var(--hk-ink-1)" }}>
                     {m.profiles?.full_name ?? "—"}
                   </div>
+                  {m.job_title && (
+                    <div style={{ fontSize: "12px", color: "#B5472A", fontWeight: 500, marginTop: "2px" }}>
+                      {m.job_title}
+                    </div>
+                  )}
                   <div style={{ fontSize: "12.5px", color: "var(--hk-ink-3)", marginTop: "2px" }}>
                     {m.profiles?.email}
                   </div>
@@ -1015,7 +1239,7 @@ function TeamTab() {
         </div>
       )}
 
-      {/* Active members */}
+      {/* ── Active members ───────────────────────────────────────────── */}
       <SectionTitle>חברי הצוות ({active.length})</SectionTitle>
       {active.length === 0 && (
         <div style={{ ...card, textAlign: "center", color: "var(--hk-ink-3)", padding: "36px 24px" }}>
@@ -1033,6 +1257,11 @@ function TeamTab() {
                 </span>
                 <RoleBadge role={m.role as OrgRole} />
               </div>
+              {m.job_title && (
+                <div style={{ fontSize: "12px", color: "var(--hk-ink-2)", fontWeight: 500, marginTop: "2px" }}>
+                  {m.job_title}
+                </div>
+              )}
               <div style={{ fontSize: "12.5px", color: "var(--hk-ink-3)", marginTop: "2px" }}>
                 {m.profiles?.email}
               </div>
@@ -1056,7 +1285,7 @@ function TeamTab() {
         </div>
       ))}
 
-      {/* Rejected (collapsed, owner only) */}
+      {/* ── Rejected (owner only) ────────────────────────────────────── */}
       {isOwner && rejected.length > 0 && (
         <div style={{ marginTop: "20px" }}>
           <SectionTitle>נדחו ({rejected.length})</SectionTitle>
