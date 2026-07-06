@@ -90,7 +90,7 @@ function ExpenseForm({
         <div>
           <label style={labelStyle}>סכום (₪)</label>
           <input type="number" value={form.amount} onChange={(e) => set("amount", e.target.value)}
-            placeholder="0" min="0" step="0.01" required style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
+            placeholder="0" min="0" step="0.01" required autoFocus style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
         </div>
       </div>
 
@@ -211,7 +211,7 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
   const handleSubmit = async (form: ExpenseFormState) => {
     try {
       await addExpense.mutateAsync({
-        expense_date: form.expense_date, amount: Number(form.amount),
+        expense_date: form.expense_date, amount: Math.round(Number(form.amount) * 100) / 100,
         source: form.source, bank_account: form.bank_account,
         budget_category_id: form.budget_category_id || null,
         supplier: form.supplier || null, description: form.description || null,
@@ -245,7 +245,7 @@ function EditExpenseModal({ expense, onClose }: { expense: Expense; onClose: () 
     try {
       await updateExpense.mutateAsync({
         id: expense.id,
-        expense_date: form.expense_date, amount: Number(form.amount),
+        expense_date: form.expense_date, amount: Math.round(Number(form.amount) * 100) / 100,
         source: form.source, bank_account: form.bank_account,
         budget_category_id: form.budget_category_id || null,
         supplier: form.supplier || null, description: form.description || null,
@@ -501,7 +501,7 @@ export default function ExpensesPage() {
                 {q ? `אין תוצאות עבור "${search}"` : "אין הוצאות להצגה"}
               </div>
               <div style={{ color: "#7A7470", fontSize: "12px", marginTop: "4px" }}>
-                {q ? "נסו מילת חיפוש אחרת" : "לחצו על \"הוסף הוצאה\" להתחלה"}
+                {q ? "נסו/י מילת חיפוש אחרת" : "לחץ/י על \"הוסף הוצאה\" להתחלה"}
               </div>
             </div>
           ) : (

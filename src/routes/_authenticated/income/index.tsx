@@ -112,7 +112,7 @@ function IncomeForm({
         <div>
           <label style={labelStyle}>סכום (₪)</label>
           <input type="number" value={form.amount} onChange={(e) => set("amount", e.target.value)}
-            placeholder="0" min="0" step="0.01" required style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
+            placeholder="0" min="0" step="0.01" required autoFocus style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
         </div>
       </div>
 
@@ -263,7 +263,7 @@ function AddIncomeModal({ onClose, defaultSource }: { onClose: () => void; defau
   const handleSubmit = async (form: IncomeFormState) => {
     try {
       await addIncome.mutateAsync({
-        income_date: form.income_date, amount: Number(form.amount),
+        income_date: form.income_date, amount: Math.round(Number(form.amount) * 100) / 100,
         source: form.source, bank_account: form.bank_account,
         payer: form.payer || null, description: form.description || null,
         payment_method: form.payment_method || null, reference_number: form.reference_number || null,
@@ -301,7 +301,7 @@ function EditIncomeModal({ income, onClose }: { income: Income; onClose: () => v
     try {
       await updateIncome.mutateAsync({
         id: income.id,
-        income_date: form.income_date, amount: Number(form.amount),
+        income_date: form.income_date, amount: Math.round(Number(form.amount) * 100) / 100,
         source: form.source, bank_account: form.bank_account,
         payer: form.payer || null, description: form.description || null,
         payment_method: form.payment_method || null, reference_number: form.reference_number || null,
@@ -632,7 +632,7 @@ export default function IncomePage() {
                 {q ? `אין תוצאות עבור "${search}"` : "אין הכנסות להצגה"}
               </div>
               <div style={{ color: "#7A7470", fontSize: "12px", marginTop: "4px" }}>
-                {q ? "נסו מילת חיפוש אחרת" : "לחצו על \"הוסף הכנסה\" להתחלה"}
+                {q ? "נסו/י מילת חיפוש אחרת" : "לחץ/י על \"הוסף הכנסה\" להתחלה"}
               </div>
             </div>
           ) : (
