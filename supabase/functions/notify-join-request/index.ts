@@ -12,15 +12,35 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const ALLOWED_ORIGIN = "https://hakerem.app";
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+function unauth() {
+  return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  // ── Verify caller is an authenticated Supabase user ──────────────────────
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return unauth();
+
+  const anonClient = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } },
+  );
+  const { data: { user }, error: authErr } = await anonClient.auth.getUser();
+  if (authErr || !user) return unauth();
+  // ─────────────────────────────────────────────────────────────────────────
 
   try {
     const { organization_id, requester_name, requester_email } = await req.json() as {
@@ -92,7 +112,7 @@ serve(async (req) => {
     <strong>${displayName}</strong> מבקש/ת להצטרף לארגון <strong>${orgName}</strong> במערכת הכרם.
   </p>
 
-  <a href="https://hakerem.vercel.app/settings"
+  <a href="https://hakerem.app/settings"
      style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #2D6644, #1A3D2B);
             color: #fff; text-decoration: none; border-radius: 8px; font-size: 15px; font-weight: 600;">
     אשר/י את הבקשה בהגדרות
@@ -111,7 +131,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "הכרם <noreply@hakerem.vercel.app>",
+        from: "הכרם <noreply@hakerem.app>",
         to: [ownerEmail],
         subject: `בקשת הצטרפות חדשה — ${displayName} רוצה להצטרף ל-${orgName}`,
         html: emailBody,
