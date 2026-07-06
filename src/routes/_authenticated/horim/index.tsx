@@ -605,7 +605,7 @@ export default function HorimPage() {
       return;
     }
     if (sections.length === 0) {
-      setGuardMsg("יש להגדיר סעיפי גבייה תחילה — לחצו על כפתור 'סעיפים'");
+      setGuardMsg("יש להגדיר סעיפי גבייה תחילה — לחץ/י על כפתור 'סעיפים'");
       return;
     }
     setGuardMsg(null);

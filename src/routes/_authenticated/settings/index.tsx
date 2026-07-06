@@ -233,7 +233,7 @@ function YearsTab() {
               שנת הלימודים לא פעילה
             </div>
             <div style={{ fontSize: "13px", color: "#B45309", lineHeight: 1.55 }}>
-              יצרת שנת לימודים אך היא אינה פעילה עדיין. לחצו על <strong>הגדר כפעיל</strong> כדי שלוח הבקרה יתחיל לעבוד.
+              יצרת שנת לימודים אך היא אינה פעילה עדיין. לחץ/י על <strong>הגדר כפעיל</strong> כדי שלוח הבקרה יתחיל לעבוד.
             </div>
           </div>
         </div>
@@ -888,16 +888,16 @@ function CategoryList({ source, color, bg, textColor }: { source: BudgetSource; 
 // ─── Team tab ───────────────────────────────────────────────────────────────
 
 const ROLE_LABEL: Record<OrgRole, string> = {
-  owner:  "מנהל ראשי",
-  admin:  "מנהל",
+  owner:  "מנהל/ת ראשי/ת",
+  admin:  "מנהל/ת",
   viewer: "צופה",
 };
 
 const STATUS_LABEL: Record<MemberStatus, string> = {
-  active:   "פעיל",
-  pending:  "ממתין לאישור",
-  rejected: "נדחה",
-  blocked:  "חסום",
+  active:   "פעיל/ה",
+  pending:  "ממתין/ת לאישור",
+  rejected: "נדחה/ת",
+  blocked:  "חסום/ה",
 };
 
 function TeamTab() {
@@ -1468,7 +1468,7 @@ function LicenseTab() {
       <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", padding: "24px" }}>
         <div style={{ fontSize: "16px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>הפעלת קוד רישיון</div>
         <div style={{ fontSize: "13px", color: "#888079", marginBottom: "18px" }}>
-          הכנס את הקוד שקיבלת מהכרם להפעלת המנוי
+          הכנס/י את הקוד שקיבלת מהכרם להפעלת המנוי
         </div>
         <form onSubmit={handleRedeem} style={{ display: "flex", gap: "10px" }}>
           <input
