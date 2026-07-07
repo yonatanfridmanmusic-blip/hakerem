@@ -521,7 +521,7 @@ const chip = (color: string, bg: string): React.CSSProperties => ({
 const FALLBACK_SOURCE_COLORS: Record<string, { color: string; bg: string; label: string }> = {
   gefen:  { color: "#166534", bg: "#F0FDF4", label: "גפן" },
   iriyah: { color: "#7C2D12", bg: "#FFF7ED", label: "עירייה" },
-  horim:  { color: "#6B21A8", bg: "#FAF5FF", label: "הורים" },
+  horim:  { color: "#8B2F6E", bg: "#F4EBF2", label: "הורים" },
 };
 
 const DIAG_CFG = {
