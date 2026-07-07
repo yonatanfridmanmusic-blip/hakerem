@@ -1017,12 +1017,12 @@ function DeepDiveModal({ org, onClose }: { org: OrgRow; onClose: () => void }) {
                       מטריצת סכומי גבייה — ₪ לתלמיד
                     </div>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                      <thead style={{ background: "#FAF5FF" }}>
+                      <thead style={{ background: "#F4EBF2" }}>
                         <tr>
-                          <th style={{ padding: "9px 14px", textAlign: "right", fontSize: "11px", fontWeight: 600, color: "#6B21A8", borderBottom: "1px solid #E8EDE9" }}>שכבה</th>
+                          <th style={{ padding: "9px 14px", textAlign: "right", fontSize: "11px", fontWeight: 600, color: "#8B2F6E", borderBottom: "1px solid #E8EDE9" }}>שכבה</th>
                           <th style={{ padding: "9px 14px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E8EDE9" }}>תלמידים</th>
                           {data.sections.map((s) => (
-                            <th key={s.id} style={{ padding: "9px 14px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "#6B21A8", borderBottom: "1px solid #E8EDE9" }}>{s.name}</th>
+                            <th key={s.id} style={{ padding: "9px 14px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "#8B2F6E", borderBottom: "1px solid #E8EDE9" }}>{s.name}</th>
                           ))}
                           <th style={{ padding: "9px 14px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "#166534", borderBottom: "1px solid #E8EDE9" }}>נגבה</th>
                           <th style={{ padding: "9px 14px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "#6B7280", borderBottom: "1px solid #E8EDE9" }}>%</th>
@@ -1080,7 +1080,7 @@ function DeepDiveModal({ org, onClose }: { org: OrgRow; onClose: () => void }) {
                               <tr key={c.id} style={{ borderBottom: "1px solid #F8FAFC" }}>
                                 <td style={{ padding: "9px 14px", fontSize: "12px", color: "#6B7280" }}>{fmtDate(c.collection_date)}</td>
                                 <td style={{ padding: "9px 14px", fontSize: "12.5px", color: "#111" }}>{grade?.name ?? "—"}</td>
-                                <td style={{ padding: "9px 14px", fontSize: "12.5px", color: "#6B21A8" }}>{sec?.name ?? "—"}</td>
+                                <td style={{ padding: "9px 14px", fontSize: "12.5px", color: "#8B2F6E" }}>{sec?.name ?? "—"}</td>
                                 <td style={{ padding: "9px 14px", fontSize: "13px", fontWeight: 600, color: "#166534" }}>{fmt(Number(c.amount))}</td>
                                 <td style={{ padding: "9px 14px", fontSize: "12px", color: "#9CA3AF" }}>{c.notes ?? "—"}</td>
                               </tr>
