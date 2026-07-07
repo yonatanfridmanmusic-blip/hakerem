@@ -556,6 +556,25 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
     setFillAllState(null);
   };
 
+  // Save all filled horim cells to DB, then advance to step 3
+  const handleFinishHorimWizard = async () => {
+    if (!yearId) { setStep(3); return; }
+    setEditingCell(null);
+    // Read current GSA synchronously (state is already up to date)
+    const currentGSA = wizardGSA;
+    const saves: Promise<void>[] = [];
+    sortedGrades.forEach(g => {
+      wizardSections.forEach((sec, secIdx) => {
+        const val = currentGSA[g.id]?.[secIdx];
+        if (val && val !== "na") {
+          saves.push(saveCellToDb(g.id, sec.name, val, secIdx));
+        }
+      });
+    });
+    await Promise.all(saves);
+    setStep(3);
+  };
+
   // Apply grade applicability: mark non-applicable grade×section combos as "na"
   const handleSectionsToAmounts = () => {
     setWizardGSA(prev => {
@@ -1248,7 +1267,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                   )}
 
                   <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
-                    <button type="button" onClick={() => setStep(3)} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
+                    <button type="button" onClick={handleFinishHorimWizard} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
                       סיים הגדרה ←
                     </button>
                     <button type="button" onClick={() => setHorimView('sections')}
