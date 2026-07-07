@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useSchoolYears,
@@ -109,6 +110,7 @@ const btnDanger: React.CSSProperties = {
 // ─── Main page ─────────────────────────────────────────────────────────────
 
 function SettingsPage() {
+  const isMobile = useIsMobile();
   const [tab, setTab] = useState<Tab>("years");
 
   const tabs: { key: Tab; label: string }[] = [
@@ -126,7 +128,7 @@ function SettingsPage() {
       <div style={{
         background: "linear-gradient(160deg, #1A3D2B 0%, #0F2419 55%, #081510 100%)",
         borderRadius: "20px",
-        padding: "28px 32px",
+        padding: isMobile ? "20px 16px" : "28px 32px",
         marginBottom: "28px",
         boxShadow: "0 8px 32px rgba(15,36,25,0.4)",
       }}>
@@ -145,7 +147,8 @@ function SettingsPage() {
         background: "#E8EDE9",
         borderRadius: "12px",
         padding: "4px",
-        width: "fit-content",
+        maxWidth: "100%",
+        overflowX: "auto",
       }}>
         {tabs.map((t) => (
           <button
@@ -186,6 +189,7 @@ function SettingsPage() {
 // ─── Years tab ─────────────────────────────────────────────────────────────
 
 function YearsTab() {
+  const isMobile = useIsMobile();
   const { data: years = [], isLoading } = useSchoolYears();
   const createYear  = useCreateSchoolYear();
   const setActive   = useSetActiveYear();
@@ -302,8 +306,8 @@ function YearsTab() {
           <div style={{ fontWeight: 700, fontSize: "15px", color: "var(--hk-ink-1)", marginBottom: "16px" }}>
             ➕ שנת לימודים חדשה
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
-            <div style={{ gridColumn: "1 / -1" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+            <div style={{ gridColumn: isMobile ? "1" : "1 / -1" }}>
               <Label>שם</Label>
               <input style={inputStyle} placeholder="לדוגמה: תשפ״ז 2026-2027" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
@@ -339,6 +343,7 @@ function YearsTab() {
 // ─── Grades tab ─────────────────────────────────────────────────────────────
 
 function GradesTab() {
+  const isMobile = useIsMobile();
   const { data: years = [] }   = useSchoolYears();
   const activeYear              = years.find((y) => y.is_active);
   const { data: grades = [], isLoading } = useGrades(activeYear?.id);
@@ -392,7 +397,7 @@ function GradesTab() {
                 <Label>שם שכבה</Label>
                 <input style={inputStyle} value={editVals.name} onChange={(e) => setEditVals((v) => ({ ...v, name: e.target.value }))} />
               </div>
-              <div style={{ width: "130px" }}>
+              <div style={{ width: isMobile ? "100%" : "130px" }}>
                 <Label>מספר תלמידים</Label>
                 <input style={inputStyle} type="number" min="0" value={editVals.count} onChange={(e) => setEditVals((v) => ({ ...v, count: e.target.value }))} />
               </div>
@@ -483,7 +488,7 @@ function GradesTab() {
                 onChange={(e) => setCustomName(e.target.value)}
               />
             </div>
-            <div style={{ width: "150px" }}>
+            <div style={{ width: isMobile ? "100%" : "150px" }}>
               <Label>מספר תלמידים</Label>
               <input style={inputStyle} type="number" min="0" value={count} onChange={(e) => setCount(e.target.value)} />
             </div>

@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateOrganization, useAllOrganizations, useRequestJoinOrg } from "@/hooks/use-organization";
 import { seedDefaultSourcesForOrg, FALLBACK_SOURCES } from "@/hooks/use-budget-sources";
@@ -821,6 +822,7 @@ function PendingStep() {
 // ─── Page shell ───────────────────────────────────────────────────────────────
 
 function OnboardingPage() {
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("choose");
   const [newOrgId, setNewOrgId] = useState<string | null>(null);
@@ -834,7 +836,7 @@ function OnboardingPage() {
     }}>
       <div style={{
         background: "#fff", border: `1px solid ${BORDER}`,
-        borderRadius: "20px", padding: "40px 36px",
+        borderRadius: isMobile ? "16px" : "20px", padding: isMobile ? "24px 20px" : "40px 36px",
         width: "100%", maxWidth: "420px",
         boxShadow: "0 8px 40px rgba(0,0,0,0.08)",
       }}>

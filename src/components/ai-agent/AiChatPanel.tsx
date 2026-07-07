@@ -5,6 +5,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { X, Plus, Trash2, Check, XCircle, SendHorizonal } from "lucide-react";
 import { useAiAgent } from "./AiAgentContext";
 import {
@@ -735,6 +736,7 @@ function EmptyState({ onSuggest }: { onSuggest: (text: string) => void }) {
 // ─── Main Panel ────────────────────────────────────────────────────────────────
 
 export function AiChatPanel() {
+  const isMobile = useIsMobile();
   const { isOpen, close, currentConvId, setCurrentConvId } = useAiAgent();
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -888,8 +890,8 @@ export function AiChatPanel() {
           bottom: 0,
           left: 0,
           zIndex: 1100,
-          width: sidebarOpen ? "720px" : "500px",
-          maxWidth: "calc(100vw - 40px)",
+          width: isMobile ? "100%" : (sidebarOpen ? "720px" : "500px"),
+          maxWidth: isMobile ? "100%" : "calc(100vw - 40px)",
           display: "flex",
           flexDirection: "column",
           background: "linear-gradient(168deg, #142619 0%, #0c1c11 50%, #080f0b 100%)",

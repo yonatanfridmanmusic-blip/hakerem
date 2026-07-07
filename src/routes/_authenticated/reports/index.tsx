@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { toast } from "sonner";
 import { useDashboardSummary, type DashboardSummary } from "@/hooks/use-dashboard-summary";
 import { useOrgBudgetSources, FALLBACK_SOURCES } from "@/hooks/use-budget-sources";
@@ -482,6 +483,7 @@ function openPrint(html: string) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 function ReportsPage() {
+  const isMobile = useIsMobile();
   const [tab, setTab] = useState<Tab>("annual");
 
   const annualQuery   = useDashboardSummary();
@@ -553,7 +555,7 @@ function ReportsPage() {
   return (
     <div>
       {/* Hero */}
-      <div style={{ background: "linear-gradient(160deg, #1A3D2B 0%, #0F2419 55%, #081510 100%)", borderRadius: "20px", padding: "28px 32px", marginBottom: "28px", boxShadow: "0 8px 32px rgba(15,36,25,0.4)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ background: "linear-gradient(160deg, #1A3D2B 0%, #0F2419 55%, #081510 100%)", borderRadius: "20px", padding: isMobile ? "20px 16px" : "28px 32px", marginBottom: "28px", boxShadow: "0 8px 32px rgba(15,36,25,0.4)", display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "center", justifyContent: "space-between", gap: isMobile ? "12px" : "0" }}>
         <div>
           <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "4px", letterSpacing: "0.07em", textTransform: "uppercase" }}>ניתוח נתונים</div>
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, color: "#fff" }}>דוחות</h1>
@@ -562,14 +564,14 @@ function ReportsPage() {
         <button
           type="button"
           onClick={handlePrint}
-          style={{ background: "#FFFFFF", color: "#1A3D2B", border: "none", borderRadius: "11px", padding: "12px 22px", fontSize: "13.5px", fontWeight: 700, cursor: "pointer", fontFamily: "Rubik, sans-serif", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 3px 12px rgba(0,0,0,0.25)" }}
+          style={{ background: "#FFFFFF", color: "#1A3D2B", border: "none", borderRadius: "11px", padding: "12px 22px", fontSize: "13.5px", fontWeight: 700, cursor: "pointer", fontFamily: "Rubik, sans-serif", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 3px 12px rgba(0,0,0,0.25)", alignSelf: isMobile ? "flex-start" : undefined }}
         >
           <span style={{ fontSize: "16px" }}>📄</span> ייצוא PDF
         </button>
       </div>
 
       {/* Tab bar */}
-      <div style={{ display: "flex", gap: "6px", marginBottom: "24px", background: "#E8EDE9", borderRadius: "12px", padding: "4px", width: "fit-content" }}>
+      <div style={{ display: "flex", gap: "6px", marginBottom: "24px", background: "#E8EDE9", borderRadius: "12px", padding: "4px", maxWidth: "100%", overflowX: "auto" }}>
         {tabs.map((t) => (
           <button key={t.key} type="button" onClick={() => setTab(t.key)} style={{ padding: "9px 24px", borderRadius: "9px", border: "none", fontSize: "13.5px", fontWeight: tab === t.key ? 600 : 400, background: tab === t.key ? "linear-gradient(135deg, #2D6644, #1A3D2B)" : "transparent", color: tab === t.key ? "#fff" : "#4A6656", cursor: "pointer", fontFamily: "Rubik, sans-serif", boxShadow: tab === t.key ? "0 2px 8px rgba(26,61,43,0.25)" : "none", transition: "all 0.15s" }}>
             {t.label}
@@ -612,12 +614,13 @@ function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, a
   data: DashboardSummary | undefined; isLoading: boolean; cfgMap: SourceCfgMap; categories: CategoryReport[];
   grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[];
 }) {
+  const isMobile = useIsMobile();
   if (isLoading) return <Loader />;
   if (!data?.schoolYear) return <EmptyState text="אין שנת לימודים פעילה" />;
   const { sources, totals, incomeTotals } = data;
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" }}>
         {[
           { label: "סה״כ מתוכנן",   value: totals.planned,     color: "#1A1A1A", sub: "תקציב שנתי",            border: "#EEE9E2", bg: "#FAFAF8" },
           { label: "סה״כ הוצאות",   value: totals.used,        color: "#B5472A", sub: `${totals.pct}% מהתקציב`,border: "#EDCFC6", bg: "#FDF9F8" },
@@ -664,7 +667,7 @@ function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, a
       </div>
       <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.05)", marginBottom: "18px" }}>
         <div style={{ fontWeight: 700, fontSize: "14px", color: "#1A1A1A", marginBottom: "14px" }}>פירוט הכנסות</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: "14px" }}>
           {[
             { label: "הכנסות ממקורות (גפן / עירייה)", value: incomeTotals.fromIncome, accent: false },
             { label: "גבייה מהורים",                  value: incomeTotals.fromParentCollections, accent: false },
@@ -797,6 +800,7 @@ function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, a
 // ─── Horim Report ─────────────────────────────────────────────────────────────
 
 function HorimReport({ grades, sections, amounts, collections, isLoading }: { grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[]; isLoading: boolean }) {
+  const isMobile = useIsMobile();
   if (isLoading) return <Loader />;
   if (grades.length === 0) return <EmptyState text="אין שכבות — הגדר שכבות במסך ההגדרות" />;
   const rows = grades.map((grade) => {
@@ -831,7 +835,7 @@ function HorimReport({ grades, sections, amounts, collections, isLoading }: { gr
 
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" }}>
         {[
           { label: "יעד גבייה (100%)", value: tT,   color: "#1A1A1A", bg: "#FAFAF8", border: "#EEE9E2",  sub: null },
           { label: "יעד גבייה (85%)", value: tT85,  color: "#8B2F6E", bg: "#F7F0F5", border: "#DDD0E8",  sub: null },
@@ -1008,6 +1012,7 @@ function PeriodicReport({
   cfgMap: SourceCfgMap; categories: PeriodicCategory[];
   grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[];
 }) {
+  const isMobile = useIsMobile();
   const periodTypeOptions: { key: PeriodType; label: string; emoji: string }[] = [
     { key: "monthly",   label: "חודשי",           emoji: "📅" },
     { key: "quarterly", label: "רבעוני",          emoji: "📊" },
@@ -1024,7 +1029,7 @@ function PeriodicReport({
       {/* Period type selector */}
       <div style={selectorCard}>
         <div style={{ fontWeight: 700, fontSize: "14px", color: "#1A1A1A", marginBottom: "14px" }}>בחר סוג תקופה</div>
-        <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
           {periodTypeOptions.map((opt) => (
             <button
               key={opt.key}
@@ -1165,7 +1170,7 @@ function PeriodicReport({
       {hasQuery && !isLoading && data && (
         <div>
           {/* KPI cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" }}>
             {[
               { label: "הכנסות בתקופה",  value: data.totals.income,             color: "#2D6644",                                bg: "#F4FBF7", border: "#C6E8D0", sub: "ממקורות" },
               { label: "גבייה מהורים",   value: data.totals.parentCollections,  color: "#8B2F6E",                                bg: "#F7F0F5", border: "#DDD0E8", sub: "תשלומים שנרשמו" },

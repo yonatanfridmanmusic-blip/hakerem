@@ -116,6 +116,7 @@ function Bar({ pct, gradient }: { pct: number; gradient: string }) {
 }
 
 function SourceCard({ s }: { s: SourceSummary }) {
+  const isMobile = useIsMobile();
   const animCashBalance = useCountUp(s.cashBalance);
   const animIncome      = useCountUp(s.income);
   const animUsed        = useCountUp(s.used);
@@ -134,7 +135,7 @@ function SourceCard({ s }: { s: SourceSummary }) {
   return (
     <div style={{
       background: hero.bg,
-      borderRadius: "20px", padding: "32px 36px",
+      borderRadius: "20px", padding: isMobile ? "24px 20px" : "32px 36px",
       display: "flex", justifyContent: "space-between", alignItems: "flex-end",
       flexWrap: "wrap", gap: "24px",
       boxShadow: hero.shadow,
@@ -147,7 +148,7 @@ function SourceCard({ s }: { s: SourceSummary }) {
         <div style={{ fontSize: "12px", color: hero.subtleText, fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px" }}>
           {s.label} — {cashLabel}
         </div>
-        <div className="num" style={{ fontSize: "52px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
+        <div className="num" style={{ fontSize: isMobile ? "36px" : "52px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
           {fmt(animCashBalance)}
         </div>
         <div style={{ marginTop: "12px", fontSize: "13px", color: hero.secondaryText, display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -188,7 +189,7 @@ function SourceCard({ s }: { s: SourceSummary }) {
       {/* Right: big pct */}
       <div style={{ textAlign: "left", position: "relative" }}>
         <div className="num" style={{
-          fontSize: "64px", fontWeight: "200",
+          fontSize: isMobile ? "44px" : "64px", fontWeight: "200",
           background: hero.pctGradient,
           WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
           letterSpacing: "-3px", lineHeight: 1,
@@ -357,6 +358,7 @@ async function setGradeHorimAmount(
 }
 
 function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; mode?: WizardMode }) {
+  const isMobile = useIsMobile();
   const { data: membership } = useOrganization();
   const orgName = membership?.organization?.name ?? "בית הספר";
   const [firstName, setFirstName] = useState<string>("");
@@ -632,7 +634,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ maxWidth: "680px", margin: "0 auto" }}>
+    <div style={{ maxWidth: "680px", margin: isMobile ? "0 16px" : "0 auto" }}>
 
       {/* ── Header card ── */}
       <div style={{
@@ -1482,7 +1484,7 @@ export default function DashboardPage() {
     <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
 
       {/* Page heading */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: isMobile ? "flex-start" : "flex-start", gap: isMobile ? "12px" : "0" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>
             לוח בקרה
@@ -1515,7 +1517,7 @@ export default function DashboardPage() {
       {/* Hero */}
       <div style={{
         background: "linear-gradient(135deg, #2D6644 0%, #1A3D2B 55%, #0D2118 100%)",
-        borderRadius: "20px", padding: "32px 36px",
+        borderRadius: "20px", padding: isMobile ? "24px 20px" : "32px 36px",
         display: "flex", justifyContent: "space-between", alignItems: "flex-end",
         flexWrap: "wrap", gap: "24px",
         boxShadow: "0 16px 56px rgba(13,33,24,0.4), 0 1px 0 rgba(255,255,255,0.08) inset",
@@ -1529,7 +1531,7 @@ export default function DashboardPage() {
           <div style={{ fontSize: "12px", color: "rgba(122,170,142,0.8)", fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px" }}>
             יתרה תקציבית — כל המקורות
           </div>
-          <div className="num" style={{ fontSize: "52px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
+          <div className="num" style={{ fontSize: isMobile ? "36px" : "52px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
             {isLoading ? "—" : fmt(animBalance)}
           </div>
           <div style={{ marginTop: "12px", fontSize: "13px", color: "#7AAA8E" }}>
@@ -1542,7 +1544,7 @@ export default function DashboardPage() {
 
         <div style={{ textAlign: "left", position: "relative" }}>
           <div className="num" style={{
-            fontSize: "64px", fontWeight: "200",
+            fontSize: isMobile ? "44px" : "64px", fontWeight: "200",
             background: "linear-gradient(135deg, #7EE8A6 0%, #4DC483 100%)",
             WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
             letterSpacing: "-3px", lineHeight: 1,

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { Plus, X, Check, ChevronDown, ChevronUp, Users, Settings2, Pencil } from "lucide-react";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { toast } from "sonner";
@@ -236,6 +237,7 @@ function AddCollectionModal({
   grades: Grade[]; sections: ParentSection[]; preGradeId?: string;
   onClose: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [gradeId, setGradeId] = useState(preGradeId ?? grades[0]?.id ?? "");
   const [sectionId, setSectionId] = useState(sections[0]?.id ?? "");
   const [amount, setAmount] = useState("");
@@ -281,7 +283,7 @@ function AddCollectionModal({
 
         <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
           {/* Grade + Section */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px" }}>
             <div>
               <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>שכבה</label>
               <select value={gradeId} onChange={(e) => setGradeId(e.target.value)} style={inputStyle}>
@@ -297,7 +299,7 @@ function AddCollectionModal({
           </div>
 
           {/* Date + Amount */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px" }}>
             <div>
               <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required style={{ ...inputStyle, direction: "ltr" }} />
@@ -538,6 +540,7 @@ function GradeRow({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HorimPage() {
+  const isMobile = useIsMobile();
   const [showModal, setShowModal] = useState(false);
   const [showSectionsModal, setShowSectionsModal] = useState(false);
   const [preGradeId, setPreGradeId] = useState<string | undefined>();
@@ -649,14 +652,14 @@ export default function HorimPage() {
         )}
 
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: isMobile ? "flex-start" : "flex-start", gap: isMobile ? "12px" : "0" }}>
           <div>
             <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>גביית הורים</h1>
             <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099" }}>
               {isLoading ? "טוען..." : `${grades.length} שכבות · ${sections.length} סעיפים`}
             </p>
           </div>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
             {/* Basis toggle */}
             <div style={{ display: "flex", background: "#F0EBE6", borderRadius: "8px", padding: "3px", gap: "2px" }}>
               {([85, 100] as const).map((b) => (

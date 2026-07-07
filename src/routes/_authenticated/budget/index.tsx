@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { Plus, Check, X, Pencil, ChevronDown, Copy, Trash2 } from "lucide-react";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { toast } from "sonner";
@@ -605,6 +606,7 @@ function SourceTab({
   isCurrentYear: boolean;
   years: ReturnType<typeof useSchoolYears>["data"] & {};
 }) {
+  const isMobile = useIsMobile();
   const { data, isLoading } = useBudgetPlan(srcCfg.key, targetYearId);
   const categories = data?.categories ?? [];
   const [addingRow, setAddingRow] = useState(false);
@@ -638,7 +640,7 @@ function SourceTab({
         style={{
           borderRadius: "18px",
           background: srcCfg.heroGradient,
-          padding: "24px 28px",
+          padding: isMobile ? "18px 16px" : "24px 28px",
           color: "#fff",
           position: "relative",
           overflow: "hidden",
@@ -706,7 +708,7 @@ function SourceTab({
 
           {/* Stats — only show used/balance for the active/current year */}
           {isCurrentYear ? (
-            <div style={{ display: "flex", gap: "28px", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "28px", alignItems: "center", flexWrap: "wrap" }}>
               <div style={{ textAlign: "center" }}>
                 <div
                   style={{
@@ -996,6 +998,7 @@ function SourceTab({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function BudgetPage() {
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<string>("");
   const [selectedYearId, setSelectedYearId] = useState<string | null>(null);
   const { data: years = [] } = useSchoolYears();
@@ -1096,6 +1099,7 @@ export default function BudgetPage() {
           display: "flex",
           gap: "0",
           borderBottom: "2px solid #EAE5DE",
+          overflowX: "auto",
         }}
       >
         {sources.map((src) => {
@@ -1118,6 +1122,7 @@ export default function BudgetPage() {
                   : "2px solid transparent",
                 marginBottom: "-2px",
                 transition: "all 0.12s",
+                flexShrink: 0,
               }}
             >
               {src.label}

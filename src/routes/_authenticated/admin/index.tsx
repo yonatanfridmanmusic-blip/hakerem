@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { setViewAsOrg } from "@/lib/view-as";
@@ -543,6 +544,7 @@ function getOrgCategory(org: OrgRow): SortFilter {
 }
 
 function AdminPage() {
+  const isMobile = useIsMobile();
   const { data: orgs = [], isLoading } = useAllOrgs();
   const [expandedId, setExpandedId]     = useState<string | null>(null);
   const [codeModalOrg, setCodeModalOrg] = useState<OrgRow | null>(null);
@@ -709,6 +711,7 @@ function OrgCard({ org, expanded, isDuplicate, onToggle, onGenerateCode, onDeepD
   onGenerateCode: () => void; onDeepDive: () => void;
   onPause: () => void; onDelete: () => void;
 }) {
+  const isMobile = useIsMobile();
   const { data: detail, isLoading } = useOrgDetail(expanded ? org.id : null);
   const expiry = expiryStatus(org.plan_expires_at);
   const isExpired = org.plan_expires_at && new Date(org.plan_expires_at) < new Date();
@@ -774,7 +777,7 @@ function OrgCard({ org, expanded, isDuplicate, onToggle, onGenerateCode, onDeepD
           {isLoading ? (
             <div style={{ color: "#9CA3AF", fontSize: "13px" }}>טוען...</div>
           ) : detail ? (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "20px" }}>
               <div>
                 <div style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", letterSpacing: "0.05em", marginBottom: "10px" }}>חברי צוות ({detail.members.length})</div>
                 {detail.members.length === 0 && <div style={{ fontSize: "13px", color: "#9CA3AF" }}>אין חברים</div>}
@@ -807,7 +810,7 @@ function OrgCard({ org, expanded, isDuplicate, onToggle, onGenerateCode, onDeepD
                     {y.is_active && <span style={chip("#166534", "#DCFCE7")}>פעיל</span>}
                   </div>
                 ))}
-                <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "8px" }}>
                   <FinStat label="סה״כ הכנסות" value={detail.incomeTotal} color="#166534" bg="#F0FDF4" />
                   <FinStat label="סה״כ הוצאות" value={detail.expenseTotal} color="#991B1B" bg="#FEF2F2" />
                 </div>
@@ -825,6 +828,7 @@ function OrgCard({ org, expanded, isDuplicate, onToggle, onGenerateCode, onDeepD
 type DeepTab = "diagnostics" | "overview" | "budget" | "horim" | "expenses" | "income" | "team";
 
 function DeepDiveModal({ org, onClose }: { org: OrgRow; onClose: () => void }) {
+  const isMobile = useIsMobile();
   const { data, isLoading, error } = useOrgFullData(org.id);
   const [tab, setTab] = useState<DeepTab>("diagnostics");
 
@@ -843,7 +847,7 @@ function DeepDiveModal({ org, onClose }: { org: OrgRow; onClose: () => void }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "16px" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: "#F0F4F8", borderRadius: "22px", width: "100%", maxWidth: "900px", maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "Rubik, sans-serif", direction: "rtl", boxShadow: "0 32px 100px rgba(0,0,0,0.5)" }}>
+      <div style={{ background: "#F0F4F8", borderRadius: isMobile ? 0 : "22px", width: "100%", maxWidth: isMobile ? "none" : "900px", maxHeight: isMobile ? "100dvh" : "90vh", ...(isMobile ? { position: "fixed" as const, top: 0, left: 0, right: 0, bottom: 0 } : {}), overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "Rubik, sans-serif", direction: "rtl", boxShadow: "0 32px 100px rgba(0,0,0,0.5)" }}>
 
         {/* Header */}
         <div style={{ background: "linear-gradient(135deg, #0F172A, #1E3A5F)", padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
@@ -908,7 +912,7 @@ function DeepDiveModal({ org, onClose }: { org: OrgRow; onClose: () => void }) {
           {!isLoading && data && tab === "overview" && (
             <div>
               {/* KPI row */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "10px", marginBottom: "18px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: "10px", marginBottom: "18px" }}>
                 {[
                   { label: "קטגוריות תקציב", value: data.categories.length + "", sub: "מוגדרות" },
                   { label: "הוצאות", value: data.allExpenses.length + "", sub: `${fmt(data.allExpenses.reduce((s, e) => s + e.amount, 0))} סה״כ` },
