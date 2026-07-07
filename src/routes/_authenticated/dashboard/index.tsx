@@ -396,6 +396,8 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   const [editingCell, setEditingCell] = useState<{ gradeId: string; secIdx: number } | null>(null);
   // Horim wizard: which grades each section applies to ('all' | gradeId[])
   const [wizardSectionGrades, setWizardSectionGrades] = useState<Record<number, 'all' | string[]>>({});
+  // Horim wizard: default amount per section (pre-populates all applicable grades in View B)
+  const [wizardSectionDefaults, setWizardSectionDefaults] = useState<Record<number, string>>({});
   // Horim wizard view: 'sections' = define sections+grades, 'amounts' = enter per-grade amounts
   const [horimView, setHorimView] = useState<'sections' | 'amounts'>('sections');
   const savingCellRef = useRef(false); // guard against double-save (Enter → blur)
@@ -565,6 +567,12 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
           const applicable = isAll ? true : (sg as string[]).includes(g.id);
           if (!applicable) {
             next[g.id] = { ...(next[g.id] ?? {}), [secIdx]: "na" };
+          } else {
+            // Pre-populate with section default if cell not yet filled
+            const def = wizardSectionDefaults[secIdx];
+            if (def && !next[g.id]?.[secIdx]) {
+              next[g.id] = { ...(next[g.id] ?? {}), [secIdx]: def };
+            }
           }
         });
       });
@@ -806,11 +814,9 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
               <button type="button" onClick={() => setStep(2)} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
                 המשך לקטגוריות ←
               </button>
-              {sortedGrades.length === 0 && (
-                <button type="button" onClick={() => setStep(2)} style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
-                  דלג
-                </button>
-              )}
+              <button type="button" onClick={() => setStep(0)} style={{ padding: "14px 18px", background: "none", color: "#6B6560", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                → חזור
+              </button>
             </div>
           </div>
         )}
@@ -818,7 +824,13 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
         {/* ── STEP 2: Categories ── */}
         {step === 2 && (
           <div>
-            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>קטגוריות תקציב</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+              <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>קטגוריות תקציב</div>
+              <button type="button" onClick={() => setStep(1)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#6B6560", fontSize: "13px", fontFamily: "Rubik, sans-serif", display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px" }}>
+                → חזור לשכבות
+              </button>
+            </div>
             <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "20px", lineHeight: 1.6 }}>
               לחצו על הצעות מהירות להוסיף קטגוריות נפוצות, או הקלידו שם מותאם.
             </div>
@@ -927,6 +939,15 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                                 });
                                 return next;
                               });
+                              setWizardSectionDefaults(prev => {
+                                const next: Record<number, string> = {};
+                                Object.entries(prev).forEach(([k, v]) => {
+                                  const ki = Number(k);
+                                  if (ki < i) next[ki] = v;
+                                  else if (ki > i) next[ki - 1] = v;
+                                });
+                                return next;
+                              });
                             }} title="הסר סעיף"
                               style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", fontSize: "13px", padding: "2px" }}
                               onMouseEnter={e => (e.currentTarget.style.color = "#E57373")}
@@ -973,6 +994,22 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                                 </button>
                               );
                             })}
+                          </div>
+                          {/* Default amount per student for this section */}
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #EDD8E8" }}>
+                            <span style={{ fontSize: "12px", color: "#8B2F6E", fontWeight: "500", whiteSpace: "nowrap" }}>סכום לתלמיד:</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <span style={{ fontSize: "12px", color: "#8B2F6E" }}>₪</span>
+                              <input
+                                type="number" min="0"
+                                value={wizardSectionDefaults[i] ?? ""}
+                                onChange={e => setWizardSectionDefaults(prev => ({ ...prev, [i]: e.target.value }))}
+                                onFocus={e => e.target.select()}
+                                placeholder="0"
+                                style={{ width: "72px", padding: "4px 8px", border: "1.5px solid #C080A8", borderRadius: "7px", fontSize: "13px", fontFamily: "Rubik, sans-serif", direction: "ltr", textAlign: "right", outline: "none", background: "#fff" }}
+                              />
+                            </div>
+                            <span style={{ fontSize: "11px", color: "#B090C0" }}>ניתן לשנות לפי שכבה בשלב הבא</span>
                           </div>
                         </div>
                       );
