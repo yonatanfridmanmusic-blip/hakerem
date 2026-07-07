@@ -607,8 +607,10 @@ export default function IncomePage() {
 
         {/* Table */}
         <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+          <div style={{ overflowX: "auto" }}>
           <div style={{
             display: "grid", gridTemplateColumns: "110px 110px 70px 100px 1fr 1fr 90px 72px",
+            minWidth: "740px",
             padding: "12px 20px", borderBottom: "1px solid #EAE5DE",
             fontSize: "11px", fontWeight: "600", color: "#AAA099",
             letterSpacing: "0.04em", textTransform: "uppercase", gap: "12px",
@@ -642,6 +644,7 @@ export default function IncomePage() {
               return (
                 <div key={inc.id} style={{
                   display: "grid", gridTemplateColumns: "110px 110px 70px 100px 1fr 1fr 90px 72px",
+                  minWidth: "740px",
                   padding: "14px 20px", gap: "12px",
                   borderBottom: i < visibleIncome.length - 1 ? "1px solid #F3EEE8" : "none",
                   alignItems: "center", transition: "background 0.1s",
@@ -700,6 +703,7 @@ export default function IncomePage() {
               );
             })
           )}
+          </div>{/* /overflowX scroll */}
         </div>
       </div>
     </>

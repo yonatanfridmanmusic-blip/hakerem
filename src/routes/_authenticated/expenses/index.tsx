@@ -478,8 +478,10 @@ export default function ExpensesPage() {
 
         {/* Table */}
         <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+          <div style={{ overflowX: "auto" }}>
           <div style={{
             display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 1fr 72px",
+            minWidth: "580px",
             padding: "12px 20px", borderBottom: "1px solid #EAE5DE",
             fontSize: "11px", fontWeight: "600", color: "#AAA099",
             letterSpacing: "0.04em", textTransform: "uppercase", gap: "12px",
@@ -511,6 +513,7 @@ export default function ExpensesPage() {
               return (
                 <div key={e.id} style={{
                   display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 1fr 72px",
+                  minWidth: "580px",
                   padding: "14px 20px", gap: "12px",
                   borderBottom: i < visibleExpenses.length - 1 ? "1px solid #F3EEE8" : "none",
                   alignItems: "center", transition: "background 0.1s",
@@ -563,6 +566,7 @@ export default function ExpensesPage() {
               );
             })
           )}
+          </div>{/* /overflowX scroll */}
         </div>
       </div>
     </>

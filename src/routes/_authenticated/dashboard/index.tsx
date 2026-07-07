@@ -11,6 +11,7 @@ import { useAddGrade, useDeleteGrade, useGrades } from "@/hooks/use-grades";
 import { useAddBudgetCategory, useDeleteBudgetCategory, useUpdatePlannedAmount, type BudgetSource } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, useAddBudgetSource, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { syncHorimBudgetCategory } from "@/hooks/use-horim";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 
 export const Route = createFileRoute("/_authenticated/dashboard/")({
   component: DashboardPage,
@@ -1441,6 +1442,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const isMobile = useIsMobile();
   const { data, isLoading, error } = useDashboardSummary();
 
   // Track whether this session started without a school year
@@ -1555,7 +1557,7 @@ export default function DashboardPage() {
 
       {/* Income strip */}
       <div style={{
-        display: "grid", gridTemplateColumns: "1fr 1fr",
+        display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
         gap: "14px",
       }}>
         {/* Income from income table */}

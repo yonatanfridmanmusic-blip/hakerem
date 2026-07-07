@@ -809,6 +809,7 @@ function SourceTab({
           boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
         }}
       >
+        <div style={{ overflowX: "auto" }}>
         {/* Header */}
         <div
           style={{
@@ -816,6 +817,7 @@ function SourceTab({
             gridTemplateColumns: isCurrentYear
               ? "1fr 130px 120px 80px 36px"
               : "1fr 130px 36px",
+            minWidth: isCurrentYear ? "460px" : "220px",
             padding: "12px 20px",
             borderBottom: "1px solid #EAE5DE",
             fontSize: "11px",
@@ -877,6 +879,7 @@ function SourceTab({
                   gridTemplateColumns: isCurrentYear
                     ? "1fr 130px 120px 80px 36px"
                     : "1fr 130px 36px",
+                  minWidth: isCurrentYear ? "460px" : "220px",
                   padding: "14px 20px",
                   gap: "12px",
                   borderBottom:
@@ -959,6 +962,7 @@ function SourceTab({
             onDone={() => setAddingRow(false)}
           />
         )}
+        </div>{/* /overflowX scroll */}
       </div>
 
       {/* Add button */}
