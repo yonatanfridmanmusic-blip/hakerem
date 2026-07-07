@@ -193,6 +193,32 @@ function buildTools(srcs: { slug: string; label: string }[]) {
       input_schema: { type: "object", required: ["description", "amount", "source", "expense_date"], properties: { description: { type: "string" }, amount: { type: "number" }, source: { type: "string", description: sd }, expense_date: { type: "string", description: td }, budget_category_id: { type: "string", description: "UUID מ-get_budget_categories בלבד" }, supplier: { type: "string" } } },
     },
     {
+      name: "add_expenses_batch",
+      description: "יוצר מספר הוצאות בבת אחת אחרי תכנון פעילות. קרא רק כשהמשתמש אמר 'כן' או אישר בפירוש את הכנסת כל ההוצאות. קרא get_budget_categories קודם לכל מקור.",
+      input_schema: {
+        type: "object",
+        required: ["expenses"],
+        properties: {
+          expenses: {
+            type: "array",
+            description: "רשימת ההוצאות להכנסה",
+            items: {
+              type: "object",
+              required: ["description", "amount", "source", "expense_date"],
+              properties: {
+                description: { type: "string" },
+                amount: { type: "number" },
+                source: { type: "string", description: sd },
+                expense_date: { type: "string", description: td },
+                budget_category_id: { type: "string", description: "UUID מ-get_budget_categories בלבד" },
+                supplier: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
       name: "add_income",
       description: "יוצר טיוטת הכנסה לאישור. קרא רק אחרי get_budget_categories וכשיש כל הפרטים.",
       input_schema: { type: "object", required: ["description", "amount", "source", "income_date"], properties: { description: { type: "string" }, amount: { type: "number" }, source: { type: "string", description: sd }, income_date: { type: "string", description: td }, budget_category_id: { type: "string", description: "UUID מ-get_budget_categories בלבד" }, payer: { type: "string" } } },
@@ -209,9 +235,10 @@ async function callClaude(
   sc: ReturnType<typeof createClient>,
   uid: string, cid: string, yid: string,
   srcs: { slug: string; label: string }[],
-): Promise<{ reply: string; draft: { id: string; action_type: string; preview: unknown } | null }> {
+): Promise<{ reply: string; draft: { id: string; action_type: string; preview: unknown } | null; batchDraft: { ids: string[]; previews: unknown[]; total: number } | null }> {
   let cur: CM[] = [...msgs];
   let draft: { id: string; action_type: string; preview: unknown } | null = null;
+  let batchDraft: { ids: string[]; previews: unknown[]; total: number } | null = null;
   const today = todayIL();
 
   for (let iter = 0; iter < 12; iter++) {
@@ -224,7 +251,7 @@ async function callClaude(
     const res: { stop_reason: string; content: CC[] } = await r.json();
 
     if (res.stop_reason === "end_turn") {
-      return { reply: res.content.find(b => b.type === "text")?.text ?? "✅", draft };
+      return { reply: res.content.find(b => b.type === "text")?.text ?? "✅", draft, batchDraft };
     }
 
     if (res.stop_reason === "tool_use") {
@@ -435,6 +462,30 @@ async function callClaude(
             if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); }
             else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. סכם ובקש אישור." }); }
           }
+        } else if (blk.name === "add_expenses_batch") {
+          const expenses = (inp.expenses ?? []) as Array<{
+            description: string; amount: number; source: string;
+            expense_date: string; budget_category_id?: string; supplier?: string;
+          }>;
+          const batchItems: { id: string; action_type: string; preview: unknown }[] = [];
+          for (const exp of expenses) {
+            const src = normSrc(String(exp.source ?? ""), srcs);
+            const lbl = srcs.find(s => s.slug === src)?.label ?? src;
+            const rawCatId = exp.budget_category_id ?? null;
+            const catId = isUUID(rawCatId) ? rawCatId : null;
+            let catName: string | null = null;
+            if (catId) {
+              const { data: catR } = await uc.from("budget_categories").select("name").eq("id", catId).maybeSingle();
+              catName = catR?.name ?? null;
+            }
+            const d = String(exp.expense_date ?? today);
+            const payload = { school_year_id: yid, description: String(exp.description ?? ""), amount: Number(exp.amount ?? 0), source: src, expense_date: d, bank_account: "school", target_grade_ids: [], budget_category_id: catId, supplier: exp.supplier ? String(exp.supplier) : null, created_by: uid };
+            const preview = { type: "add_expense", description: String(exp.description ?? ""), amount: Number(exp.amount ?? 0), source_slug: src, source_label: lbl, date: d, budget_category_id: catId, category_name: catName, supplier: exp.supplier ? String(exp.supplier) : null };
+            const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "add_expense", status: "draft", payload, preview }).select("id,action_type,preview").single();
+            if (!de && dd) batchItems.push(dd);
+          }
+          batchDraft = { ids: batchItems.map(b => b.id), previews: batchItems.map(b => b.preview), total: batchItems.length };
+          tr.push({ type: "tool_result", tool_use_id: blk.id, content: `נוצרו ${batchItems.length} טיוטות. ציין שיש ${batchItems.length} הוצאות שמחכות לאישור אחד.` });
         }
       }
       cur.push({ role: "user", content: tr });
@@ -442,7 +493,7 @@ async function callClaude(
     }
     break;
   }
-  return { reply: "✅", draft };
+  return { reply: "✅", draft, batchDraft };
 }
 
 async function handleConfirm(
@@ -489,6 +540,40 @@ async function handleConfirm(
   }
 }
 
+async function handleConfirmBatch(
+  sc: ReturnType<typeof createClient>, uc: ReturnType<typeof createClient>,
+  uid: string, cid: string | null, draftIds: string[], approved: boolean,
+) {
+  if (!approved) {
+    await sc.from("ai_action_drafts").update({ status: "cancelled", updated_at: new Date().toISOString() }).in("id", draftIds).eq("user_id", uid);
+    const msg = "ביטלתי את כל ההוצאות.";
+    if (cid) await uc.from("ai_messages").insert({ conversation_id: cid, user_id: uid, role: "assistant", content: msg });
+    return json({ reply: msg, executed: false });
+  }
+  let success = 0;
+  let failed = 0;
+  for (const draftId of draftIds) {
+    const { data: dr } = await sc.from("ai_action_drafts").select("*").eq("id", draftId).eq("user_id", uid).in("status", ["draft", "failed"]).maybeSingle();
+    if (!dr) continue;
+    try {
+      const pl = { ...(dr.payload as Record<string, unknown>) };
+      if (!pl.bank_account) pl.bank_account = "school";
+      if (!pl.target_grade_ids) pl.target_grade_ids = [];
+      const rawCatId = pl.budget_category_id != null ? String(pl.budget_category_id) : null;
+      if (!isUUID(rawCatId)) pl.budget_category_id = null;
+      const { error: ie } = await sc.from("expenses").insert(pl);
+      if (ie) throw ie;
+      await sc.from("ai_action_drafts").update({ status: "executed", updated_at: new Date().toISOString(), executed_at: new Date().toISOString() }).eq("id", draftId);
+      success++;
+    } catch {
+      failed++;
+    }
+  }
+  const msg = `נרשמו ${success} הוצאות בהצלחה${failed > 0 ? ` (${failed} נכשלו)` : ""}. הדף עודכן.`;
+  if (cid) await uc.from("ai_messages").insert({ conversation_id: cid, user_id: uid, role: "assistant", content: msg });
+  return json({ reply: msg, executed: true, count: success });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
@@ -502,9 +587,11 @@ serve(async (req) => {
     const { data: { user }, error: ae } = await uc.auth.getUser();
     if (ae || !user) return json({ error: "Unauthorized" }, 401);
 
-    const body = await req.json() as { type?: string; message?: string; conversation_id?: string; action_draft_id?: string; approved?: boolean };
+    const body = await req.json() as { type?: string; message?: string; conversation_id?: string; action_draft_id?: string; draft_ids?: string[]; approved?: boolean };
     if (body.type === "confirm" && body.action_draft_id)
       return handleConfirm(sc, uc, user.id, body.conversation_id ?? null, body.action_draft_id, body.approved ?? false);
+    if (body.type === "confirm_batch" && Array.isArray((body as { draft_ids?: string[] }).draft_ids))
+      return handleConfirmBatch(sc, uc, user.id, (body as { conversation_id?: string }).conversation_id ?? null, (body as { draft_ids: string[] }).draft_ids, (body as { approved?: boolean }).approved ?? false);
     if (!body.message) return json({ error: "message required" }, 400);
 
     const memR = await uc.from("organization_members").select("organization_id").eq("user_id", user.id).eq("status", "active").maybeSingle();
@@ -543,17 +630,17 @@ serve(async (req) => {
     const hist = ((histR as { data: { role: string; content: string }[] }).data ?? []).map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
     hist.push({ role: "user", content: body.message });
 
-    const [_save, { reply, draft }] = await Promise.all([
+    const [_save, { reply, draft, batchDraft }] = await Promise.all([
       uc.from("ai_messages").insert({ conversation_id: cid, user_id: user.id, role: "user", content: body.message }),
       callClaude(apiKey, buildSys(ctx, srcs, year), hist, buildTools(srcs), uc, sc, user.id, cid, yid, srcs),
     ]);
 
     const [savedR] = await Promise.all([
-      uc.from("ai_messages").insert({ conversation_id: cid, user_id: user.id, role: "assistant", content: reply, metadata: draft ? { action_draft_id: draft.id } : null }).select("id").single(),
+      uc.from("ai_messages").insert({ conversation_id: cid, user_id: user.id, role: "assistant", content: reply, metadata: draft ? { action_draft_id: draft.id } : (batchDraft ? { batch_draft_ids: batchDraft.ids } : null) }).select("id").single(),
       uc.from("ai_conversations").update({ updated_at: new Date().toISOString() }).eq("id", cid),
     ]);
 
-    return json({ conversation_id: cid, message_id: (savedR as { data: { id: string } | null }).data?.id, reply, action_draft: draft ? { id: draft.id, action_type: draft.action_type, preview: draft.preview } : null });
+    return json({ conversation_id: cid, message_id: (savedR as { data: { id: string } | null }).data?.id, reply, action_draft: draft ? { id: draft.id, action_type: draft.action_type, preview: draft.preview } : null, batch_draft: batchDraft ? { ids: batchDraft.ids, previews: batchDraft.previews, total: batchDraft.total } : null });
   } catch (err) {
     console.error("top-level:", String(err));
     return json({ error: "שגיאה." }, 500);

@@ -13,9 +13,12 @@ import {
   useAiMessages,
   useSendAiMessage,
   useConfirmAiAction,
+  useConfirmAiBatch,
   useDeleteAiConversation,
   type AiMessage,
   type ActionDraft,
+  type BatchDraft,
+  type ActionDraftPreview,
 } from "@/hooks/use-ai-agent";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -303,6 +306,117 @@ function ConfirmCard({
   );
 }
 
+// ─── Batch Confirm Card ───────────────────────────────────────────────────────
+
+interface BatchConfirmCardProps {
+  draftIds: string[];
+  previews: ActionDraftPreview[];
+  convId: string;
+  onDone: () => void;
+}
+
+function BatchConfirmCard({ draftIds, previews, convId, onDone }: BatchConfirmCardProps) {
+  const confirm = useConfirmAiBatch();
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+
+  const total = previews.reduce((s, p) => s + p.amount, 0);
+
+  const handleConfirm = async (approved: boolean) => {
+    setConfirmError(null);
+    confirm.mutate(
+      { draftIds, conversationId: convId, approved },
+      {
+        onSuccess: () => onDone(),
+        onError: (e) => setConfirmError(e.message),
+      }
+    );
+  };
+
+  return (
+    <div style={{
+      background: "rgba(255,255,255,0.06)",
+      border: "1px solid rgba(255,255,255,0.12)",
+      borderRadius: "14px",
+      padding: "16px",
+      marginTop: "8px",
+      maxWidth: "380px",
+    }}>
+      <div style={{ fontSize: "11px", fontWeight: "600", color: "rgba(122,170,142,0.9)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "12px" }}>
+        {previews.length} הוצאות ממתינות לאישור
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "14px" }}>
+        {previews.map((p, i) => (
+          <div key={i} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "7px 10px",
+            background: "rgba(255,255,255,0.05)",
+            borderRadius: "8px",
+            gap: "8px",
+          }}>
+            <span style={{ fontSize: "12.5px", color: "rgba(255,255,255,0.8)", flex: 1 }}>
+              {p.description}
+            </span>
+            <span style={{ fontSize: "13px", fontWeight: "600", color: "#fff", flexShrink: 0 }}>
+              ₪{p.amount.toLocaleString("he-IL")}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{
+        display: "flex", justifyContent: "space-between",
+        padding: "8px 10px",
+        borderTop: "1px solid rgba(255,255,255,0.1)",
+        marginBottom: "14px",
+      }}>
+        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)" }}>סה"כ</span>
+        <span style={{ fontSize: "15px", fontWeight: "700", color: "#7AAA8E" }}>
+          ₪{total.toLocaleString("he-IL")}
+        </span>
+      </div>
+
+      {confirmError && (
+        <div style={{ fontSize: "12px", color: "#F87171", marginBottom: "10px", padding: "8px 10px", background: "rgba(248,113,113,0.1)", borderRadius: "8px" }}>
+          {confirmError}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: "8px" }}>
+        <button
+          type="button"
+          disabled={confirm.isPending}
+          onClick={() => handleConfirm(false)}
+          style={{
+            flex: 1, padding: "9px 12px", borderRadius: "10px",
+            background: "rgba(255,255,255,0.08)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            color: "rgba(255,255,255,0.6)", fontSize: "13px", fontWeight: "500",
+            cursor: confirm.isPending ? "not-allowed" : "pointer",
+          }}
+        >
+          ביטול
+        </button>
+        <button
+          type="button"
+          disabled={confirm.isPending}
+          onClick={() => handleConfirm(true)}
+          style={{
+            flex: 2, padding: "9px 12px", borderRadius: "10px",
+            background: confirm.isPending ? "rgba(45,102,68,0.5)" : "linear-gradient(135deg, #2D6644, #1A3D2B)",
+            border: "none",
+            color: "#fff", fontSize: "13px", fontWeight: "600",
+            cursor: confirm.isPending ? "not-allowed" : "pointer",
+            boxShadow: confirm.isPending ? "none" : "0 2px 12px rgba(45,102,68,0.35)",
+          }}
+        >
+          {confirm.isPending ? "מכניס..." : `אשר הכל (${previews.length} הוצאות)`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Message Bubble ────────────────────────────────────────────────────────────
 
 function MessageBubble({
@@ -310,12 +424,16 @@ function MessageBubble({
   convId,
   pendingDraft,
   onDraftDone,
+  pendingBatchDraft,
+  onBatchDraftDone,
   isOptimistic,
 }: {
   msg: AiMessage | { id: string; role: "user"; content: string; metadata: null; created_at: string };
   convId: string | null;
   pendingDraft: ActionDraft | null;
   onDraftDone: () => void;
+  pendingBatchDraft: BatchDraft | null;
+  onBatchDraftDone: () => void;
   isOptimistic?: boolean;
 }) {
   const isUser = msg.role === "user";
@@ -389,6 +507,18 @@ function MessageBubble({
       {!isUser && msg.metadata?.action_draft_id && pendingDraft && convId && (
         <div style={{ maxWidth: "96%", width: "100%" }}>
           <ConfirmCard draft={pendingDraft} convId={convId} onDone={onDraftDone} />
+        </div>
+      )}
+
+      {/* Batch confirm card */}
+      {!isUser && msg.metadata?.batch_draft_ids && msg.metadata.batch_draft_ids.length > 0 && convId && pendingBatchDraft && (
+        <div style={{ maxWidth: "96%", width: "100%" }}>
+          <BatchConfirmCard
+            draftIds={msg.metadata.batch_draft_ids}
+            previews={pendingBatchDraft.previews as ActionDraftPreview[]}
+            convId={convId}
+            onDone={onBatchDraftDone}
+          />
         </div>
       )}
 
@@ -741,6 +871,7 @@ export function AiChatPanel() {
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pendingDrafts, setPendingDrafts] = useState<Record<string, ActionDraft>>({});
+  const [pendingBatchDrafts, setPendingBatchDrafts] = useState<Record<string, BatchDraft>>({});
   const [mounted, setMounted] = useState(false);
   const [optimisticMsg, setOptimisticMsg] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -816,6 +947,9 @@ export function AiChatPanel() {
           if (data.action_draft) {
             setPendingDrafts(prev => ({ ...prev, [data.conversation_id]: data.action_draft! }));
           }
+          if (data.batch_draft && data.batch_draft.ids.length > 0) {
+            setPendingBatchDrafts(prev => ({ ...prev, [data.conversation_id]: data.batch_draft! }));
+          }
         },
         onError: (err) => {
           setOptimisticMsg(null);
@@ -847,6 +981,7 @@ export function AiChatPanel() {
   const handleNewConv = () => {
     setCurrentConvId(null);
     setPendingDrafts({});
+    setPendingBatchDrafts({});
     setInput("");
     setOptimisticMsg(null);
     setSendError(null);
@@ -856,6 +991,7 @@ export function AiChatPanel() {
   if (!isOpen) return null;
 
   const activeDraft = currentConvId ? pendingDrafts[currentConvId] ?? null : null;
+  const activeBatchDraft = currentConvId ? pendingBatchDrafts[currentConvId] ?? null : null;
 
   // Fake optimistic message object for rendering
   const optimisticMsgObj = optimisticMsg ? {
@@ -1050,7 +1186,7 @@ export function AiChatPanel() {
           {sidebarOpen && (
             <ConvList
               currentId={currentConvId}
-              onSelect={id => { setCurrentConvId(id); setPendingDrafts({}); setOptimisticMsg(null); }}
+              onSelect={id => { setCurrentConvId(id); setPendingDrafts({}); setPendingBatchDrafts({}); setOptimisticMsg(null); }}
               onNew={handleNewConv}
             />
           )}
@@ -1090,6 +1226,20 @@ export function AiChatPanel() {
                       });
                     }
                   }}
+                  pendingBatchDraft={
+                    msg.metadata?.batch_draft_ids && msg.metadata.batch_draft_ids.length > 0
+                      ? activeBatchDraft
+                      : null
+                  }
+                  onBatchDraftDone={() => {
+                    if (currentConvId) {
+                      setPendingBatchDrafts(prev => {
+                        const next = { ...prev };
+                        delete next[currentConvId];
+                        return next;
+                      });
+                    }
+                  }}
                 />
               ))}
 
@@ -1101,6 +1251,8 @@ export function AiChatPanel() {
                   convId={currentConvId}
                   pendingDraft={null}
                   onDraftDone={() => {}}
+                  pendingBatchDraft={null}
+                  onBatchDraftDone={() => {}}
                   isOptimistic
                 />
               )}

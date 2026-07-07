@@ -17,6 +17,7 @@ export interface AiMessage {
   content: string;
   metadata: {
     action_draft_id?: string;
+    batch_draft_ids?: string[];
   } | null;
   created_at: string;
 }
@@ -40,11 +41,18 @@ export interface ActionDraft {
   preview: ActionDraftPreview;
 }
 
+export interface BatchDraft {
+  ids: string[];
+  previews: ActionDraftPreview[];
+  total: number;
+}
+
 export interface SendMessageResult {
   conversation_id: string;
   message_id: string;
   reply: string;
   action_draft: ActionDraft | null;
+  batch_draft: BatchDraft | null;
 }
 
 export interface OrgAiSettings {
@@ -184,6 +192,50 @@ export function useConfirmAiAction() {
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["ai-messages", vars.conversationId] });
       // Also refresh financial data so numbers update in real-time
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["income"] });
+    },
+  });
+}
+
+export function useConfirmAiBatch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      draftIds,
+      conversationId,
+      approved,
+    }: {
+      draftIds: string[];
+      conversationId: string;
+      approved: boolean;
+    }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-agent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            type: "confirm_batch",
+            draft_ids: draftIds,
+            conversation_id: conversationId,
+            approved,
+          }),
+        },
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "שגיאה בביצוע");
+      return json as { reply: string; executed: boolean; count?: number };
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["ai-messages", vars.conversationId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["income"] });
