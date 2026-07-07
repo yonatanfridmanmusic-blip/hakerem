@@ -560,18 +560,27 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   const handleFinishHorimWizard = async () => {
     if (!yearId) { setStep(3); return; }
     setEditingCell(null);
-    // Read current GSA synchronously (state is already up to date)
+    // Read current GSA synchronously (state is already up to date).
+    // IMPORTANT: we use setGradeHorimAmount directly (not saveCellToDb) because
+    // saveCellToDb has a savingCellRef mutex that would block all but the first
+    // call when initiated synchronously in a loop. Sequential awaits are safe.
     const currentGSA = wizardGSA;
-    const saves: Promise<void>[] = [];
-    sortedGrades.forEach(g => {
-      wizardSections.forEach((sec, secIdx) => {
+    for (const g of sortedGrades) {
+      for (let secIdx = 0; secIdx < wizardSections.length; secIdx++) {
+        const sec = wizardSections[secIdx];
         const val = currentGSA[g.id]?.[secIdx];
         if (val && val !== "na") {
-          saves.push(saveCellToDb(g.id, sec.name, val, secIdx));
+          const n = Number(val);
+          if (!isNaN(n) && n > 0) {
+            try { await setGradeHorimAmount(yearId, g.id, n, sec.name); }
+            catch { /* non-blocking */ }
+          }
         }
-      });
-    });
-    await Promise.all(saves);
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ["grade-section-amounts"] });
+    queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+    queryClient.invalidateQueries({ queryKey: ["budget-categories"] });
     setStep(3);
   };
 
