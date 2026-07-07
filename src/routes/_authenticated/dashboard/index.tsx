@@ -380,16 +380,24 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
   const addGrade = useAddGrade();
   const deleteGrade = useDeleteGrade();
   const { data: grades = [] } = useGrades(yearId || undefined);
+  // Sort grades by Hebrew letter order (א, ב, ג, ד...)
+  const sortedGrades = [...grades].sort((a, b) => {
+    const letterOf = (name: string) => name.replace(/^שכבה /, "").replace(/['"]/g, "").trim();
+    return GRADE_LETTERS.indexOf(letterOf(a.name)) - GRADE_LETTERS.indexOf(letterOf(b.name));
+  });
   // fill-all: secIdx → fill value being typed
   const [fillAllState, setFillAllState] = useState<{ secIdx: number; value: string } | null>(null);
   // Wizard: parent-collection sections defined inline
   const [wizardSections, setWizardSections] = useState<Array<{ name: string }>>([{ name: "שכר לימוד" }]);
   const [addingSection, setAddingSection] = useState(false);
   const [newSecName, setNewSecName] = useState("");
-  // wizardGSA[gradeId][sectionIndex] = amountString
   // wizardGSA[gradeId][sectionIndex] = amountString | "na" (not applicable)
   const [wizardGSA, setWizardGSA] = useState<Record<string, Record<number, string>>>({});
   const [editingCell, setEditingCell] = useState<{ gradeId: string; secIdx: number } | null>(null);
+  // Horim wizard: which grades each section applies to ('all' | gradeId[])
+  const [wizardSectionGrades, setWizardSectionGrades] = useState<Record<number, 'all' | string[]>>({});
+  // Horim wizard view: 'sections' = define sections+grades, 'amounts' = enter per-grade amounts
+  const [horimView, setHorimView] = useState<'sections' | 'amounts'>('sections');
   const savingCellRef = useRef(false); // guard against double-save (Enter → blur)
   const cellInputRef = useRef<HTMLInputElement>(null); // for reliable focus on cell edit
 
@@ -544,6 +552,25 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
       return next;
     });
     setFillAllState(null);
+  };
+
+  // Apply grade applicability: mark non-applicable grade×section combos as "na"
+  const handleSectionsToAmounts = () => {
+    setWizardGSA(prev => {
+      const next = { ...prev };
+      sortedGrades.forEach(g => {
+        wizardSections.forEach((_, secIdx) => {
+          const sg = wizardSectionGrades[secIdx];
+          const isAll = !sg || sg === 'all';
+          const applicable = isAll ? true : (sg as string[]).includes(g.id);
+          if (!applicable) {
+            next[g.id] = { ...(next[g.id] ?? {}), [secIdx]: "na" };
+          }
+        });
+      });
+      return next;
+    });
+    setHorimView('amounts');
   };
 
   // ── Shared UI pieces ──────────────────────────────────────────────────────
@@ -742,6 +769,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                       שכבה {selLetter}' — מספר תלמידים
                     </label>
                     <input style={inputSt} type="number" min="0" value={gradeCount} onChange={e => setGradeCount(e.target.value)} autoFocus
+                      onFocus={e => e.target.select()}
                       onKeyDown={e => { if (e.key === "Enter") handleAddGrade(); }} />
                   </div>
                   <button type="button" onClick={handleAddGrade} disabled={addGrade.isPending}
@@ -752,276 +780,33 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
               </div>
             )}
 
-            {/* Parent-collection sections × grades matrix */}
-            {grades.length > 0 && (
+            {/* Grades list — simple summary */}
+            {sortedGrades.length > 0 && (
               <div style={{ marginBottom: "20px" }}>
-                {/* Section header row */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560" }}>
-                    סעיפי גביית הורים לפי שכבה
-                  </div>
-                  {addingSection ? (
-                    <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
-                      <input
-                        autoFocus value={newSecName}
-                        onChange={e => setNewSecName(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === "Enter" && newSecName.trim()) {
-                            setWizardSections(prev => [...prev, { name: newSecName.trim() }]);
-                            setNewSecName(""); setAddingSection(false);
-                          }
-                          if (e.key === "Escape") { setNewSecName(""); setAddingSection(false); }
-                        }}
-                        placeholder="שם סעיף..."
-                        style={{ width: "110px", padding: "4px 9px", border: "1.5px solid #D0DDD4", borderRadius: "7px", fontSize: "12px", fontFamily: "Rubik, sans-serif", outline: "none" }}
-                      />
-                      <button type="button" onClick={() => {
-                        if (newSecName.trim()) setWizardSections(prev => [...prev, { name: newSecName.trim() }]);
-                        setNewSecName(""); setAddingSection(false);
-                      }} style={{ padding: "4px 10px", background: "#EAF2EC", color: "#2D6644", border: "1px solid #B6E0C0", borderRadius: "7px", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
-                        הוסף
-                      </button>
-                      <button type="button" onClick={() => { setNewSecName(""); setAddingSection(false); }} style={{ padding: "4px 8px", background: "none", color: "#AAA099", border: "1px solid #E8E2D9", borderRadius: "7px", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>ביטול</button>
+                <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>שכבות שנוספו</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {sortedGrades.map(g => (
+                    <div key={g.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 14px", borderRadius: "10px", background: "#EDFBF3", border: "1px solid #B6E8C4" }}>
+                      <div>
+                        <span style={{ fontSize: "13.5px", fontWeight: "500", color: "#1A3D2B" }}>{g.name}</span>
+                        <span style={{ fontSize: "12px", color: "#6B9E80", marginRight: "8px" }}> — {g.student_count} תלמידים</span>
+                      </div>
+                      <button type="button" onClick={() => deleteGrade.mutateAsync(g.id)} title="הסר שכבה"
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#C0D8C0", padding: "2px", fontSize: "13px" }}
+                        onMouseEnter={e => (e.currentTarget.style.color = "#E57373")}
+                        onMouseLeave={e => (e.currentTarget.style.color = "#C0D8C0")}
+                      >✕</button>
                     </div>
-                  ) : (
-                    <button type="button" onClick={() => setAddingSection(true)}
-                      style={{ display: "flex", alignItems: "center", gap: "4px", padding: "4px 10px", background: "#F9F7F4", color: "#6B6560", border: "1px solid #E8E2D9", borderRadius: "7px", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
-                      + הוסף סעיף
-                    </button>
-                  )}
+                  ))}
                 </div>
 
-                {/* Matrix table — scrollable horizontally when many sections */}
-                <div style={{ border: "1px solid #E8E2D9", borderRadius: "10px", overflowX: "auto", overflowY: "visible" }}>
-                  {/* min total width so columns never get too narrow */}
-                  <div style={{ minWidth: `${120 + wizardSections.length * 100 + 88}px` }}>
-                    {/* Table header: Grade | Section1 | Section2 | ... | Total */}
-                    <div style={{
-                      display: "grid",
-                      gridTemplateColumns: `120px repeat(${wizardSections.length}, minmax(96px, 1fr)) 88px`,
-                      padding: "8px 12px", background: "#F5F3F0", borderBottom: "1px solid #E8E2D9",
-                    }}>
-                      <span style={{ fontSize: "11px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.04em" }}>שכבה</span>
-                      {wizardSections.map((sec, i) => (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: "3px", justifyContent: "center", flexDirection: "column" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-                            <span style={{ fontSize: "11px", fontWeight: "600", color: "#6B6560", maxWidth: "80px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sec.name}>{sec.name}</span>
-                            {wizardSections.length > 1 && (
-                              <button type="button" onClick={() => {
-                                setWizardSections(prev => prev.filter((_, j) => j !== i));
-                                setWizardGSA(prev => {
-                                  const next = { ...prev };
-                                  Object.keys(next).forEach(gId => {
-                                    const updated: Record<number, string> = {};
-                                    Object.entries(next[gId] ?? {}).forEach(([k, v]) => {
-                                      const ki = Number(k);
-                                      if (ki < i) updated[ki] = v;
-                                      else if (ki > i) updated[ki - 1] = v;
-                                    });
-                                    next[gId] = updated;
-                                  });
-                                  return next;
-                                });
-                              }} style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", padding: "0 1px", display: "flex", lineHeight: 1, flexShrink: 0 }}>
-                                ✕
-                              </button>
-                            )}
-                          </div>
-                          {/* Fill-all for this column */}
-                          {fillAllState?.secIdx === i ? (
-                            <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-                              <input
-                                autoFocus
-                                type="number" min="0"
-                                value={fillAllState.value}
-                                onChange={e => setFillAllState({ secIdx: i, value: e.target.value })}
-                                onKeyDown={e => {
-                                  if (e.key === "Enter") handleFillAll(i, fillAllState.value);
-                                  if (e.key === "Escape") setFillAllState(null);
-                                }}
-                                onBlur={() => { if (fillAllState.value) handleFillAll(i, fillAllState.value); else setFillAllState(null); }}
-                                style={{ width: "46px", padding: "2px 4px", border: "1.5px solid #C080A8", borderRadius: "5px", fontSize: "11px", fontFamily: "Rubik, sans-serif", direction: "ltr", textAlign: "right", outline: "none" }}
-                              />
-                              <span style={{ fontSize: "9px", color: "#8B2F6E" }}>₪</span>
-                            </div>
-                          ) : (
-                            <button type="button" onClick={() => setFillAllState({ secIdx: i, value: "" })}
-                              title="מלא/י את כל השכבות בסכום זהה"
-                              style={{ fontSize: "9px", color: "#B090C0", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Rubik, sans-serif" }}>
-                              מלא הכל
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                      <span style={{ fontSize: "11px", fontWeight: "600", color: "#1A1A1A", textAlign: "center", letterSpacing: "0.04em" }}>סה"כ/תלמיד</span>
-                    </div>
-
-                    {/* Grade rows */}
-                    {grades.map((g, gIdx) => {
-                      const gAmts = wizardGSA[g.id] ?? {};
-                      const total = wizardSections.reduce((s, _, i) => {
-                        const v = gAmts[i];
-                        if (!v || v === "na") return s;
-                        return s + (Number(v) || 0);
-                      }, 0);
-                      return (
-                        <div key={g.id} style={{
-                          display: "grid",
-                          gridTemplateColumns: `120px repeat(${wizardSections.length}, minmax(96px, 1fr)) 88px`,
-                          padding: "8px 12px", alignItems: "center",
-                          borderBottom: gIdx < grades.length - 1 ? "1px solid #F3EEE8" : "none",
-                          background: gIdx % 2 === 0 ? "#fff" : "#FDFCFB",
-                        }}>
-                          {/* Grade name + delete */}
-                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "4px" }}>
-                            <div>
-                              <div style={{ fontSize: "13px", color: "#1A1A1A", fontWeight: "500" }}>{g.name}</div>
-                              <div style={{ fontSize: "11px", color: "#AAA099" }}>{g.student_count} תלמידים</div>
-                            </div>
-                            <button
-                              type="button"
-                              title="הסר שכבה"
-                              onClick={() => deleteGrade.mutateAsync(g.id)}
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "#D0C8C4", padding: "2px", lineHeight: 1, flexShrink: 0, fontSize: "13px" }}
-                              onMouseEnter={e => (e.currentTarget.style.color = "#E57373")}
-                              onMouseLeave={e => (e.currentTarget.style.color = "#D0C8C4")}
-                            >✕</button>
-                          </div>
-
-                          {/* Amount cell per section */}
-                          {wizardSections.map((sec, secIdx) => {
-                            const cellVal = gAmts[secIdx];
-                            const isNA = cellVal === "na";
-                            const isEditing = editingCell?.gradeId === g.id && editingCell?.secIdx === secIdx;
-                            const hasValue = !isNA && cellVal && Number(cellVal) > 0;
-
-                            return (
-                              <div key={secIdx} style={{ display: "flex", justifyContent: "center" }}>
-                                {isEditing ? (
-                                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-                                      <span style={{ fontSize: "11px", color: "#8B2F6E", fontWeight: "500" }}>₪</span>
-                                      <input
-                                        ref={cellInputRef}
-                                        type="number" min="0"
-                                        value={isNA ? "" : (cellVal ?? "")}
-                                        onFocus={e => e.target.select()}
-                                        onChange={e => setWizardGSA(prev => ({
-                                          ...prev,
-                                          [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: e.target.value },
-                                        }))}
-                                        onBlur={() => saveCellToDb(g.id, sec.name, gAmts[secIdx], secIdx)}
-                                        onKeyDown={e => {
-                                          if (e.key === "Enter") saveCellToDb(g.id, sec.name, gAmts[secIdx], secIdx);
-                                          if (e.key === "Escape") setEditingCell(null);
-                                          if (e.key === "Tab") {
-                                            e.preventDefault();
-                                            saveCellToDb(g.id, sec.name, gAmts[secIdx], secIdx);
-                                            if (secIdx < wizardSections.length - 1) setEditingCell({ gradeId: g.id, secIdx: secIdx + 1 });
-                                            else if (gIdx < grades.length - 1) setEditingCell({ gradeId: grades[gIdx + 1].id, secIdx: 0 });
-                                          }
-                                        }}
-                                        style={{
-                                          width: "58px", padding: "3px 6px",
-                                          border: "1.5px solid #C080A8", borderRadius: "6px",
-                                          fontSize: "12px", fontFamily: "Rubik, sans-serif",
-                                          direction: "ltr", textAlign: "right", outline: "none",
-                                        }}
-                                      />
-                                    </div>
-                                    {/* N/A toggle */}
-                                    <button
-                                      type="button"
-                                      onMouseDown={e => {
-                                        e.preventDefault(); // prevent blur before click
-                                        setWizardGSA(prev => ({
-                                          ...prev,
-                                          [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: "na" },
-                                        }));
-                                        saveCellToDb(g.id, sec.name, "na", secIdx);
-                                      }}
-                                      style={{ fontSize: "10px", color: "#B0A8A4", background: "none", border: "none", cursor: "pointer", padding: "0", lineHeight: 1.2, fontFamily: "Rubik, sans-serif" }}
-                                    >לא רלוונטי</button>
-                                  </div>
-                                ) : isNA ? (
-                                  // N/A cell — click to re-enable
-                                  <div
-                                    onClick={() => {
-                                      setWizardGSA(prev => ({
-                                        ...prev,
-                                        [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: "" },
-                                      }));
-                                      setEditingCell({ gradeId: g.id, secIdx });
-                                    }}
-                                    title="לחץ/י לעריכה"
-                                    style={{
-                                      display: "inline-flex", alignItems: "center", justifyContent: "center",
-                                      padding: "5px 10px", borderRadius: "7px", cursor: "pointer",
-                                      border: "1px dashed #DDD8D4", background: "#F8F6F3",
-                                      minWidth: "64px", transition: "all 0.12s",
-                                    }}
-                                  >
-                                    <span style={{ fontSize: "12px", color: "#CCC4BC" }}>—</span>
-                                  </div>
-                                ) : (
-                                  <div
-                                    onClick={() => setEditingCell({ gradeId: g.id, secIdx })}
-                                    title="לחץ/י לעריכה"
-                                    onMouseEnter={e => { e.currentTarget.style.background = "#F0E0ED"; (e.currentTarget.style as CSSStyleDeclaration).borderColor = "#B060A0"; }}
-                                    onMouseLeave={e => {
-                                      e.currentTarget.style.background = hasValue ? "#FAF0F8" : "#FCF7FB";
-                                      (e.currentTarget.style as CSSStyleDeclaration).borderColor = hasValue ? "#DDB8D4" : "#D4B8CC";
-                                    }}
-                                    style={{
-                                      display: "inline-flex", alignItems: "center", gap: "3px",
-                                      padding: "5px 10px", borderRadius: "7px", cursor: "pointer",
-                                      border: hasValue ? "1px solid #DDB8D4" : "1.5px dashed #D4B8CC",
-                                      background: hasValue ? "#FAF0F8" : "#FCF7FB",
-                                      minWidth: "64px", justifyContent: "center", transition: "all 0.12s",
-                                    }}
-                                  >
-                                    {hasValue ? (
-                                      <>
-                                        <span style={{ fontSize: "10px", color: "#8B2F6E" }}>₪</span>
-                                        <span style={{ fontSize: "12px", fontWeight: "600", color: "#8B2F6E" }}>
-                                          {Number(cellVal).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <span style={{ fontSize: "11px", color: "#C0A0BE", fontStyle: "italic" }}>הגדר</span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-
-                          {/* Total */}
-                          <div style={{ textAlign: "center" }}>
-                            {total > 0 ? (
-                              <>
-                                <div style={{ fontSize: "13px", fontWeight: "600", color: "#1A1A1A" }}>
-                                  ₪{total.toLocaleString("he-IL")}
-                                </div>
-                                <div style={{ fontSize: "10px", color: "#AAA099" }}>לתלמיד</div>
-                              </>
-                            ) : (
-                              <span style={{ fontSize: "11px", color: "#C0BAB4" }}>—</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
             )}
-
             <div style={{ display: "flex", gap: "10px", marginTop: "28px" }}>
               <button type="button" onClick={() => setStep(2)} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
                 המשך לקטגוריות ←
               </button>
-              {grades.length === 0 && (
+              {sortedGrades.length === 0 && (
                 <button type="button" onClick={() => setStep(2)} style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
                   דלג
                 </button>
@@ -1083,107 +868,464 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
               )}
             </div>
 
-            {/* Quick suggestions */}
-            {(() => {
-              const activeSrc = orgSources.find(s => s.slug === effectiveCatSrc) ?? orgSources[0];
-              const c = activeSrc ? wizardStyle(activeSrc) : { label: effectiveCatSrc, color: "#6B6560", light: "#F5F5F2", grad: "#aaa" };
-              const suggestions = CAT_SUGGESTIONS[effectiveCatSrc] ?? [];
-              const cats = addedCats[effectiveCatSrc] ?? [];
-              return (
-                <div style={{ marginBottom: "16px" }}>
-                  {suggestions.length > 0 && (
-                    <>
+            {effectiveCatSrc === 'horim' ? (
+              horimView === 'sections' ? (
+                /* ── View A: Define sections + grade applicability ── */
+                <div>
+                  <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "16px", lineHeight: 1.6 }}>
+                    הגדירו את סעיפי הגבייה וסמנו לאילו שכבות כל סעיף מתאים.
+                  </div>
+
+                  {/* Quick suggestions */}
+                  {CAT_SUGGESTIONS.horim.length > 0 && (
+                    <div style={{ marginBottom: "16px" }}>
                       <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>הצעות מהירות</div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
-                        {suggestions.map(name => {
-                          const added = cats.some(cat => cat.name === name);
+                        {CAT_SUGGESTIONS.horim.map(name => {
+                          const alreadyAdded = wizardSections.some(s => s.name === name);
                           return (
                             <button key={name} type="button"
-                              onClick={() => handleAddCatSuggestion(name)}
-                              disabled={added || addCategory.isPending}
+                              onClick={() => { if (!alreadyAdded) setWizardSections(prev => [...prev, { name }]); }}
+                              disabled={alreadyAdded}
                               style={{
                                 padding: "6px 13px",
-                                background: added ? "#EDFBF3" : c.light,
-                                color: added ? "#2D6644" : c.color,
-                                border: added ? "1.5px solid #B6E8C4" : `1px solid ${c.color}30`,
+                                background: alreadyAdded ? "#F4EBF2" : "#F4EBF2",
+                                color: "#8B2F6E",
+                                border: alreadyAdded ? "1.5px solid #D4A0C8" : "1px solid #C080A830",
                                 borderRadius: "8px", fontSize: "12.5px", fontFamily: "Rubik, sans-serif",
-                                cursor: added ? "default" : "pointer", fontWeight: added ? "500" : "400",
+                                cursor: alreadyAdded ? "default" : "pointer", fontWeight: alreadyAdded ? "500" : "400",
                                 transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: "5px",
-                                opacity: addCategory.isPending && !added ? 0.6 : 1,
                               }}>
-                              {added ? (<><svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#2D6644" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>{name}</>) : `+ ${name}`}
+                              {alreadyAdded
+                                ? (<><svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#8B2F6E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>{name}</>)
+                                : `+ ${name}`}
                             </button>
                           );
                         })}
                       </div>
-                    </>
+                    </div>
                   )}
 
-                  {/* Added categories list */}
-                  {cats.length > 0 && (
-                    <div style={{ marginTop: "14px" }}>
-                      <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>
-                        נוספו ({cats.length}) — לחץ/י על הסכום לעדכון
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                        {cats.map(cat => (
-                          <div key={cat.id} style={{
-                            display: "flex", alignItems: "center", justifyContent: "space-between",
-                            background: c.light, border: `1px solid ${c.color}30`,
-                            borderRadius: "9px", padding: "7px 12px",
-                          }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke={c.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                              <span style={{ fontSize: "13px", color: c.color, fontWeight: "500" }}>{cat.name}</span>
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                              <InlineAmountEdit catId={cat.id} current={cat.amount} color={c.color}
-                                onSave={async (n) => {
-                                  await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
-                                  setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
-                                }} />
-                              <button type="button" onClick={() => handleDeleteCat(cat.id, effectiveCatSrc)}
-                                title="הסר קטגוריה"
-                                style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", padding: "2px", fontSize: "14px", lineHeight: 1 }}
-                                onMouseEnter={e => (e.currentTarget.style.color = "#E57373")}
-                                onMouseLeave={e => (e.currentTarget.style.color = "#C0BAB4")}
-                              >✕</button>
-                            </div>
+                  {/* Sections list with grade applicability */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
+                    {wizardSections.map((sec, i) => {
+                      const sg = wizardSectionGrades[i];
+                      const isAll = !sg || sg === 'all';
+                      return (
+                        <div key={i} style={{ background: "#FAF0F8", border: "1px solid #DDB8D4", borderRadius: "12px", padding: "12px 14px" }}>
+                          {/* Section name row */}
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                            <span style={{ fontSize: "13.5px", fontWeight: "500", color: "#1A1A1A" }}>{sec.name}</span>
+                            <button type="button" onClick={() => {
+                              setWizardSections(prev => prev.filter((_, idx) => idx !== i));
+                              setWizardSectionGrades(prev => {
+                                const next: Record<number, 'all' | string[]> = {};
+                                Object.entries(prev).forEach(([k, v]) => {
+                                  const ki = Number(k);
+                                  if (ki < i) next[ki] = v;
+                                  else if (ki > i) next[ki - 1] = v;
+                                });
+                                return next;
+                              });
+                            }} title="הסר סעיף"
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", fontSize: "13px", padding: "2px" }}
+                              onMouseEnter={e => (e.currentTarget.style.color = "#E57373")}
+                              onMouseLeave={e => (e.currentTarget.style.color = "#C0BAB4")}
+                            >✕</button>
                           </div>
-                        ))}
+                          {/* Grade applicability chips */}
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                            <button type="button" onClick={() => setWizardSectionGrades(prev => ({ ...prev, [i]: 'all' }))}
+                              style={{
+                                padding: "4px 10px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
+                                background: isAll ? "#8B2F6E" : "transparent",
+                                color: isAll ? "#fff" : "#8B2F6E",
+                                border: "1.5px solid #8B2F6E",
+                                fontFamily: "Rubik, sans-serif", fontWeight: "500", transition: "all 0.12s",
+                              }}>
+                              כל השכבות
+                            </button>
+                            {sortedGrades.map(g => {
+                              const gradeInList = !isAll && (sg as string[]).includes(g.id);
+                              const letterOf = (n: string) => n.replace(/^שכבה /, "").replace(/['"]/g, "").trim();
+                              return (
+                                <button key={g.id} type="button" onClick={() => {
+                                  setWizardSectionGrades(prev => {
+                                    const cur = prev[i];
+                                    const curList = (!cur || cur === 'all')
+                                      ? sortedGrades.map(gr => gr.id)
+                                      : [...(cur as string[])];
+                                    const toggled = gradeInList
+                                      ? curList.filter(id => id !== g.id)
+                                      : [...curList, g.id];
+                                    return { ...prev, [i]: toggled.length === 0 ? 'all' : toggled };
+                                  });
+                                }}
+                                  style={{
+                                    padding: "4px 10px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
+                                    background: gradeInList ? "#8B2F6E" : (isAll ? "#EDD8E8" : "transparent"),
+                                    color: gradeInList ? "#fff" : (isAll ? "#B060A0" : "#8B2F6E"),
+                                    border: `1.5px solid ${isAll ? "#EDD8E8" : "#8B2F6E"}`,
+                                    fontFamily: "Rubik, sans-serif", fontWeight: gradeInList ? "500" : "400",
+                                    transition: "all 0.12s", opacity: isAll ? 0.6 : 1,
+                                  }}>
+                                  {letterOf(g.name)}′
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add section input */}
+                  {addingSection ? (
+                    <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+                      <input autoFocus value={newSecName} onChange={e => setNewSecName(e.target.value)}
+                        placeholder="שם הסעיף..."
+                        onKeyDown={e => {
+                          if (e.key === "Enter" && newSecName.trim()) {
+                            setWizardSections(prev => [...prev, { name: newSecName.trim() }]);
+                            setNewSecName(""); setAddingSection(false);
+                          }
+                          if (e.key === "Escape") { setNewSecName(""); setAddingSection(false); }
+                        }}
+                        style={{ ...inputSt, flex: 1 }} />
+                      <button type="button" onClick={() => {
+                        if (!newSecName.trim()) return;
+                        setWizardSections(prev => [...prev, { name: newSecName.trim() }]);
+                        setNewSecName(""); setAddingSection(false);
+                      }} style={{ padding: "10px 14px", background: "linear-gradient(135deg,#8B2F6E,#4A1A38)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "13px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                        הוסף
+                      </button>
+                      <button type="button" onClick={() => { setNewSecName(""); setAddingSection(false); }}
+                        style={{ padding: "10px 12px", background: "none", border: "1px solid #D0C8C4", borderRadius: "10px", fontSize: "13px", cursor: "pointer", color: "#888" }}>✕</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setAddingSection(true)}
+                      style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 14px", background: "transparent", border: "1.5px dashed #C080A8", borderRadius: "10px", color: "#8B2F6E", fontSize: "13px", cursor: "pointer", fontFamily: "Rubik, sans-serif", marginBottom: "16px" }}>
+                      + הוסף סעיף
+                    </button>
+                  )}
+
+                  {/* Continue button */}
+                  <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+                    <button type="button" onClick={handleSectionsToAmounts} disabled={wizardSections.length === 0}
+                      style={{ flex: 1, padding: "14px 0", background: wizardSections.length > 0 ? "linear-gradient(135deg,#8B2F6E,#4A1A38)" : "#E8E2D9", color: wizardSections.length > 0 ? "#fff" : "#AAA099", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: wizardSections.length > 0 ? "pointer" : "not-allowed", boxShadow: wizardSections.length > 0 ? "0 4px 16px rgba(139,47,110,0.3)" : "none" }}>
+                      המשך לסכומות ←
+                    </button>
+                    {wizardSections.length === 0 && (
+                      <button type="button" onClick={() => setStep(3)}
+                        style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                        דלג
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* ── View B: Amounts matrix ── */
+                <div>
+                  <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "16px", lineHeight: 1.6 }}>
+                    הכניסו סכום לתלמיד לפי שכבה וסעיף.
+                  </div>
+
+                  {wizardSections.length > 0 && sortedGrades.length > 0 && (
+                    <div style={{ overflowX: "auto", marginBottom: "20px", borderRadius: "12px", border: "1px solid #EDD8E8" }}>
+                      <div style={{ minWidth: `${120 + wizardSections.length * 100 + 88}px` }}>
+                        {/* Header row */}
+                        <div style={{
+                          display: "grid",
+                          gridTemplateColumns: `120px repeat(${wizardSections.length}, minmax(96px, 1fr)) 88px`,
+                          padding: "10px 12px", borderBottom: "2px solid #EDD8E8",
+                          background: "#F9F0F7", borderRadius: "10px 10px 0 0",
+                        }}>
+                          <span style={{ fontSize: "11px", fontWeight: "600", color: "#8B2F6E", letterSpacing: "0.04em" }}>שכבה</span>
+                          {wizardSections.map((sec, i) => (
+                            <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                              <span style={{ fontSize: "11px", fontWeight: "600", color: "#8B2F6E", textAlign: "center" }}>{sec.name}</span>
+                              {fillAllState?.secIdx === i ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                                  <input
+                                    autoFocus type="number" min="0"
+                                    value={fillAllState.value}
+                                    onChange={e => setFillAllState({ secIdx: i, value: e.target.value })}
+                                    onKeyDown={e => {
+                                      if (e.key === "Enter") handleFillAll(i, fillAllState.value);
+                                      if (e.key === "Escape") setFillAllState(null);
+                                    }}
+                                    onBlur={() => { if (fillAllState.value) handleFillAll(i, fillAllState.value); else setFillAllState(null); }}
+                                    style={{ width: "46px", padding: "2px 4px", border: "1.5px solid #C080A8", borderRadius: "5px", fontSize: "11px", fontFamily: "Rubik, sans-serif", direction: "ltr", textAlign: "right", outline: "none" }}
+                                  />
+                                  <span style={{ fontSize: "9px", color: "#8B2F6E" }}>₪</span>
+                                </div>
+                              ) : (
+                                <button type="button" onClick={() => setFillAllState({ secIdx: i, value: "" })}
+                                  title="מלא/י את כל השכבות בסכום זהה"
+                                  style={{ fontSize: "9px", color: "#B090C0", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Rubik, sans-serif" }}>
+                                  מלא הכל
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          <span style={{ fontSize: "11px", fontWeight: "600", color: "#1A1A1A", textAlign: "center", letterSpacing: "0.04em" }}>סה"כ/תלמיד</span>
+                        </div>
+
+                        {/* Grade rows */}
+                        {sortedGrades.map((g, gIdx) => {
+                          const gAmts = wizardGSA[g.id] ?? {};
+                          const total = wizardSections.reduce((s, _, idx) => {
+                            const v = gAmts[idx];
+                            if (!v || v === "na") return s;
+                            return s + (Number(v) || 0);
+                          }, 0);
+                          return (
+                            <div key={g.id} style={{
+                              display: "grid",
+                              gridTemplateColumns: `120px repeat(${wizardSections.length}, minmax(96px, 1fr)) 88px`,
+                              padding: "8px 12px", alignItems: "center",
+                              borderBottom: gIdx < sortedGrades.length - 1 ? "1px solid #F3EEE8" : "none",
+                              background: gIdx % 2 === 0 ? "#fff" : "#FDFCFB",
+                            }}>
+                              <div>
+                                <div style={{ fontSize: "13px", color: "#1A1A1A", fontWeight: "500" }}>{g.name}</div>
+                                <div style={{ fontSize: "11px", color: "#AAA099" }}>{g.student_count} תלמידים</div>
+                              </div>
+
+                              {wizardSections.map((sec, secIdx) => {
+                                const cellVal = gAmts[secIdx];
+                                const isNA = cellVal === "na";
+                                const isEditing = editingCell?.gradeId === g.id && editingCell?.secIdx === secIdx;
+                                const hasValue = !isNA && cellVal && Number(cellVal) > 0;
+                                return (
+                                  <div key={secIdx} style={{ display: "flex", justifyContent: "center" }}>
+                                    {isEditing ? (
+                                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                                          <span style={{ fontSize: "11px", color: "#8B2F6E", fontWeight: "500" }}>₪</span>
+                                          <input
+                                            ref={cellInputRef}
+                                            type="number" min="0"
+                                            value={isNA ? "" : (cellVal ?? "")}
+                                            onFocus={e => e.target.select()}
+                                            onChange={e => setWizardGSA(prev => ({
+                                              ...prev,
+                                              [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: e.target.value },
+                                            }))}
+                                            onBlur={() => saveCellToDb(g.id, sec.name, gAmts[secIdx], secIdx)}
+                                            onKeyDown={e => {
+                                              if (e.key === "Enter") saveCellToDb(g.id, sec.name, gAmts[secIdx], secIdx);
+                                              if (e.key === "Escape") setEditingCell(null);
+                                              if (e.key === "Tab") {
+                                                e.preventDefault();
+                                                saveCellToDb(g.id, sec.name, gAmts[secIdx], secIdx);
+                                                if (secIdx < wizardSections.length - 1) setEditingCell({ gradeId: g.id, secIdx: secIdx + 1 });
+                                                else if (gIdx < sortedGrades.length - 1) setEditingCell({ gradeId: sortedGrades[gIdx + 1].id, secIdx: 0 });
+                                              }
+                                            }}
+                                            style={{
+                                              width: "58px", padding: "3px 6px",
+                                              border: "1.5px solid #C080A8", borderRadius: "6px",
+                                              fontSize: "12px", fontFamily: "Rubik, sans-serif",
+                                              direction: "ltr", textAlign: "right", outline: "none",
+                                            }}
+                                          />
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onMouseDown={e => {
+                                            e.preventDefault();
+                                            setWizardGSA(prev => ({
+                                              ...prev,
+                                              [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: "na" },
+                                            }));
+                                            saveCellToDb(g.id, sec.name, "na", secIdx);
+                                          }}
+                                          style={{ fontSize: "10px", color: "#B0A8A4", background: "none", border: "none", cursor: "pointer", padding: "0", lineHeight: 1.2, fontFamily: "Rubik, sans-serif" }}
+                                        >לא רלוונטי</button>
+                                      </div>
+                                    ) : isNA ? (
+                                      <div
+                                        onClick={() => {
+                                          setWizardGSA(prev => ({ ...prev, [g.id]: { ...(prev[g.id] ?? {}), [secIdx]: "" } }));
+                                          setEditingCell({ gradeId: g.id, secIdx });
+                                        }}
+                                        title="לחץ/י לעריכה"
+                                        style={{
+                                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                          padding: "5px 10px", borderRadius: "7px", cursor: "pointer",
+                                          border: "1px dashed #DDD8D4", background: "#F8F6F3",
+                                          minWidth: "64px", transition: "all 0.12s",
+                                        }}
+                                      >
+                                        <span style={{ fontSize: "12px", color: "#CCC4BC" }}>—</span>
+                                      </div>
+                                    ) : (
+                                      <div
+                                        onClick={() => setEditingCell({ gradeId: g.id, secIdx })}
+                                        title="לחץ/י לעריכה"
+                                        onMouseEnter={e => { e.currentTarget.style.background = "#F0E0ED"; (e.currentTarget.style as CSSStyleDeclaration).borderColor = "#B060A0"; }}
+                                        onMouseLeave={e => {
+                                          e.currentTarget.style.background = hasValue ? "#FAF0F8" : "#FCF7FB";
+                                          (e.currentTarget.style as CSSStyleDeclaration).borderColor = hasValue ? "#DDB8D4" : "#D4B8CC";
+                                        }}
+                                        style={{
+                                          display: "inline-flex", alignItems: "center", gap: "3px",
+                                          padding: "5px 10px", borderRadius: "7px", cursor: "pointer",
+                                          border: hasValue ? "1px solid #DDB8D4" : "1.5px dashed #D4B8CC",
+                                          background: hasValue ? "#FAF0F8" : "#FCF7FB",
+                                          minWidth: "64px", justifyContent: "center", transition: "all 0.12s",
+                                        }}
+                                      >
+                                        {hasValue ? (
+                                          <>
+                                            <span style={{ fontSize: "10px", color: "#8B2F6E" }}>₪</span>
+                                            <span style={{ fontSize: "12px", fontWeight: "600", color: "#8B2F6E" }}>
+                                              {Number(cellVal).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <span style={{ fontSize: "11px", color: "#C0A0BE", fontStyle: "italic" }}>הגדר</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+
+                              <div style={{ textAlign: "center" }}>
+                                {total > 0 ? (
+                                  <>
+                                    <div style={{ fontSize: "13px", fontWeight: "600", color: "#1A1A1A" }}>₪{total.toLocaleString("he-IL")}</div>
+                                    <div style={{ fontSize: "10px", color: "#AAA099" }}>לתלמיד</div>
+                                  </>
+                                ) : (
+                                  <span style={{ fontSize: "11px", color: "#C0BAB4" }}>—</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
-                </div>
-              );
-            })()}
 
-            {/* Custom cat input */}
-            {(() => {
-              const activeSrc = orgSources.find(s => s.slug === effectiveCatSrc) ?? orgSources[0];
-              const c = activeSrc ? wizardStyle(activeSrc) : { grad: "#aaa" };
-              return (
-                <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
-                  <input style={{ ...inputSt, flex: 1 }} value={catCustom} onChange={e => setCatCustom(e.target.value)}
-                    placeholder="קטגוריה מותאמת אישית..." onKeyDown={e => { if (e.key === "Enter") handleAddCustomCat(); }} />
-                  <button type="button" onClick={handleAddCustomCat} disabled={!catCustom.trim() || addCategory.isPending}
-                    style={{ padding: "10px 18px", background: (catCustom.trim() && !addCategory.isPending) ? c.grad : "#E8E2D9", color: (catCustom.trim() && !addCategory.isPending) ? "#fff" : "#AAA099", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: (catCustom.trim() && !addCategory.isPending) ? "pointer" : "not-allowed", fontWeight: "500" }}>
-                    {addCategory.isPending ? "..." : "הוסף"}
+                  <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+                    <button type="button" onClick={() => setStep(3)} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
+                      סיים הגדרה ←
+                    </button>
+                    <button type="button" onClick={() => setHorimView('sections')}
+                      style={{ padding: "14px 18px", background: "none", color: "#8B2F6E", border: "1.5px solid #C080A8", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                      ← חזור לסעיפים
+                    </button>
+                  </div>
+                </div>
+              )
+            ) : (
+              /* ── Regular categories UI (non-horim sources) ── */
+              <>
+                {/* Quick suggestions */}
+                {(() => {
+                  const activeSrc = orgSources.find(s => s.slug === effectiveCatSrc) ?? orgSources[0];
+                  const c = activeSrc ? wizardStyle(activeSrc) : { label: effectiveCatSrc, color: "#6B6560", light: "#F5F5F2", grad: "#aaa" };
+                  const suggestions = CAT_SUGGESTIONS[effectiveCatSrc] ?? [];
+                  const cats = addedCats[effectiveCatSrc] ?? [];
+                  return (
+                    <div style={{ marginBottom: "16px" }}>
+                      {suggestions.length > 0 && (
+                        <>
+                          <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>הצעות מהירות</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
+                            {suggestions.map(name => {
+                              const added = cats.some(cat => cat.name === name);
+                              return (
+                                <button key={name} type="button"
+                                  onClick={() => handleAddCatSuggestion(name)}
+                                  disabled={added || addCategory.isPending}
+                                  style={{
+                                    padding: "6px 13px",
+                                    background: added ? "#EDFBF3" : c.light,
+                                    color: added ? "#2D6644" : c.color,
+                                    border: added ? "1.5px solid #B6E8C4" : `1px solid ${c.color}30`,
+                                    borderRadius: "8px", fontSize: "12.5px", fontFamily: "Rubik, sans-serif",
+                                    cursor: added ? "default" : "pointer", fontWeight: added ? "500" : "400",
+                                    transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: "5px",
+                                    opacity: addCategory.isPending && !added ? 0.6 : 1,
+                                  }}>
+                                  {added ? (<><svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#2D6644" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>{name}</>) : `+ ${name}`}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                      {cats.length > 0 && (
+                        <div style={{ marginTop: "14px" }}>
+                          <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>
+                            נוספו ({cats.length}) — לחץ/י על הסכום לעדכון
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            {cats.map(cat => (
+                              <div key={cat.id} style={{
+                                display: "flex", alignItems: "center", justifyContent: "space-between",
+                                background: c.light, border: `1px solid ${c.color}30`,
+                                borderRadius: "9px", padding: "7px 12px",
+                              }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke={c.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  <span style={{ fontSize: "13px", color: c.color, fontWeight: "500" }}>{cat.name}</span>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <InlineAmountEdit catId={cat.id} current={cat.amount} color={c.color}
+                                    onSave={async (n) => {
+                                      await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
+                                      setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                    }} />
+                                  <button type="button" onClick={() => handleDeleteCat(cat.id, effectiveCatSrc)}
+                                    title="הסר קטגוריה"
+                                    style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", padding: "2px", fontSize: "14px", lineHeight: 1 }}
+                                    onMouseEnter={e => (e.currentTarget.style.color = "#E57373")}
+                                    onMouseLeave={e => (e.currentTarget.style.color = "#C0BAB4")}
+                                  >✕</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Custom cat input */}
+                {(() => {
+                  const activeSrc = orgSources.find(s => s.slug === effectiveCatSrc) ?? orgSources[0];
+                  const c = activeSrc ? wizardStyle(activeSrc) : { grad: "#aaa" };
+                  return (
+                    <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+                      <input style={{ ...inputSt, flex: 1 }} value={catCustom} onChange={e => setCatCustom(e.target.value)}
+                        placeholder="קטגוריה מותאמת אישית..." onKeyDown={e => { if (e.key === "Enter") handleAddCustomCat(); }} />
+                      <button type="button" onClick={handleAddCustomCat} disabled={!catCustom.trim() || addCategory.isPending}
+                        style={{ padding: "10px 18px", background: (catCustom.trim() && !addCategory.isPending) ? c.grad : "#E8E2D9", color: (catCustom.trim() && !addCategory.isPending) ? "#fff" : "#AAA099", border: "none", borderRadius: "10px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: (catCustom.trim() && !addCategory.isPending) ? "pointer" : "not-allowed", fontWeight: "500" }}>
+                        {addCategory.isPending ? "..." : "הוסף"}
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                <div style={{ display: "flex", gap: "10px", marginTop: "28px" }}>
+                  <button type="button" onClick={() => setStep(3)} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
+                    סיים הגדרה ←
+                  </button>
+                  <button type="button" onClick={() => setStep(3)} style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                    דלג
                   </button>
                 </div>
-              );
-            })()}
-
-            <div style={{ display: "flex", gap: "10px", marginTop: "28px" }}>
-              <button type="button" onClick={() => setStep(3)} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
-                סיים הגדרה ←
-              </button>
-              <button type="button" onClick={() => setStep(3)} style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
-                דלג
-              </button>
-            </div>
+              </>
+            )}
           </div>
         )}
+
 
         {/* ── STEP 3: Done ── */}
         {step === 3 && (
@@ -1207,7 +1349,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
               <div style={{ fontSize: "12px", fontWeight: "500", color: "#AAA099", marginBottom: "10px", letterSpacing: "0.05em" }}>מה הוגדר</div>
               {[
                 { label: `שנת לימודים: ${createdYearName}`, done: true },
-                { label: grades.length > 0 ? `${grades.length} שכבות הוגדרו` : "שכבות — ניתן להוסיף בהגדרות", done: grades.length > 0 },
+                { label: sortedGrades.length > 0 ? `${sortedGrades.length} שכבות הוגדרו` : "שכבות — ניתן להוסיף בהגדרות", done: sortedGrades.length > 0 },
                 { label: (() => { const total = Object.values(addedCats).reduce((s,a) => s + a.length, 0); return total > 0 ? `${total} קטגוריות תקציב נוספו` : "קטגוריות — ניתן להוסיף בהגדרות"; })(), done: Object.values(addedCats).some(a => a.length > 0) },
               ].map((item, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "5px 0" }}>

@@ -482,7 +482,11 @@ function usePauseSubscription() {
   return useMutation({
     mutationFn: async (orgId: string) => {
       const yesterday = new Date(Date.now() - 86400000).toISOString();
-      const { error } = await supabase.from("organizations").update({ plan_expires_at: yesterday }).eq("id", orgId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.rpc as any)("admin_set_org_expiry", {
+        p_org_id: orgId,
+        p_expires_at: yesterday,
+      });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-orgs"] }),
