@@ -152,6 +152,7 @@ export function useAddParentSection() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parent-sections"] });
+      queryClient.invalidateQueries({ queryKey: ["parent-sections-all"] });
     },
   });
 }
