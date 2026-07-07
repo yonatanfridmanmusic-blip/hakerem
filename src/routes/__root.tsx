@@ -22,6 +22,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "הכרם — ניהול פיננסי לבתי ספר" },
+      // Open Graph — WhatsApp / Telegram / social previews
+      { property: "og:type",        content: "website" },
+      { property: "og:url",         content: "https://www.hakerem.app" },
+      { property: "og:title",       content: "הכרם — ניהול פיננסי לבתי ספר" },
+      { property: "og:description", content: "פלטפורמה חכמה לניהול תקציב, הורים וגביה בבתי ספר" },
+      { property: "og:image",       content: "https://www.hakerem.app/og-image.png" },
+      { property: "og:image:width",  content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:locale",      content: "he_IL" },
+      // Twitter / X card
+      { name: "twitter:card",        content: "summary_large_image" },
+      { name: "twitter:title",       content: "הכרם — ניהול פיננסי לבתי ספר" },
+      { name: "twitter:description", content: "פלטפורמה חכמה לניהול תקציב, הורים וגביה בבתי ספר" },
+      { name: "twitter:image",       content: "https://www.hakerem.app/og-image.png" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },

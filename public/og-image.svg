@@ -1,0 +1,52 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#22503A"/>
+      <stop offset="55%" style="stop-color:#1A3D2B"/>
+      <stop offset="100%" style="stop-color:#0F2219"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4A8C62"/>
+      <stop offset="100%" style="stop-color:#2D6644"/>
+    </linearGradient>
+    <filter id="softglow">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="40" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <ellipse cx="200" cy="315" rx="350" ry="250" fill="#2D6644" opacity="0.15" filter="url(#softglow)"/>
+  <ellipse cx="1000" cy="315" rx="300" ry="200" fill="#4A8C62" opacity="0.08" filter="url(#softglow)"/>
+  <g opacity="0.05" stroke="#7AAA8E" stroke-width="1">
+    <line x1="0" y1="105" x2="1200" y2="105"/>
+    <line x1="0" y1="210" x2="1200" y2="210"/>
+    <line x1="0" y1="315" x2="1200" y2="315"/>
+    <line x1="0" y1="420" x2="1200" y2="420"/>
+    <line x1="0" y1="525" x2="1200" y2="525"/>
+    <line x1="150" y1="0" x2="150" y2="630"/>
+    <line x1="300" y1="0" x2="300" y2="630"/>
+    <line x1="450" y1="0" x2="450" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="750" y1="0" x2="750" y2="630"/>
+    <line x1="900" y1="0" x2="900" y2="630"/>
+    <line x1="1050" y1="0" x2="1050" y2="630"/>
+  </g>
+  <rect x="0" y="0" width="1200" height="4" fill="url(#accent)" opacity="0.8"/>
+  <circle cx="600" cy="200" r="90" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+  <circle cx="600" cy="200" r="70" fill="rgba(255,255,255,0.04)"/>
+  <g transform="translate(556,156) scale(2.4)">
+    <line x1="18" y1="4" x2="18" y2="10" stroke="#7AAA8E" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M18 7 Q23 4.5 26 6.5" fill="none" stroke="rgba(122,170,142,0.6)" stroke-width="1.4" stroke-linecap="round"/>
+    <circle cx="12" cy="15" r="6" fill="#7AAA8E"/>
+    <circle cx="10" cy="13" r="1.8" fill="rgba(255,255,255,0.28)"/>
+    <circle cx="24" cy="15" r="6" fill="#5AA674"/>
+    <circle cx="22" cy="13" r="1.8" fill="rgba(255,255,255,0.22)"/>
+    <circle cx="18" cy="25" r="6" fill="#4A8C62"/>
+    <circle cx="16" cy="23" r="1.8" fill="rgba(255,255,255,0.22)"/>
+  </g>
+  <text x="600" y="340" font-family="Helvetica Neue,Arial,sans-serif" font-size="96" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="-2">הכרם</text>
+  <rect x="520" y="358" width="160" height="2" rx="1" fill="url(#accent)" opacity="0.7"/>
+  <text x="600" y="415" font-family="Helvetica Neue,Arial,sans-serif" font-size="34" font-weight="400" fill="rgba(255,255,255,0.60)" text-anchor="middle">ניהול פיננסי לבתי ספר</text>
+  <rect x="525" y="465" width="150" height="38" rx="19" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+  <text x="600" y="489" font-family="Helvetica Neue,Arial,sans-serif" font-size="18" font-weight="400" fill="rgba(255,255,255,0.45)" text-anchor="middle">hakerem.app</text>
+</svg>
