@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -125,6 +126,7 @@ function DashboardPreview() {
 // ─── Auth Page ────────────────────────────────────────────────────────────────
 
 function AuthPage() {
+  const isMobile = useIsMobile();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -220,14 +222,24 @@ function AuthPage() {
 
   const inputStyle = (field: string): React.CSSProperties => ({
     width: "100%", padding: "12px 14px",
-    border: `1.5px solid ${focusedField === field ? "#2D6644" : "#E8E2D9"}`,
+    border: `1.5px solid ${
+      focusedField === field
+        ? (isMobile ? "rgba(122,170,142,0.6)" : "#2D6644")
+        : (isMobile ? "rgba(255,255,255,0.15)" : "#E8E2D9")
+    }`,
     borderRadius: "10px",
-    fontSize: "14px", background: focusedField === field ? "#FCFBF9" : "#fff",
-    color: "#1A1A1A", outline: "none",
+    fontSize: "14px",
+    background: isMobile
+      ? (focusedField === field ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.08)")
+      : (focusedField === field ? "#FCFBF9" : "#fff"),
+    color: isMobile ? "#fff" : "#1A1A1A",
+    outline: "none",
     fontFamily: f,
     boxSizing: "border-box",
     transition: "border-color 0.15s, background 0.15s",
-    boxShadow: focusedField === field ? "0 0 0 3px rgba(45,102,68,0.08)" : "none",
+    boxShadow: focusedField === field
+      ? (isMobile ? "0 0 0 3px rgba(122,170,142,0.15)" : "0 0 0 3px rgba(45,102,68,0.08)")
+      : "none",
   });
 
   // ── "Check your email" screen ─────────────────────────────────────────
@@ -288,14 +300,17 @@ function AuthPage() {
     <div style={{
       minHeight: "100vh", display: "flex",
       fontFamily: f, direction: "rtl",
-      background: "#F8F5F1",
+      background: isMobile
+        ? "linear-gradient(160deg, #1C4430 0%, #0F2419 55%, #081510 100%)"
+        : "#F8F5F1",
     }}>
-      {/* ── Left panel (dark) ── */}
+      {/* ── Left panel (dark) — hidden on mobile ── */}
       <div style={{
         flex: "0 0 480px",
         background: "linear-gradient(160deg, #1C4430 0%, #0F2419 55%, #081510 100%)",
         padding: "48px 40px",
-        display: "flex", flexDirection: "column", justifyContent: "space-between",
+        display: isMobile ? "none" : "flex",
+        flexDirection: "column", justifyContent: "space-between",
         position: "relative", overflow: "hidden",
         minHeight: "100vh",
       }}>
@@ -343,13 +358,29 @@ function AuthPage() {
       {/* ── Right panel (form) ── */}
       <div style={{
         flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "40px 32px",
+        padding: isMobile ? "32px 20px 48px" : "40px 32px",
+        minHeight: "100vh",
       }}>
         <div style={{ width: "100%", maxWidth: "380px" }}>
 
+          {/* Mobile: logo at top of form */}
+          {isMobile && (
+            <div style={{ textAlign: "center", marginBottom: "36px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+                <LogoIcon size={38} />
+                <span style={{ fontSize: "22px", fontWeight: "500", color: "#fff", letterSpacing: "-0.3px" }}>הכרם</span>
+              </div>
+              <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginTop: "8px" }}>
+                ניהול פיננסי לבתי ספר בישראל
+              </p>
+            </div>
+          )}
+
           {/* Tab switcher */}
           <div style={{
-            display: "flex", background: "#EEE8E0", borderRadius: "10px",
+            display: "flex",
+            background: isMobile ? "rgba(255,255,255,0.1)" : "#EEE8E0",
+            borderRadius: "10px",
             padding: "3px", marginBottom: "32px",
           }}>
             {(["login", "signup"] as const).map(m => (
@@ -357,9 +388,13 @@ function AuthPage() {
                 flex: 1, padding: "8px 0", border: "none",
                 borderRadius: "8px", fontSize: "14px", fontWeight: "500",
                 fontFamily: f, cursor: "pointer",
-                background: mode === m ? "#fff" : "transparent",
-                color: mode === m ? "#1A1A1A" : "#AAA099",
-                boxShadow: mode === m ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
+                background: mode === m
+                  ? (isMobile ? "rgba(255,255,255,0.18)" : "#fff")
+                  : "transparent",
+                color: mode === m
+                  ? (isMobile ? "#fff" : "#1A1A1A")
+                  : (isMobile ? "rgba(255,255,255,0.45)" : "#AAA099"),
+                boxShadow: mode === m && !isMobile ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
                 transition: "all 0.15s",
               }}>
                 {m === "login" ? "כניסה" : "הרשמה"}
@@ -370,10 +405,10 @@ function AuthPage() {
           {mode === "login" ? (
             <>
               <div style={{ marginBottom: "28px" }}>
-                <h1 style={{ fontSize: "24px", fontWeight: "400", color: "#1A1A1A", margin: "0 0 6px", letterSpacing: "-0.5px" }}>
+                <h1 style={{ fontSize: "24px", fontWeight: "400", color: isMobile ? "#fff" : "#1A1A1A", margin: "0 0 6px", letterSpacing: "-0.5px" }}>
                   ברוכים הבאים
                 </h1>
-                <p style={{ fontSize: "14px", color: "#AAA099", margin: 0 }}>
+                <p style={{ fontSize: "14px", color: isMobile ? "rgba(255,255,255,0.5)" : "#AAA099", margin: 0 }}>
                   כניסה לחשבון בית הספר שלך
                 </p>
               </div>
@@ -382,32 +417,30 @@ function AuthPage() {
               <button type="button" onClick={signInWithGoogle} disabled={googleLoading} style={{
                 width: "100%", padding: "11px 0",
                 display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
-                background: "#fff", border: "1.5px solid #E8E2D9",
+                background: isMobile ? "rgba(255,255,255,0.1)" : "#fff",
+                border: isMobile ? "1.5px solid rgba(255,255,255,0.2)" : "1.5px solid #E8E2D9",
                 borderRadius: "10px", fontSize: "14px", fontWeight: "500",
-                fontFamily: f, color: "#1A1A1A",
+                fontFamily: f, color: isMobile ? "#fff" : "#1A1A1A",
                 cursor: googleLoading ? "not-allowed" : "pointer",
                 marginBottom: "20px",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                boxShadow: isMobile ? "none" : "0 1px 3px rgba(0,0,0,0.06)",
                 transition: "box-shadow 0.15s, border-color 0.15s",
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 3px 10px rgba(0,0,0,0.1)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#C8C2BB"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 1px 3px rgba(0,0,0,0.06)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#E8E2D9"; }}
-              >
+              }}>
                 <GoogleIcon />
                 {googleLoading ? "מתחבר..." : "כניסה עם Google"}
               </button>
 
-              <Divider />
+              <Divider dark={isMobile} />
 
               <form onSubmit={signIn} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <Field label="כתובת אימייל">
+                <Field dark={isMobile} label="כתובת אימייל">
                   <input
                     type="email" value={email} onChange={e => setEmail(e.target.value)} required dir="ltr"
                     style={inputStyle("email")}
                     onFocus={() => setFocusedField("email")} onBlur={() => setFocusedField(null)}
                   />
                 </Field>
-                <Field label="סיסמה">
+                <Field dark={isMobile} label="סיסמה">
                   <input
                     type="password" value={password} onChange={e => setPassword(e.target.value)} required dir="ltr"
                     style={inputStyle("password")}
@@ -420,16 +453,16 @@ function AuthPage() {
           ) : (
             <>
               <div style={{ marginBottom: "28px" }}>
-                <h1 style={{ fontSize: "24px", fontWeight: "400", color: "#1A1A1A", margin: "0 0 6px", letterSpacing: "-0.5px" }}>
+                <h1 style={{ fontSize: "24px", fontWeight: "400", color: isMobile ? "#fff" : "#1A1A1A", margin: "0 0 6px", letterSpacing: "-0.5px" }}>
                   יצירת חשבון
                 </h1>
-                <p style={{ fontSize: "14px", color: "#AAA099", margin: 0 }}>
+                <p style={{ fontSize: "14px", color: isMobile ? "rgba(255,255,255,0.5)" : "#AAA099", margin: 0 }}>
                   הצטרף/י לניהול פיננסי חכם לבית הספר שלך
                 </p>
               </div>
 
               <form onSubmit={signUp} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <Field label="שם מלא">
+                <Field dark={isMobile} label="שם מלא">
                   <input
                     type="text" value={fullName} onChange={e => setFullName(e.target.value)} required
                     placeholder="לדוגמה: נורית כהן"
@@ -437,21 +470,21 @@ function AuthPage() {
                     onFocus={() => setFocusedField("name")} onBlur={() => setFocusedField(null)}
                   />
                 </Field>
-                <Field label="כתובת אימייל">
+                <Field dark={isMobile} label="כתובת אימייל">
                   <input
                     type="email" value={email} onChange={e => setEmail(e.target.value)} required dir="ltr"
                     style={inputStyle("email")}
                     onFocus={() => setFocusedField("email")} onBlur={() => setFocusedField(null)}
                   />
                 </Field>
-                <Field label="סיסמה (לפחות 6 תווים)">
+                <Field dark={isMobile} label="סיסמה (לפחות 6 תווים)">
                   <input
                     type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} dir="ltr"
                     style={inputStyle("password")}
                     onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField(null)}
                   />
                 </Field>
-                <Field label="אימות סיסמה">
+                <Field dark={isMobile} label="אימות סיסמה">
                   <input
                     type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required dir="ltr"
                     placeholder="הקלד/י את הסיסמה שוב"
@@ -472,15 +505,16 @@ function AuthPage() {
 
               {/* Or Google for signup too */}
               <div style={{ margin: "16px 0" }}>
-                <Divider />
+                <Divider dark={isMobile} />
                 <button type="button" onClick={signInWithGoogle} disabled={googleLoading} style={{
                   width: "100%", padding: "11px 0",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
-                  background: "#fff", border: "1.5px solid #E8E2D9",
+                  background: isMobile ? "rgba(255,255,255,0.1)" : "#fff",
+                  border: isMobile ? "1.5px solid rgba(255,255,255,0.2)" : "1.5px solid #E8E2D9",
                   borderRadius: "10px", fontSize: "14px", fontWeight: "500",
-                  fontFamily: f, color: "#1A1A1A",
+                  fontFamily: f, color: isMobile ? "#fff" : "#1A1A1A",
                   cursor: googleLoading ? "not-allowed" : "pointer",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                  boxShadow: "none",
                 }}>
                   <GoogleIcon />
                   {googleLoading ? "מתחבר..." : "הרשמה עם Google"}
@@ -501,11 +535,12 @@ function AuthPage() {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, dark = false }: { label: string; children: React.ReactNode; dark?: boolean }) {
   return (
     <div>
       <label style={{
-        fontSize: "12px", fontWeight: "600", color: "#6B6560",
+        fontSize: "12px", fontWeight: "600",
+        color: dark ? "rgba(255,255,255,0.6)" : "#6B6560",
         display: "block", marginBottom: "7px", letterSpacing: "0.03em",
       }}>
         {label}
@@ -515,12 +550,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Divider() {
+function Divider({ dark = false }: { dark?: boolean }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
-      <div style={{ flex: 1, height: "1px", background: "#EAE5DE" }} />
-      <span style={{ fontSize: "11px", color: "#C8C2BB", letterSpacing: "0.02em" }}>או עם אימייל</span>
-      <div style={{ flex: 1, height: "1px", background: "#EAE5DE" }} />
+      <div style={{ flex: 1, height: "1px", background: dark ? "rgba(255,255,255,0.15)" : "#EAE5DE" }} />
+      <span style={{ fontSize: "11px", color: dark ? "rgba(255,255,255,0.35)" : "#C8C2BB", letterSpacing: "0.02em" }}>או עם אימייל</span>
+      <div style={{ flex: 1, height: "1px", background: dark ? "rgba(255,255,255,0.15)" : "#EAE5DE" }} />
     </div>
   );
 }
