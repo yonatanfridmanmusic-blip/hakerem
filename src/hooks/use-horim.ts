@@ -68,6 +68,25 @@ export function useParentSections() {
   });
 }
 
+/** All sections (active AND inactive) — for manage/toggle UI */
+export function useAllParentSections() {
+  return useQuery<ParentSection[]>({
+    queryKey: ["parent-sections-all"],
+    queryFn: async () => {
+      const yearId = await getActiveYearId();
+      if (!yearId) return [];
+      const { data, error } = await supabase
+        .from("parent_sections")
+        .select("id, name, order_index, is_active")
+        .eq("school_year_id", yearId)
+        .order("order_index");
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
 export function useGradeSectionAmounts() {
   return useQuery<GradeSectionAmount[]>({
     queryKey: ["grade-section-amounts"],
@@ -150,6 +169,7 @@ export function useToggleParentSection() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parent-sections"] });
+      queryClient.invalidateQueries({ queryKey: ["parent-sections-all"] });
     },
   });
 }

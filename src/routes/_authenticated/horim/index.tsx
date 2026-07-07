@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   useGrades,
   useParentSections,
+  useAllParentSections,
   useGradeSectionAmounts,
   useParentCollections,
   useUpsertGradeSectionAmount,
@@ -545,6 +546,7 @@ export default function HorimPage() {
 
   const { data: grades = [], isLoading: gradesLoading } = useGrades();
   const { data: sections = [], isLoading: sectionsLoading } = useParentSections();
+  const { data: allSections = [] } = useAllParentSections();
   const { data: gsaList = [] } = useGradeSectionAmounts();
   const { data: collections = [] } = useParentCollections();
 
@@ -616,7 +618,7 @@ export default function HorimPage() {
   return (
     <>
       {showSectionsModal && (
-        <ManageSectionsModal sections={sections} onClose={() => setShowSectionsModal(false)} />
+        <ManageSectionsModal sections={allSections} onClose={() => setShowSectionsModal(false)} />
       )}
       {showModal && grades.length > 0 && sections.length > 0 && (
         <AddCollectionModal

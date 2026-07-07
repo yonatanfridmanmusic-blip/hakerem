@@ -19,7 +19,7 @@ export interface OrgBudgetSource {
 export const FALLBACK_SOURCES: OrgBudgetSource[] = [
   { id: "gefen",  org_id: "", slug: "gefen",  label: "גפן",    color: "#166534", bg_color: "#F0FDF4", is_default: true, order_index: 1 },
   { id: "iriyah", org_id: "", slug: "iriyah", label: "עירייה", color: "#7C2D12", bg_color: "#FFF7ED", is_default: true, order_index: 2 },
-  { id: "horim",  org_id: "", slug: "horim",  label: "הורים",  color: "#6B21A8", bg_color: "#FAF5FF", is_default: true, order_index: 3 },
+  { id: "horim",  org_id: "", slug: "horim",  label: "הורים",  color: "#8B2F6E", bg_color: "#F4EBF2", is_default: true, order_index: 3 },
 ];
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
@@ -67,8 +67,8 @@ export function useAddBudgetSource() {
   return useMutation({
     mutationFn: async ({
       label,
-      color = "#6B21A8",
-      bg_color = "#FAF5FF",
+      color = "#6B6560",
+      bg_color = "#F5F5F2",
     }: {
       label: string;
       color?: string;
@@ -173,7 +173,7 @@ export async function seedDefaultSourcesForOrg(orgId: string, extras: { label: s
   const defaults = [
     { slug: "gefen",  label: "גפן",    color: "#166534", bg_color: "#F0FDF4", order_index: 1, is_default: true },
     { slug: "iriyah", label: "עירייה", color: "#7C2D12", bg_color: "#FFF7ED", order_index: 2, is_default: true },
-    { slug: "horim",  label: "הורים",  color: "#6B21A8", bg_color: "#FAF5FF", order_index: 3, is_default: true },
+    { slug: "horim",  label: "הורים",  color: "#8B2F6E", bg_color: "#F4EBF2", order_index: 3, is_default: true },
   ];
 
   const rows = [
