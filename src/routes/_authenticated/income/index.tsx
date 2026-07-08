@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { Plus, X, TrendingUp, Pencil, Check, Trash2, Search } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { CategorySearchSelect } from "@/components/ui/category-search-select";
 import { useCountUp } from "@/hooks/use-count-up";
@@ -80,6 +81,11 @@ function IncomeForm({
   const [form, setForm] = useState<IncomeFormState>(initial);
   const [newCatName, setNewCatName] = useState("");
   const newCatRef = useRef<HTMLInputElement>(null);
+  // For "אחר" custom payment method
+  const isOtherPayment = form.payment_method === "אחר";
+  const [customPayment, setCustomPayment] = useState(() =>
+    initial.payment_method && !PAYMENT_METHODS.includes(initial.payment_method) ? initial.payment_method : ""
+  );
   const { data: categories } = useBudgetCategories(form.source);
   const { data: orgSources } = useOrgBudgetSources();
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
@@ -91,6 +97,7 @@ function IncomeForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.amount || Number(form.amount) <= 0) { toast.error("יש להזין סכום תקין"); return; }
+    if (isOtherPayment && !customPayment.trim()) { toast.error("יש להזין אמצעי תשלום"); return; }
 
     let resolvedCategoryId: string | null = form.budget_category_id || null;
     if (isAddingNew) {
@@ -99,7 +106,8 @@ function IncomeForm({
       resolvedCategoryId = (created as { id: string } | undefined)?.id ?? null;
     }
 
-    await onSubmit({ ...form, budget_category_id: resolvedCategoryId ?? "" });
+    const finalPaymentMethod = isOtherPayment ? customPayment.trim() : form.payment_method;
+    await onSubmit({ ...form, payment_method: finalPaymentMethod, budget_category_id: resolvedCategoryId ?? "" });
   };
 
   return (
@@ -107,8 +115,7 @@ function IncomeForm({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
         <div>
           <label style={labelStyle}>תאריך</label>
-          <input type="date" value={form.income_date} onChange={(e) => set("income_date", e.target.value)}
-            required style={{ ...inputStyle, direction: "ltr" }} />
+          <DateInput value={form.income_date} onChange={(v) => set("income_date", v)} required style={inputStyle} />
         </div>
         <div>
           <label style={labelStyle}>סכום (₪)</label>
@@ -166,10 +173,24 @@ function IncomeForm({
         </div>
         <div>
           <label style={labelStyle}>אמצעי תשלום</label>
-          <select value={form.payment_method} onChange={(e) => set("payment_method", e.target.value)} style={inputStyle}>
+          <select
+            value={isOtherPayment ? "אחר" : (PAYMENT_METHODS.includes(form.payment_method) ? form.payment_method : (form.payment_method ? "אחר" : ""))}
+            onChange={(e) => { set("payment_method", e.target.value); if (e.target.value !== "אחר") setCustomPayment(""); }}
+            style={inputStyle}
+          >
             <option value="">— בחר —</option>
             {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
+          {isOtherPayment && (
+            <input
+              type="text"
+              value={customPayment}
+              onChange={(e) => setCustomPayment(e.target.value)}
+              placeholder="פרט את אמצעי התשלום..."
+              autoFocus
+              style={{ ...inputStyle, marginTop: "8px", borderColor: "#B5472A" }}
+            />
+          )}
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowDownLeft, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -117,6 +117,7 @@ function Bar({ pct, gradient }: { pct: number; gradient: string }) {
 
 function SourceCard({ s }: { s: SourceSummary }) {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const animCashBalance = useCountUp(s.cashBalance);
   const animIncome      = useCountUp(s.income);
   const animUsed        = useCountUp(s.used);
@@ -133,14 +134,27 @@ function SourceCard({ s }: { s: SourceSummary }) {
   const hero = SOURCE_HERO[s.source] ?? SOURCE_HERO["_default"];
 
   return (
-    <div style={{
-      background: hero.bg,
-      borderRadius: "20px", padding: isMobile ? "24px 20px" : "32px 36px",
-      display: "flex", justifyContent: "space-between", alignItems: "flex-end",
-      flexWrap: "wrap", gap: "24px",
-      boxShadow: hero.shadow,
-      position: "relative", overflow: "hidden",
-    }}>
+    <div
+      onClick={() => void navigate({ to: "/budget" })}
+      style={{
+        background: hero.bg,
+        borderRadius: "20px", padding: isMobile ? "24px 20px" : "32px 36px",
+        display: "flex", justifyContent: "space-between", alignItems: "flex-end",
+        flexWrap: "wrap", gap: "24px",
+        boxShadow: hero.shadow,
+        position: "relative", overflow: "hidden",
+        cursor: "pointer",
+        transition: "transform 0.15s ease, box-shadow 0.15s ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-2px)";
+        e.currentTarget.style.boxShadow = hero.shadow.replace("0 16px 56px", "0 20px 64px");
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0)";
+        e.currentTarget.style.boxShadow = hero.shadow;
+      }}
+    >
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: hero.glow }} />
 
       {/* Left: label + balance + details */}

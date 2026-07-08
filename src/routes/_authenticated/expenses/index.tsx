@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Plus, X, AlertTriangle, Pencil, Trash2, Search } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Plus, X, AlertTriangle, Pencil, Trash2, Search, Paperclip } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
 import { CategorySearchSelect } from "@/components/ui/category-search-select";
 import { useCountUp } from "@/hooks/use-count-up";
 import { useIsMobile } from "@/hooks/use-is-mobile";
@@ -20,6 +22,22 @@ import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES, 
 export const Route = createFileRoute("/_authenticated/expenses/")({
   component: ExpensesPage,
 });
+
+// ─── Receipt helpers ──────────────────────────────────────────────────────────
+
+async function uploadReceipt(file: File): Promise<string> {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+  const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const { error } = await supabase.storage.from("receipts").upload(path, file, { upsert: false });
+  if (error) throw error;
+  return path;
+}
+
+async function openReceipt(receiptUrl: string) {
+  const { data, error } = await supabase.storage.from("receipts").createSignedUrl(receiptUrl, 3600);
+  if (error || !data?.signedUrl) { toast.error("שגיאה בפתיחת הקבלה"); return; }
+  window.open(data.signedUrl, "_blank");
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -62,12 +80,13 @@ function ExpenseForm({
   submitLabel,
 }: {
   initial: ExpenseFormState;
-  onSubmit: (form: ExpenseFormState) => Promise<void>;
+  onSubmit: (form: ExpenseFormState, receiptFile: File | null) => Promise<void>;
   onClose: () => void;
   isPending: boolean;
   submitLabel: string;
 }) {
   const [form, setForm] = useState<ExpenseFormState>(initial);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const { data: categories } = useBudgetCategories(form.source);
   const { data: orgSources } = useOrgBudgetSources();
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
@@ -77,7 +96,7 @@ function ExpenseForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.amount || Number(form.amount) <= 0) { toast.error("יש להזין סכום תקין"); return; }
-    await onSubmit(form);
+    await onSubmit(form, receiptFile);
   };
 
   return (
@@ -85,8 +104,7 @@ function ExpenseForm({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
         <div>
           <label style={labelStyle}>תאריך</label>
-          <input type="date" value={form.expense_date} onChange={(e) => set("expense_date", e.target.value)}
-            required style={{ ...inputStyle, direction: "ltr" }} />
+          <DateInput value={form.expense_date} onChange={(v) => set("expense_date", v)} required style={inputStyle} />
         </div>
         <div>
           <label style={labelStyle}>סכום (₪)</label>
@@ -148,6 +166,35 @@ function ExpenseForm({
         <label style={labelStyle}>תיאור (אופציונלי)</label>
         <input type="text" value={form.description} onChange={(e) => set("description", e.target.value)}
           placeholder="פרטים נוספים" style={inputStyle} />
+      </div>
+
+      <div>
+        <label style={labelStyle}>קבלה (אופציונלי)</label>
+        <label style={{
+          display: "flex", alignItems: "center", gap: "8px",
+          padding: "9px 12px", border: "1px dashed #E8E2D9", borderRadius: "8px",
+          cursor: "pointer", fontSize: "14px",
+          color: receiptFile ? "#1A1A1A" : "#AAA099",
+          background: receiptFile ? "#F7FBF9" : "#FAFAF8",
+        }}>
+          <Paperclip size={15} color={receiptFile ? "#2D6644" : "#AAA099"} />
+          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {receiptFile ? receiptFile.name : "בחר/י קובץ קבלה..."}
+          </span>
+          <input type="file" accept="image/*,application/pdf"
+            onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+            style={{ display: "none" }} />
+        </label>
+        {receiptFile && (
+          <button type="button" onClick={() => setReceiptFile(null)} style={{
+            marginTop: "4px", background: "none", border: "none",
+            cursor: "pointer", fontSize: "12px", color: "#AAA099",
+            display: "flex", alignItems: "center", gap: "4px", padding: 0,
+            fontFamily: "var(--font-sans)",
+          }}>
+            <X size={11} /> הסר קבלה
+          </button>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
@@ -229,13 +276,16 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
     expense_date: today(), amount: "", source: defaultSource,
     budget_category_id: "", supplier: "", description: "", bank_account: "school",
   };
-  const handleSubmit = async (form: ExpenseFormState) => {
+  const handleSubmit = async (form: ExpenseFormState, receiptFile: File | null) => {
     try {
+      let receipt_url: string | null = null;
+      if (receiptFile) receipt_url = await uploadReceipt(receiptFile);
       await addExpense.mutateAsync({
         expense_date: form.expense_date, amount: Math.round(Number(form.amount) * 100) / 100,
         source: form.source, bank_account: form.bank_account,
         budget_category_id: form.budget_category_id || null,
         supplier: form.supplier || null, description: form.description || null,
+        receipt_url,
       } as NewExpense);
       toast.success("ההוצאה נוספה בהצלחה");
       onClose();
@@ -262,14 +312,17 @@ function EditExpenseModal({ expense, onClose }: { expense: Expense; onClose: () 
     description: expense.description ?? "",
     bank_account: expense.bank_account ?? "school",
   };
-  const handleSubmit = async (form: ExpenseFormState) => {
+  const handleSubmit = async (form: ExpenseFormState, receiptFile: File | null) => {
     try {
+      let receipt_url = expense.receipt_url;
+      if (receiptFile) receipt_url = await uploadReceipt(receiptFile);
       await updateExpense.mutateAsync({
         id: expense.id,
         expense_date: form.expense_date, amount: Math.round(Number(form.amount) * 100) / 100,
         source: form.source, bank_account: form.bank_account,
         budget_category_id: form.budget_category_id || null,
         supplier: form.supplier || null, description: form.description || null,
+        receipt_url,
       });
       toast.success("ההוצאה עודכנה בהצלחה");
       onClose();
@@ -277,6 +330,20 @@ function EditExpenseModal({ expense, onClose }: { expense: Expense; onClose: () 
   };
   return (
     <Modal title="עריכת הוצאה" subtitle="ערוך את פרטי ההוצאה" onClose={onClose}>
+      {expense.receipt_url && (
+        <div style={{ padding: "12px 24px 0" }}>
+          <button type="button" onClick={() => void openReceipt(expense.receipt_url!)} style={{
+            display: "flex", alignItems: "center", gap: "8px",
+            padding: "8px 12px", borderRadius: "8px",
+            border: "1px solid #D4EDE0", background: "#F0FAF5",
+            color: "#2D6644", fontSize: "13px", cursor: "pointer",
+            fontFamily: "var(--font-sans)",
+          }}>
+            <Paperclip size={14} />
+            צפה בקבלה הקיימת
+          </button>
+        </div>
+      )}
       <ExpenseForm initial={initial} onSubmit={handleSubmit} onClose={onClose}
         isPending={updateExpense.isPending} submitLabel="שמור שינויים" />
     </Modal>
@@ -397,6 +464,15 @@ function ExpenseMobileCard({
 
       {/* Actions */}
       <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+        {e.receipt_url && (
+          <button onClick={() => void openReceipt(e.receipt_url!)} title="קבלה" style={{
+            background: "#EDFBF3", border: "none", borderRadius: "9px",
+            width: "36px", height: "36px", display: "flex", alignItems: "center",
+            justifyContent: "center", cursor: "pointer", color: "#2D6644",
+          }}>
+            <Paperclip size={14} />
+          </button>
+        )}
         <button onClick={() => onEdit(e)} style={{
           background: "#F7F4EF", border: "none", borderRadius: "9px",
           width: "36px", height: "36px", display: "flex", alignItems: "center",
@@ -589,7 +665,7 @@ export default function ExpensesPage() {
         </div>
 
         {/* List / Table */}
-        <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+        <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
 
           {isLoading ? (
             <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>טוען...</div>
@@ -616,7 +692,7 @@ export default function ExpensesPage() {
             ))
           ) : (
             /* ── Desktop: scrollable table ── */
-            <div style={{ overflowX: "auto" }}>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
               <div style={{
                 display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 1fr 72px",
                 minWidth: "580px",
@@ -666,6 +742,17 @@ export default function ExpensesPage() {
                       {e.supplier ?? e.description ?? "—"}
                     </span>
                     <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                      {e.receipt_url && (
+                        <button
+                          onClick={() => void openReceipt(e.receipt_url!)}
+                          title="קבלה"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                          onMouseEnter={(el) => { el.currentTarget.style.background = "#EDFBF3"; el.currentTarget.style.color = "#2D6644"; }}
+                          onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                        >
+                          <Paperclip size={13} />
+                        </button>
+                      )}
                       <button
                         onClick={() => setEditingExpense(e)}
                         title="ערוך"

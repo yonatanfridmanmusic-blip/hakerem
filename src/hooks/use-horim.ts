@@ -334,6 +334,49 @@ export function useAddParentCollection() {
   });
 }
 
+// Update a parent collection
+export function useUpdateParentCollection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      amount,
+      collectionDate,
+      notes,
+    }: {
+      id: string;
+      amount: number;
+      collectionDate: string;
+      notes?: string;
+    }) => {
+      const { error } = await supabase
+        .from("parent_collections")
+        .update({ amount, collection_date: collectionDate, notes: notes || null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parent-collections"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+// Delete a parent collection
+export function useDeleteParentCollection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("parent_collections").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parent-collections"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
 // Helper: compute target for a grade+section
 export function computeTarget(
   grade: Grade,

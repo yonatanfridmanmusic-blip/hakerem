@@ -15,6 +15,7 @@ export interface Expense {
   supplier: string | null;
   description: string | null;
   bank_account: "school" | "parents" | null;
+  receipt_url: string | null;
   budget_categories?: { name: string } | null;
 }
 
@@ -27,6 +28,7 @@ export interface NewExpense {
   supplier?: string | null;
   description?: string | null;
   bank_account: "school" | "parents";
+  receipt_url?: string | null;
 }
 
 // ─── Active year ──────────────────────────────────────────────────────────────
@@ -43,7 +45,7 @@ export function useExpenses(sourceFilter?: BudgetSource | "all") {
 
       let query = supabase
         .from("expenses")
-        .select("id, expense_date, amount, source, budget_category_id, activity_name, supplier, description, bank_account, budget_categories(name)")
+        .select("id, expense_date, amount, source, budget_category_id, activity_name, supplier, description, bank_account, receipt_url, budget_categories(name)")
         .eq("school_year_id", yearId)
         .order("expense_date", { ascending: false });
 

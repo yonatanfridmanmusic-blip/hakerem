@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-is-mobile";
-import { Plus, X, Check, ChevronDown, ChevronUp, Users, Settings2, Pencil } from "lucide-react";
+import { Plus, X, Check, ChevronDown, ChevronUp, Users, Settings2, Pencil, Trash2 } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { toast } from "sonner";
 import {
@@ -12,12 +13,15 @@ import {
   useParentCollections,
   useUpsertGradeSectionAmount,
   useAddParentCollection,
+  useUpdateParentCollection,
+  useDeleteParentCollection,
   useAddParentSection,
   useToggleParentSection,
   syncAllHorimBudgetCategories,
   computeTarget,
   type Grade,
   type ParentSection,
+  type ParentCollection,
 } from "@/hooks/use-horim";
 
 export const Route = createFileRoute("/_authenticated/horim/")({
@@ -238,7 +242,9 @@ function AddCollectionModal({
   onClose: () => void;
 }) {
   const isMobile = useIsMobile();
-  const [gradeId, setGradeId] = useState(preGradeId ?? grades[0]?.id ?? "");
+  const [gradeIds, setGradeIds] = useState<string[]>(
+    preGradeId ? [preGradeId] : grades[0]?.id ? [grades[0].id] : []
+  );
   const [sectionId, setSectionId] = useState(sections[0]?.id ?? "");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(today());
@@ -249,10 +255,12 @@ function AddCollectionModal({
     e.preventDefault();
     const n = Number(amount);
     if (!n || n <= 0) { toast.error("יש להזין סכום תקין"); return; }
-    if (!gradeId || !sectionId) { toast.error("יש לבחור שכבה וסעיף"); return; }
+    if (gradeIds.length === 0 || !sectionId) { toast.error("יש לבחור שכבה אחת לפחות וסעיף"); return; }
     try {
-      await addCollection.mutateAsync({ gradeId, sectionId, amount: n, collectionDate: date, notes });
-      toast.success("הגבייה נרשמה");
+      for (const gId of gradeIds) {
+        await addCollection.mutateAsync({ gradeId: gId, sectionId, amount: n, collectionDate: date, notes });
+      }
+      toast.success(gradeIds.length > 1 ? `הגבייה נרשמה עבור ${gradeIds.length} שכבות` : "הגבייה נרשמה");
       onClose();
     } catch { toast.error("שגיאה ברישום הגבייה"); }
   };
@@ -282,27 +290,50 @@ function AddCollectionModal({
         </div>
 
         <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
-          {/* Grade + Section */}
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px" }}>
-            <div>
-              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>שכבה</label>
-              <select value={gradeId} onChange={(e) => setGradeId(e.target.value)} style={inputStyle}>
-                {grades.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
+          {/* Multi-grade selection */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>
+              שכבות{gradeIds.length > 0 && <span style={{ color: "#8B2F6E", fontWeight: "600" }}> ({gradeIds.length} נבחרו)</span>}
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              {grades.map((g) => {
+                const selected = gradeIds.includes(g.id);
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => setGradeIds((prev) =>
+                      prev.includes(g.id) ? prev.filter((id) => id !== g.id) : [...prev, g.id]
+                    )}
+                    style={{
+                      padding: "6px 14px", borderRadius: "99px",
+                      border: `1.5px solid ${selected ? "#8B2F6E" : "#E8E2D9"}`,
+                      background: selected ? "#F4EBF2" : "#fff",
+                      color: selected ? "#8B2F6E" : "#888079",
+                      fontSize: "13px", fontWeight: selected ? "600" : "400",
+                      cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
+                    }}
+                  >
+                    {g.name}
+                  </button>
+                );
+              })}
             </div>
-            <div>
-              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סעיף</label>
-              <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={inputStyle}>
-                {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
+          </div>
+
+          {/* Section select */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סעיף</label>
+            <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={inputStyle}>
+              {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
           </div>
 
           {/* Date + Amount */}
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px" }}>
             <div>
               <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required style={{ ...inputStyle, direction: "ltr" }} />
+              <DateInput value={date} onChange={setDate} required style={inputStyle} />
             </div>
             <div>
               <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סכום (₪)</label>
@@ -329,10 +360,120 @@ function AddCollectionModal({
   );
 }
 
+// ─── Edit Collection Modal ────────────────────────────────────────────────────
+
+function EditCollectionModal({
+  collection, sections, onClose,
+}: {
+  collection: ParentCollection;
+  sections: ParentSection[];
+  onClose: () => void;
+}) {
+  const [amount, setAmount] = useState(String(collection.amount));
+  const [date, setDate] = useState(collection.collection_date);
+  const [notes, setNotes] = useState(collection.notes ?? "");
+  const updateCollection = useUpdateParentCollection();
+
+  const sec = sections.find((s) => s.id === collection.parent_section_id);
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "9px 12px",
+    border: "1px solid #E8E2D9", borderRadius: "8px",
+    fontSize: "14px", background: "#fff", color: "#1A1A1A",
+    outline: "none", fontFamily: "var(--font-sans)", direction: "rtl",
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const n = Number(amount);
+    if (!n || n <= 0) { toast.error("יש להזין סכום תקין"); return; }
+    try {
+      await updateCollection.mutateAsync({ id: collection.id, amount: n, collectionDate: date, notes });
+      toast.success("הגבייה עודכנה");
+      onClose();
+    } catch { toast.error("שגיאה בעדכון"); }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.4)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
+    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "#fff", borderRadius: "18px", width: "100%", maxWidth: "400px", boxShadow: "0 24px 80px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid #EAE5DE", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>עריכת גבייה</div>
+            {sec && <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>{sec.name}</div>}
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#AAA099", display: "flex" }}><X size={18} /></button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
+              <DateInput value={date} onChange={setDate} required style={inputStyle} />
+            </div>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סכום (₪)</label>
+              <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" min="0" step="0.01" required autoFocus style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>הערה (אופציונלי)</label>
+            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="פרטים נוספים" style={inputStyle} />
+          </div>
+          <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
+            <button type="submit" disabled={updateCollection.isPending} style={{ flex: 2, padding: "10px 0", border: "none", borderRadius: "8px", background: updateCollection.isPending ? "#888" : "linear-gradient(135deg, #B04A90, #8B2F6E)", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: updateCollection.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
+              {updateCollection.isPending ? "שומר..." : "שמור שינויים"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Delete Collection Confirm ────────────────────────────────────────────────
+
+function DeleteCollectionConfirm({ id, onClose }: { id: string; onClose: () => void }) {
+  const deleteCollection = useDeleteParentCollection();
+  const handleDelete = async () => {
+    try {
+      await deleteCollection.mutateAsync(id);
+      toast.success("הגבייה נמחקה");
+      onClose();
+    } catch { toast.error("שגיאה במחיקה"); }
+  };
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.4)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
+    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "#fff", borderRadius: "16px", width: "100%", maxWidth: "360px", padding: "28px 24px 24px", boxShadow: "0 24px 80px rgba(0,0,0,0.2)" }}>
+        <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: "#FEF2F2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+          <Trash2 size={20} color="#DC2626" />
+        </div>
+        <div style={{ fontSize: "17px", fontWeight: "600", color: "#1A1A1A", marginBottom: "8px" }}>מחיקת גבייה</div>
+        <div style={{ fontSize: "14px", color: "#6B6560", lineHeight: 1.6, marginBottom: "24px" }}>
+          האם למחוק רישום גבייה זה? פעולה זו אינה הפיכה.
+        </div>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "12px 0", border: "1px solid #E8E2D9", borderRadius: "10px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
+          <button onClick={handleDelete} disabled={deleteCollection.isPending} style={{ flex: 1, padding: "12px 0", border: "none", borderRadius: "10px", background: deleteCollection.isPending ? "#888" : "#DC2626", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: deleteCollection.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
+            {deleteCollection.isPending ? "מוחק..." : "מחק"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Grade Row (expandable) ───────────────────────────────────────────────────
 
 function GradeRow({
   grade, sections, gsaMap, collectionsMap, onAddCollection, multiplier,
+  onEditCollection, onDeleteCollection,
 }: {
   grade: Grade;
   sections: ParentSection[];
@@ -340,6 +481,8 @@ function GradeRow({
   collectionsMap: Map<string, number>;
   onAddCollection: (gradeId: string) => void;
   multiplier: number;
+  onEditCollection: (c: ParentCollection) => void;
+  onDeleteCollection: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { data: allCollections } = useParentCollections();
@@ -515,16 +658,32 @@ function GradeRow({
                 const sec = sections.find((s) => s.id === c.parent_section_id);
                 return (
                   <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#fff", borderRadius: "8px", border: "1px solid #EAE5DE" }}>
-                    <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                      <span style={{ fontSize: "12px", color: "#AAA099" }}>
+                    <div style={{ display: "flex", gap: "12px", alignItems: "center", flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: "12px", color: "#AAA099", whiteSpace: "nowrap" }}>
                         {new Date(c.collection_date).toLocaleDateString("he-IL")}
                       </span>
-                      <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "99px", background: "#F4EBF2", color: "#6B2356" }}>
+                      <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "99px", background: "#F4EBF2", color: "#6B2356", whiteSpace: "nowrap" }}>
                         {sec?.name ?? "—"}
                       </span>
-                      {c.notes && <span style={{ fontSize: "12px", color: "#6B6560" }}>{c.notes}</span>}
+                      {c.notes && <span style={{ fontSize: "12px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.notes}</span>}
                     </div>
-                    <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#8B2F6E" }}>{fmt(c.amount)}</span>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
+                      <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#8B2F6E" }}>{fmt(c.amount)}</span>
+                      <button
+                        onClick={() => onEditCollection(c)}
+                        title="ערוך"
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                        onMouseEnter={(el) => { el.currentTarget.style.background = "#F0E0ED"; el.currentTarget.style.color = "#8B2F6E"; }}
+                        onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                      ><Pencil size={12} /></button>
+                      <button
+                        onClick={() => onDeleteCollection(c.id)}
+                        title="מחק"
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                        onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
+                        onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                      ><Trash2 size={12} /></button>
+                    </div>
                   </div>
                 );
               })
@@ -546,6 +705,8 @@ export default function HorimPage() {
   const [preGradeId, setPreGradeId] = useState<string | undefined>();
   const [basis, setBasis] = useState<85 | 100>(85);
   const [guardMsg, setGuardMsg] = useState<string | null>(null);
+  const [editingCollection, setEditingCollection] = useState<ParentCollection | null>(null);
+  const [deletingCollectionId, setDeletingCollectionId] = useState<string | null>(null);
 
   const { data: grades = [], isLoading: gradesLoading } = useGrades();
   const { data: sections = [], isLoading: sectionsLoading } = useParentSections();
@@ -622,6 +783,12 @@ export default function HorimPage() {
     <>
       {showSectionsModal && (
         <ManageSectionsModal sections={allSections} onClose={() => setShowSectionsModal(false)} />
+      )}
+      {editingCollection && (
+        <EditCollectionModal collection={editingCollection} sections={sections} onClose={() => setEditingCollection(null)} />
+      )}
+      {deletingCollectionId && (
+        <DeleteCollectionConfirm id={deletingCollectionId} onClose={() => setDeletingCollectionId(null)} />
       )}
       {showModal && grades.length > 0 && sections.length > 0 && (
         <AddCollectionModal
@@ -807,6 +974,8 @@ export default function HorimPage() {
                       collectionsMap={collectionsMap}
                       onAddCollection={openAddCollection}
                       multiplier={multiplier}
+                      onEditCollection={setEditingCollection}
+                      onDeleteCollection={setDeletingCollectionId}
                     />
                   ))
                 )}

@@ -403,6 +403,7 @@ export type Database = {
           notes: string | null
           parent_section_id: string | null
           payment_method: string | null
+          receipt_url: string | null
           school_year_id: string
           source: string
           supplier: string | null
@@ -426,6 +427,7 @@ export type Database = {
           notes?: string | null
           parent_section_id?: string | null
           payment_method?: string | null
+          receipt_url?: string | null
           school_year_id: string
           source: string
           supplier?: string | null
@@ -449,6 +451,7 @@ export type Database = {
           notes?: string | null
           parent_section_id?: string | null
           payment_method?: string | null
+          receipt_url?: string | null
           school_year_id?: string
           source?: string
           supplier?: string | null
