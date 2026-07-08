@@ -749,7 +749,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
             // Replace with compressed version so uploadReceipt doesn't re-compress
             setItems((prev) => prev.map((x) => x.id === it.id ? { ...x, file: compressed } : x));
             const parsed = await parseReceiptFile(compressed);
-            setItemStatus(it.id, { status: "ready", parsed });
+            setItemStatus(it.id, { status: "ready", parsed, error: undefined });
           } catch {
             setItemStatus(it.id, { status: "error", error: "לא ניתן לקרוא את המסמך" });
           }
