@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, X, AlertTriangle, Pencil, Trash2, Search, Paperclip } from "lucide-react";
+import { Plus, X, AlertTriangle, Pencil, Trash2, Search, Paperclip, Check, Upload } from "lucide-react";
 import { DateInput } from "@/components/ui/date-input";
 import { CategorySearchSelect } from "@/components/ui/category-search-select";
 import { useCountUp } from "@/hooks/use-count-up";
@@ -37,6 +37,33 @@ async function openReceipt(receiptUrl: string) {
   const { data, error } = await supabase.storage.from("receipts").createSignedUrl(receiptUrl, 3600);
   if (error || !data?.signedUrl) { toast.error("שגיאה בפתיחת הקבלה"); return; }
   window.open(data.signedUrl, "_blank");
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+    reader.onerror = reject;
+  });
+}
+
+type ParsedReceipt = {
+  amount?: number | null;
+  supplier?: string | null;
+  date?: string | null;
+  description?: string | null;
+  invoice_number?: string | null;
+};
+
+async function parseReceiptFile(file: File): Promise<ParsedReceipt> {
+  const file_base64 = await fileToBase64(file);
+  const { data, error } = await supabase.functions.invoke("parse-receipt", {
+    body: { file_base64, file_media_type: file.type },
+  });
+  if (error) throw error;
+  if (!data?.success) throw new Error(data?.error ?? "Parse failed");
+  return (data.data ?? {}) as ParsedReceipt;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -87,10 +114,35 @@ function ExpenseForm({
 }) {
   const [form, setForm] = useState<ExpenseFormState>(initial);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [autofilled, setAutofilled] = useState(false);
   const { data: categories } = useBudgetCategories(form.source);
   const { data: orgSources } = useOrgBudgetSources();
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleFileSelect = async (file: File | null) => {
+    setReceiptFile(file);
+    setAutofilled(false);
+    if (!file) return;
+    setParsing(true);
+    try {
+      const parsed = await parseReceiptFile(file);
+      setForm((prev) => ({
+        ...prev,
+        amount: parsed.amount != null && (prev.amount === "" || prev.amount === "0")
+          ? String(parsed.amount) : prev.amount,
+        supplier: parsed.supplier && prev.supplier === "" ? parsed.supplier : prev.supplier,
+        expense_date: parsed.date && prev.expense_date === today() ? parsed.date : prev.expense_date,
+        description: parsed.description && prev.description === "" ? parsed.description : prev.description,
+      }));
+      setAutofilled(true);
+    } catch {
+      toast.error("לא הצלחנו לקרוא את הקבלה אוטומטית");
+    } finally {
+      setParsing(false);
+    }
+  };
   const activeSourceColor = sources.find(s => s.slug === form.source)?.color ?? "#2D6644";
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -182,11 +234,22 @@ function ExpenseForm({
             {receiptFile ? receiptFile.name : "בחר/י קובץ קבלה..."}
           </span>
           <input type="file" accept="image/*,application/pdf"
-            onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => handleFileSelect(e.target.files?.[0] ?? null)}
             style={{ display: "none" }} />
         </label>
+        {parsing && (
+          <div style={{ marginTop: "6px", fontSize: "12px", color: "#2D6644", display: "flex", alignItems: "center", gap: "6px" }}>
+            <div style={{ width: "12px", height: "12px", border: "2px solid #2D6644", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite", flexShrink: 0 }} />
+            קורא את הקבלה...
+          </div>
+        )}
+        {!parsing && autofilled && (
+          <div style={{ marginTop: "6px", fontSize: "12px", color: "#2D6644", display: "flex", alignItems: "center", gap: "6px" }}>
+            <Check size={13} /> פרטים מולאו אוטומטית
+          </div>
+        )}
         {receiptFile && (
-          <button type="button" onClick={() => setReceiptFile(null)} style={{
+          <button type="button" onClick={() => { setReceiptFile(null); setAutofilled(false); }} style={{
             marginTop: "4px", background: "none", border: "none",
             cursor: "pointer", fontSize: "12px", color: "#AAA099",
             display: "flex", alignItems: "center", gap: "4px", padding: 0,
@@ -492,6 +555,277 @@ function ExpenseMobileCard({
   );
 }
 
+// ─── Bulk Import Modal ────────────────────────────────────────────────────────
+
+type ImportStatus = "queued" | "parsing" | "ready" | "error" | "saving" | "saved";
+type ImportItem = {
+  id: string;
+  file: File;
+  status: ImportStatus;
+  parsed?: ParsedReceipt;
+  error?: string;
+};
+
+function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defaultSource: string }) {
+  const isMobile = useIsMobile();
+  const addExpense = useAddExpense();
+  const [items, setItems] = useState<ImportItem[]>([]);
+  const [processing, setProcessing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const addFiles = (files: FileList | File[]) => {
+    const arr = Array.from(files).filter(
+      (f) => f.type === "application/pdf" || f.type.startsWith("image/")
+    );
+    if (!arr.length) return;
+    setItems((prev) => [
+      ...prev,
+      ...arr.map((f) => ({
+        id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        file: f,
+        status: "queued" as ImportStatus,
+      })),
+    ]);
+  };
+
+  const setItemStatus = (id: string, updates: Partial<ImportItem>) =>
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...updates } : it)));
+
+  const processAll = async () => {
+    const queued = items.filter((it) => it.status === "queued" || it.status === "error");
+    if (!queued.length) return;
+    setProcessing(true);
+    for (let i = 0; i < queued.length; i += 3) {
+      const batch = queued.slice(i, i + 3);
+      batch.forEach((it) => setItemStatus(it.id, { status: "parsing" }));
+      await Promise.allSettled(
+        batch.map(async (it) => {
+          try {
+            const parsed = await parseReceiptFile(it.file);
+            setItemStatus(it.id, { status: "ready", parsed });
+          } catch {
+            setItemStatus(it.id, { status: "error", error: "לא ניתן לקרוא את המסמך" });
+          }
+        })
+      );
+    }
+    setProcessing(false);
+  };
+
+  const importAll = async () => {
+    const ready = items.filter((it) => it.status === "ready");
+    if (!ready.length) return;
+    setImporting(true);
+    let saved = 0;
+    for (const it of ready) {
+      setItemStatus(it.id, { status: "saving" });
+      try {
+        const receipt_url = await uploadReceipt(it.file);
+        const p = it.parsed ?? {};
+        await addExpense.mutateAsync({
+          expense_date: p.date ?? today(),
+          amount: p.amount ?? 0,
+          source: defaultSource,
+          bank_account: "school",
+          supplier: p.supplier ?? null,
+          description: p.description ?? null,
+          receipt_url,
+        } as NewExpense);
+        setItemStatus(it.id, { status: "saved" });
+        saved++;
+      } catch {
+        setItemStatus(it.id, { status: "error", error: "שגיאה בשמירה" });
+      }
+    }
+    setImporting(false);
+    if (saved > 0) toast.success(`${saved} הוצאות נשמרו בהצלחה`);
+  };
+
+  const statusIcon = (status: ImportStatus) => {
+    if (status === "parsing" || status === "saving")
+      return <div style={{ width: "14px", height: "14px", border: "2px solid #2D6644", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />;
+    if (status === "ready") return <Check size={14} color="#2D6644" />;
+    if (status === "saved") return <Check size={14} color="#2D6644" />;
+    if (status === "error") return <AlertTriangle size={14} color="#DC2626" />;
+    return <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#E8E2D9", margin: "0 3px" }} />;
+  };
+
+  const readyCount = items.filter((it) => it.status === "ready").length;
+  const savedCount = items.filter((it) => it.status === "saved").length;
+  const pendingCount = items.filter((it) => it.status === "queued" || it.status === "error").length;
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.55)",
+      display: "flex",
+      alignItems: isMobile ? "flex-end" : "center",
+      justifyContent: "center",
+      padding: isMobile ? 0 : "20px",
+    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={isMobile ? "hk-bottom-sheet" : ""} style={{
+        background: "#fff",
+        borderRadius: isMobile ? "20px 20px 0 0" : "18px",
+        width: "100%",
+        maxWidth: isMobile ? "100%" : "560px",
+        maxHeight: isMobile ? "92dvh" : "90vh",
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.18), 0 24px 80px rgba(0,0,0,0.2)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "20px 20px 16px", borderBottom: "1px solid #EAE5DE",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          flexShrink: 0,
+        }}>
+          {isMobile && (
+            <div style={{
+              position: "absolute", top: "8px", left: "50%", transform: "translateX(-50%)",
+              width: "36px", height: "4px", borderRadius: "2px", background: "#E8E2D9",
+            }} />
+          )}
+          <div>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>ייבוא מרובה</div>
+            <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>
+              העלה מסמכים — AI יזהה פרטים אוטומטית
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "8px", color: "#AAA099", display: "flex" }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ overflowY: "auto", flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: "12px" } as React.CSSProperties}>
+          {/* Drop zone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              border: `2px dashed ${dragging ? "#2D6644" : "#E8E2D9"}`,
+              borderRadius: "12px",
+              padding: "28px 20px",
+              textAlign: "center",
+              cursor: "pointer",
+              background: dragging ? "#F0FAF5" : "#FAFAF8",
+              transition: "all 0.15s",
+            }}
+          >
+            <Upload size={26} color={dragging ? "#2D6644" : "#C5BFB8"} style={{ marginBottom: "8px" }} />
+            <div style={{ fontSize: "14px", fontWeight: "500", color: dragging ? "#2D6644" : "#6B6560" }}>
+              גרור קבצים לכאן
+            </div>
+            <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "4px" }}>
+              או לחץ לבחירה · PDF, JPG, PNG
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,application/pdf"
+              style={{ display: "none" }}
+              onChange={(e) => { addFiles(e.target.files ?? new FileList()); e.target.value = ""; }}
+            />
+          </div>
+
+          {/* File list */}
+          {items.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {items.map((it) => (
+                <div key={it.id} style={{
+                  display: "flex", alignItems: "center", gap: "10px",
+                  padding: "10px 12px", borderRadius: "10px",
+                  background: it.status === "saved" ? "#F0FAF5" : it.status === "error" ? "#FEF2F2" : "#F7F4EF",
+                  border: `1px solid ${it.status === "saved" ? "#D4EDE0" : it.status === "error" ? "#FECACA" : "#EAE5DE"}`,
+                }}>
+                  <div style={{ flexShrink: 0, width: "20px", display: "flex", justifyContent: "center" }}>
+                    {statusIcon(it.status)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {it.file.name}
+                    </div>
+                    {it.parsed && (
+                      <div style={{ fontSize: "11px", color: "#6B6560", marginTop: "2px" }}>
+                        {[
+                          it.parsed.supplier,
+                          it.parsed.amount != null ? fmt(it.parsed.amount) : null,
+                          it.parsed.date,
+                        ].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                    {it.error && (
+                      <div style={{ fontSize: "11px", color: "#DC2626", marginTop: "2px" }}>{it.error}</div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#AAA099", flexShrink: 0 }}>
+                    {it.status === "queued" && "ממתין"}
+                    {it.status === "parsing" && "קורא..."}
+                    {it.status === "ready" && "מוכן"}
+                    {it.status === "saving" && "שומר..."}
+                    {it.status === "saved" && "✓ נשמר"}
+                    {it.status === "error" && "שגיאה"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {items.length > 0 && (
+          <div style={{
+            padding: `14px 20px calc(14px + env(safe-area-inset-bottom, 0px))`,
+            borderTop: "1px solid #EAE5DE",
+            display: "flex", gap: "10px", alignItems: "center", flexShrink: 0,
+          }}>
+            <div style={{ flex: 1, fontSize: "12px", color: "#AAA099" }}>
+              {[
+                savedCount > 0 && `${savedCount} נשמרו`,
+                readyCount > 0 && `${readyCount} מוכנים`,
+                pendingCount > 0 && `${pendingCount} ממתינים`,
+              ].filter(Boolean).join(" · ")}
+            </div>
+            {pendingCount > 0 && (
+              <button
+                onClick={() => void processAll()}
+                disabled={processing}
+                style={{
+                  padding: "9px 16px", border: "1px solid #1A3D2B", borderRadius: "8px",
+                  background: "#fff", color: "#1A3D2B", fontSize: "13px", fontWeight: "500",
+                  cursor: processing ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
+                  opacity: processing ? 0.6 : 1,
+                }}
+              >
+                {processing ? "מעבד..." : "עבד קבצים"}
+              </button>
+            )}
+            {readyCount > 0 && (
+              <button
+                onClick={() => void importAll()}
+                disabled={importing}
+                style={{
+                  padding: "9px 18px", border: "none", borderRadius: "8px",
+                  background: importing ? "#888" : "linear-gradient(135deg, #2D6644, #1A3D2B)",
+                  color: "#fff", fontSize: "13px", fontWeight: "500",
+                  cursor: importing ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
+                }}
+              >
+                {importing ? "מייבא..." : `ייבא ${readyCount} הוצאות`}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ExpensesPage() {
@@ -499,6 +833,7 @@ export default function ExpensesPage() {
   const [filter, setFilter] = useState<BudgetSource | "all">("all");
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deletingExpense, setDeletingExpense] = useState<Expense | null>(null);
 
@@ -536,6 +871,7 @@ export default function ExpensesPage() {
   return (
     <>
       {showAdd && <AddExpenseModal defaultSource={defaultSource} onClose={() => setShowAdd(false)} />}
+      {showBulkImport && <BulkImportModal defaultSource={defaultSource} onClose={() => setShowBulkImport(false)} />}
       {editingExpense && <EditExpenseModal expense={editingExpense} onClose={() => setEditingExpense(null)} />}
       {deletingExpense && <DeleteConfirm expense={deletingExpense} onClose={() => setDeletingExpense(null)} />}
 
@@ -551,19 +887,32 @@ export default function ExpensesPage() {
                 : `${(expenses ?? []).length} הוצאות · סה״כ ${fmt(total)}`}
             </p>
           </div>
-          <button onClick={() => setShowAdd(true)} style={{
-            display: "flex", alignItems: "center", gap: "7px",
-            padding: isMobile ? "11px 0" : "10px 18px",
-            width: isMobile ? "100%" : "auto",
-            justifyContent: "center",
-            background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
-            border: "none", borderRadius: "10px", color: "#fff",
-            fontSize: "14px", fontWeight: "500", cursor: "pointer",
-            fontFamily: "var(--font-sans)", boxShadow: "0 4px 12px rgba(26,61,43,0.3)",
-            flexShrink: 0,
-          }}>
-            <Plus size={16} />הוסף הוצאה
-          </button>
+          <div style={{ display: "flex", gap: "8px", width: isMobile ? "100%" : "auto", flexShrink: 0 }}>
+            <button onClick={() => setShowBulkImport(true)} style={{
+              display: "flex", alignItems: "center", gap: "7px",
+              padding: isMobile ? "11px 0" : "10px 14px",
+              flex: isMobile ? 1 : "none",
+              justifyContent: "center",
+              background: "#fff",
+              border: "1px solid #1A3D2B", borderRadius: "10px", color: "#1A3D2B",
+              fontSize: "14px", fontWeight: "500", cursor: "pointer",
+              fontFamily: "var(--font-sans)",
+            }}>
+              <Upload size={15} />ייבוא מרובה
+            </button>
+            <button onClick={() => setShowAdd(true)} style={{
+              display: "flex", alignItems: "center", gap: "7px",
+              padding: isMobile ? "11px 0" : "10px 18px",
+              flex: isMobile ? 1 : "none",
+              justifyContent: "center",
+              background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
+              border: "none", borderRadius: "10px", color: "#fff",
+              fontSize: "14px", fontWeight: "500", cursor: "pointer",
+              fontFamily: "var(--font-sans)", boxShadow: "0 4px 12px rgba(26,61,43,0.3)",
+            }}>
+              <Plus size={16} />הוסף הוצאה
+            </button>
+          </div>
         </div>
 
         {/* Hero */}
