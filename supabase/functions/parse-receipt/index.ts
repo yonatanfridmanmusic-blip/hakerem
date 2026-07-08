@@ -66,31 +66,45 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[parse-receipt] calling Claude (${isPdf ? "PDF" : "image"} document)...`);
 
+    // Use tool_use (structured output) — avoids JSON.parse failures on strings
+    // containing Hebrew gershayim (") like "בע\"מ", which break raw JSON parsing.
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 512,
-      system:
-        "אתה עוזר חשבונאות לבית ספר ישראלי. תפקידך לחלץ מידע ממסמכים פיננסיים (קבלות, חשבוניות). החזר JSON בלבד ללא שום הסבר נוסף.",
+      system: "אתה עוזר חשבונאות לבית ספר ישראלי. חלץ מידע פיננסי ממסמכים.",
+      tools: [
+        {
+          name: "extract_receipt",
+          description: "חילוץ פרטים פיננסיים מקבלה או חשבונית",
+          input_schema: {
+            type: "object" as const,
+            properties: {
+              amount:         { type: "number",  description: "סכום כולל לתשלום כמספר (ללא סימן מטבע). null אם לא קיים." },
+              supplier:       { type: "string",  description: "שם הספק / בית העסק / החברה. null אם לא קיים." },
+              date:           { type: "string",  description: "תאריך המסמך בפורמט YYYY-MM-DD. null אם לא קיים." },
+              description:    { type: "string",  description: "תיאור קצר של מה נרכש בעברית. null אם לא קיים." },
+              invoice_number: { type: "string",  description: "מספר חשבונית/קבלה. null אם לא קיים." },
+            },
+            required: [],
+          },
+        },
+      ],
+      tool_choice: { type: "tool", name: "extract_receipt" },
       messages: [
         {
           role: "user",
           content: [
             contentBlock,
-            {
-              type: "text",
-              text: `חלץ מהמסמך הבא את הפרטים הפיננסיים והחזר JSON בלבד:\n{\n  "amount": <סכום כולל לתשלום כמספר עשרוני - ללא סימן מטבע>,\n  "supplier": "<שם הספק / בית העסק / החברה>",\n  "date": "<תאריך המסמך בפורמט YYYY-MM-DD>",\n  "description": "<תיאור קצר של מה נרכש בעברית>",\n  "invoice_number": "<מספר חשבונית/קבלה אם קיים>"\n}\nשדות שאינם קיימים במסמך — החזר null. החזר JSON בלבד, ללא שום טקסט נוסף.`,
-            },
+            { type: "text", text: "חלץ את הפרטים הפיננסיים מהמסמך." },
           ],
         },
       ],
     });
 
-    const raw =
-      message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
-    console.log(`[parse-receipt] Claude raw response: ${raw.slice(0, 200)}`);
-
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    const data = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    // tool_use block contains an already-parsed object — no JSON.parse needed
+    const toolBlock = message.content.find((b) => b.type === "tool_use");
+    // deno-lint-ignore no-explicit-any
+    const data: Record<string, unknown> = (toolBlock as any)?.input ?? {};
     console.log(`[parse-receipt] parsed data: ${JSON.stringify(data)}`);
 
     return new Response(JSON.stringify({ success: true, data }), {
