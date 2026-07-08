@@ -23,16 +23,45 @@ export interface AiMessage {
 }
 
 export interface ActionDraftPreview {
-  type: "add_expense" | "add_income";
-  description: string;
-  amount: number;
-  source_slug: string;
-  source_label: string;
-  date: string;
+  type: string;
+  // add_expense / add_income
+  description?: string;
+  amount?: number;
+  source_slug?: string;
+  source_label?: string;
+  date?: string;
   budget_category_id?: string | null;
   category_name?: string | null;
   supplier?: string | null;
   payer?: string | null;
+  // set_category_budget / rename_budget_category / delete_budget_category
+  category_id?: string;
+  old_name?: string;
+  new_name?: string;
+  old_amount?: number;
+  new_amount?: number;
+  planned_amount?: number;
+  name?: string;
+  has_expenses?: boolean;
+  expense_count?: number;
+  // set_grade / create_grade
+  grade_id?: string;
+  grade_name?: string;
+  old_count?: number;
+  new_count?: number;
+  student_count?: number;
+  // create_budget_source
+  slug?: string;
+  label?: string;
+  // update_expense / update_income (diff fields)
+  expense_id?: string;
+  income_id?: string;
+  old_description?: string;
+  new_description?: string;
+  old_date?: string;
+  new_date?: string;
+  // delete_expense / delete_income
+  // (uses description, amount, source_label, date from above)
 }
 
 export interface ActionDraft {

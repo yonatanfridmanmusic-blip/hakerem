@@ -2,6 +2,7 @@ import {
   useState,
   useRef,
   useEffect,
+  type ReactNode,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
@@ -36,6 +37,166 @@ function formatTime(iso: string) {
 
 // ─── Confirm Card ──────────────────────────────────────────────────────────────
 
+type ActionCfg = { label: string; emoji: string; color: string; barGradient: string; bgGradient: string; borderColor: string; shadowColor: string };
+
+function getActionCfg(type: string): ActionCfg {
+  switch (type) {
+    case "add_expense":
+      return { label: "אישור הוצאה", emoji: "📤", color: "#f87171", barGradient: "linear-gradient(90deg,#ef4444,#f97316)", bgGradient: "linear-gradient(145deg,rgba(30,12,12,0.9),rgba(20,8,8,0.9))", borderColor: "rgba(239,68,68,0.25)", shadowColor: "rgba(239,68,68,0.12)" };
+    case "add_income":
+      return { label: "אישור הכנסה", emoji: "📥", color: "#4ade80", barGradient: "linear-gradient(90deg,#2D6644,#4ade80)", bgGradient: "linear-gradient(145deg,rgba(12,30,20,0.9),rgba(8,20,14,0.9))", borderColor: "rgba(45,102,68,0.35)", shadowColor: "rgba(45,102,68,0.15)" };
+    case "set_category_budget":
+      return { label: "עדכון תקציב סעיף", emoji: "💰", color: "#60a5fa", barGradient: "linear-gradient(90deg,#3b82f6,#60a5fa)", bgGradient: "linear-gradient(145deg,rgba(12,20,35,0.9),rgba(8,14,28,0.9))", borderColor: "rgba(96,165,250,0.25)", shadowColor: "rgba(96,165,250,0.12)" };
+    case "create_budget_category":
+      return { label: "סעיף חדש", emoji: "✨", color: "#4ade80", barGradient: "linear-gradient(90deg,#2D6644,#4ade80)", bgGradient: "linear-gradient(145deg,rgba(12,30,20,0.9),rgba(8,20,14,0.9))", borderColor: "rgba(45,102,68,0.35)", shadowColor: "rgba(45,102,68,0.15)" };
+    case "rename_budget_category":
+      return { label: "שינוי שם סעיף", emoji: "✏️", color: "#fb923c", barGradient: "linear-gradient(90deg,#ea580c,#fb923c)", bgGradient: "linear-gradient(145deg,rgba(30,15,8,0.9),rgba(20,10,6,0.9))", borderColor: "rgba(251,146,60,0.25)", shadowColor: "rgba(251,146,60,0.1)" };
+    case "delete_budget_category":
+      return { label: "מחיקת סעיף", emoji: "🗑️", color: "#f87171", barGradient: "linear-gradient(90deg,#dc2626,#f87171)", bgGradient: "linear-gradient(145deg,rgba(30,8,8,0.9),rgba(20,6,6,0.9))", borderColor: "rgba(239,68,68,0.25)", shadowColor: "rgba(239,68,68,0.12)" };
+    case "set_grade":
+      return { label: "עדכון כיתה", emoji: "🏫", color: "#60a5fa", barGradient: "linear-gradient(90deg,#2563eb,#60a5fa)", bgGradient: "linear-gradient(145deg,rgba(10,18,36,0.9),rgba(7,12,26,0.9))", borderColor: "rgba(96,165,250,0.22)", shadowColor: "rgba(96,165,250,0.1)" };
+    case "create_grade":
+      return { label: "כיתה חדשה", emoji: "🎒", color: "#4ade80", barGradient: "linear-gradient(90deg,#2D6644,#4ade80)", bgGradient: "linear-gradient(145deg,rgba(12,30,20,0.9),rgba(8,20,14,0.9))", borderColor: "rgba(45,102,68,0.35)", shadowColor: "rgba(45,102,68,0.15)" };
+    case "create_budget_source":
+      return { label: "מקור תקציב חדש", emoji: "🏛️", color: "#c084fc", barGradient: "linear-gradient(90deg,#9333ea,#c084fc)", bgGradient: "linear-gradient(145deg,rgba(20,10,35,0.9),rgba(14,7,26,0.9))", borderColor: "rgba(192,132,252,0.25)", shadowColor: "rgba(192,132,252,0.1)" };
+    case "update_expense":
+      return { label: "עריכת הוצאה", emoji: "✏️", color: "#fb923c", barGradient: "linear-gradient(90deg,#ea580c,#fb923c)", bgGradient: "linear-gradient(145deg,rgba(30,15,8,0.9),rgba(20,10,6,0.9))", borderColor: "rgba(251,146,60,0.25)", shadowColor: "rgba(251,146,60,0.1)" };
+    case "delete_expense":
+      return { label: "מחיקת הוצאה", emoji: "🗑️", color: "#f87171", barGradient: "linear-gradient(90deg,#dc2626,#f87171)", bgGradient: "linear-gradient(145deg,rgba(30,8,8,0.9),rgba(20,6,6,0.9))", borderColor: "rgba(239,68,68,0.25)", shadowColor: "rgba(239,68,68,0.12)" };
+    case "update_income":
+      return { label: "עריכת הכנסה", emoji: "✏️", color: "#34d399", barGradient: "linear-gradient(90deg,#059669,#34d399)", bgGradient: "linear-gradient(145deg,rgba(8,26,18,0.9),rgba(6,18,12,0.9))", borderColor: "rgba(52,211,153,0.25)", shadowColor: "rgba(52,211,153,0.1)" };
+    case "delete_income":
+      return { label: "מחיקת הכנסה", emoji: "🗑️", color: "#f87171", barGradient: "linear-gradient(90deg,#dc2626,#f87171)", bgGradient: "linear-gradient(145deg,rgba(30,8,8,0.9),rgba(20,6,6,0.9))", borderColor: "rgba(239,68,68,0.25)", shadowColor: "rgba(239,68,68,0.12)" };
+    default:
+      return { label: "פעולה", emoji: "⚡", color: "#4ade80", barGradient: "linear-gradient(90deg,#2D6644,#4ade80)", bgGradient: "linear-gradient(145deg,rgba(12,30,20,0.9),rgba(8,20,14,0.9))", borderColor: "rgba(45,102,68,0.35)", shadowColor: "rgba(45,102,68,0.15)" };
+  }
+}
+
+function ConfirmCardBody({ p, cfg }: { p: ActionDraftPreview; cfg: ActionCfg }) {
+  const row = (label: string, value: ReactNode) => (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.38)" }}>{label}</span>
+      <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.88)", fontWeight: 500, textAlign: "left" }}>{value}</span>
+    </div>
+  );
+  const arrow = (a: ReactNode, b: ReactNode) => (
+    <span style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+      <span style={{ color: "rgba(255,255,255,0.35)", textDecoration: "line-through" }}>{a}</span>
+      <span style={{ color: cfg.color, fontSize: "10px" }}>←</span>
+      <span style={{ color: "#fff", fontWeight: 600 }}>{b}</span>
+    </span>
+  );
+
+  switch (p.type) {
+    case "add_expense":
+    case "add_income":
+      return (
+        <>
+          <div style={{ marginBottom: "12px" }}>
+            <div style={{ fontSize: "28px", fontWeight: 800, color: "#fff", letterSpacing: "-0.5px", lineHeight: 1.1, marginBottom: "5px" }}>₪{fmt(p.amount ?? 0)}</div>
+            <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.82)", fontWeight: 500, lineHeight: 1.4 }}>{p.description}</div>
+            <div style={{ display: "flex", gap: "10px", marginTop: "6px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>📅 {p.date}</span>
+              {p.category_name && <span style={{ fontSize: "12px", color: cfg.color, fontWeight: 500 }}>📂 {p.category_name}</span>}
+              {p.supplier && <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>🏢 {p.supplier}</span>}
+              {p.payer && <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>👤 {p.payer}</span>}
+            </div>
+          </div>
+        </>
+      );
+    case "set_category_budget":
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "12px" }}>
+          <div style={{ fontSize: "13px", color: cfg.color, fontWeight: 600, marginBottom: "8px" }}>{p.category_name} · {p.source_label}</div>
+          {row("תקציב נוכחי", `₪${fmt(p.old_amount ?? 0)}`)}
+          {row("תקציב חדש", <span style={{ color: cfg.color, fontWeight: 700 }}>₪{fmt(p.new_amount ?? 0)}</span>)}
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "6px" }}>
+            שינוי: {(p.new_amount ?? 0) >= (p.old_amount ?? 0) ? "+" : ""}{fmt((p.new_amount ?? 0) - (p.old_amount ?? 0))} ₪
+          </div>
+        </div>
+      );
+    case "create_budget_category":
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "12px" }}>
+          <div style={{ fontSize: "22px", fontWeight: 700, color: "#fff", marginBottom: "6px" }}>{p.name}</div>
+          {row("מקור", p.source_label)}
+          {row("תקציב מתוכנן", `₪${fmt(p.planned_amount ?? 0)}`)}
+        </div>
+      );
+    case "rename_budget_category":
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "12px" }}>
+          <div style={{ fontSize: "13px", color: cfg.color, fontWeight: 600, marginBottom: "8px" }}>{p.source_label}</div>
+          {row("שם הסעיף", arrow(p.old_name, p.new_name))}
+        </div>
+      );
+    case "delete_budget_category":
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "12px" }}>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#fff", marginBottom: "6px" }}>{p.name}</div>
+          {row("מקור", p.source_label)}
+          {p.has_expenses && (
+            <div style={{ marginTop: "8px", padding: "8px 10px", borderRadius: "8px", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", fontSize: "12px", color: "#fca5a5" }}>
+              ⚠️ לסעיף זה יש {p.expense_count} הוצאות רשומות. ההוצאות לא יימחקו, אך יאבדו את הסיווג לסעיף.
+            </div>
+          )}
+        </div>
+      );
+    case "set_grade":
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "12px" }}>
+          <div style={{ fontSize: "18px", fontWeight: 700, color: "#fff", marginBottom: "8px" }}>{p.grade_name}</div>
+          {p.old_name !== p.new_name && row("שם כיתה", arrow(p.old_name, p.new_name))}
+          {p.old_count !== p.new_count && row("מספר תלמידים", arrow(p.old_count, p.new_count))}
+        </div>
+      );
+    case "create_grade":
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "12px" }}>
+          <div style={{ fontSize: "22px", fontWeight: 700, color: "#fff", marginBottom: "6px" }}>{p.name}</div>
+          {row("מספר תלמידים", p.student_count)}
+        </div>
+      );
+    case "create_budget_source":
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "12px" }}>
+          <div style={{ fontSize: "22px", fontWeight: 700, color: "#fff", marginBottom: "6px" }}>{p.label}</div>
+          {row("מזהה", p.slug)}
+        </div>
+      );
+    case "update_expense":
+    case "update_income": {
+      const hasDescChange = p.old_description !== p.new_description;
+      const hasAmtChange = p.old_amount !== p.new_amount;
+      const hasDateChange = p.old_date !== p.new_date;
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "12px" }}>
+          <div style={{ fontSize: "13px", color: cfg.color, fontWeight: 600, marginBottom: "8px" }}>{p.source_label}</div>
+          {hasDescChange && row("תיאור", arrow(p.old_description, p.new_description))}
+          {hasAmtChange && row("סכום", arrow(`₪${fmt(p.old_amount ?? 0)}`, <span style={{ color: cfg.color }}>₪{fmt(p.new_amount ?? 0)}</span>))}
+          {hasDateChange && row("תאריך", arrow(p.old_date, p.new_date))}
+          {!hasDescChange && !hasAmtChange && !hasDateChange && (
+            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)" }}>{p.new_description} — ₪{fmt(p.new_amount ?? 0)}</div>
+          )}
+          {p.category_name && <div style={{ fontSize: "12px", color: cfg.color, marginTop: "4px" }}>📂 {p.category_name}</div>}
+        </div>
+      );
+    }
+    case "delete_expense":
+    case "delete_income":
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "12px" }}>
+          <div style={{ fontSize: "26px", fontWeight: 800, color: "#fff", letterSpacing: "-0.5px", marginBottom: "4px" }}>₪{fmt(p.amount ?? 0)}</div>
+          <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.8)", marginBottom: "6px" }}>{p.description ?? ""}</div>
+          {row("מקור", p.source_label)}
+          {row("תאריך", p.date)}
+        </div>
+      );
+    default:
+      return <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", marginBottom: "12px" }}>פעולה זו תבוצע לאחר אישור.</div>;
+  }
+}
+
 function ConfirmCard({
   draft,
   convId,
@@ -48,7 +209,7 @@ function ConfirmCard({
   const confirm = useConfirmAiAction();
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const p = draft.preview;
-  const isExpense = p.type === "add_expense";
+  const cfg = getActionCfg(p.type);
 
   const handle = (approved: boolean) => {
     setConfirmError(null);
@@ -68,151 +229,44 @@ function ConfirmCard({
       marginTop: "12px",
       borderRadius: "16px",
       overflow: "hidden",
-      border: isExpense
-        ? "1px solid rgba(239,68,68,0.25)"
-        : "1px solid rgba(45,102,68,0.35)",
-      background: isExpense
-        ? "linear-gradient(145deg, rgba(30,12,12,0.9) 0%, rgba(20,8,8,0.9) 100%)"
-        : "linear-gradient(145deg, rgba(12,30,20,0.9) 0%, rgba(8,20,14,0.9) 100%)",
+      border: `1px solid ${cfg.borderColor}`,
+      background: cfg.bgGradient,
       backdropFilter: "blur(16px)",
-      boxShadow: isExpense
-        ? "0 4px 24px rgba(239,68,68,0.12), inset 0 1px 0 rgba(255,255,255,0.04)"
-        : "0 4px 24px rgba(45,102,68,0.15), inset 0 1px 0 rgba(255,255,255,0.04)",
+      boxShadow: `0 4px 24px ${cfg.shadowColor}, inset 0 1px 0 rgba(255,255,255,0.04)`,
     }}>
       {/* Color bar */}
-      <div style={{
-        height: "4px",
-        background: isExpense
-          ? "linear-gradient(90deg, #ef4444 0%, #f97316 100%)"
-          : "linear-gradient(90deg, #2D6644 0%, #4ade80 100%)",
-      }} />
+      <div style={{ height: "4px", background: cfg.barGradient }} />
 
       <div style={{ padding: "16px 18px 18px" }}>
         {/* Label row */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: "14px",
-        }}>
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-          }}>
-            <div style={{
-              width: "26px",
-              height: "26px",
-              borderRadius: "8px",
-              background: isExpense ? "rgba(239,68,68,0.15)" : "rgba(45,102,68,0.2)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "13px",
-            }}>
-              {isExpense ? "📤" : "📥"}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <div style={{ width: "26px", height: "26px", borderRadius: "8px", background: `${cfg.shadowColor}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px" }}>
+              {cfg.emoji}
             </div>
-            <span style={{
-              fontSize: "11px",
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: isExpense ? "#f87171" : "#4ade80",
-            }}>
-              {isExpense ? "אישור הוצאה" : "אישור הכנסה"}
+            <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: cfg.color }}>
+              {cfg.label}
             </span>
           </div>
-          <span style={{
-            fontSize: "11px",
-            color: "rgba(255,255,255,0.3)",
-            background: "rgba(255,255,255,0.05)",
-            padding: "3px 9px",
-            borderRadius: "20px",
-            border: "1px solid rgba(255,255,255,0.07)",
-          }}>
-            {p.source_label}
-          </span>
+          {p.source_label && (
+            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.05)", padding: "3px 9px", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.07)" }}>
+              {p.source_label}
+            </span>
+          )}
         </div>
 
-        {/* Amount + description */}
-        <div style={{ marginBottom: "12px" }}>
-          <div style={{
-            fontSize: "28px",
-            fontWeight: 800,
-            color: "#fff",
-            letterSpacing: "-0.5px",
-            lineHeight: 1.1,
-            marginBottom: "5px",
-          }}>
-            ₪{fmt(p.amount)}
-          </div>
-          <div style={{
-            fontSize: "14px",
-            color: "rgba(255,255,255,0.82)",
-            fontWeight: 500,
-            lineHeight: 1.4,
-          }}>
-            {p.description}
-          </div>
-          <div style={{
-            display: "flex",
-            gap: "12px",
-            marginTop: "6px",
-            flexWrap: "wrap",
-          }}>
-            <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>
-              📅 {p.date}
-            </span>
-            {p.category_name && (
-              <span style={{ fontSize: "12px", color: isExpense ? "rgba(249,115,22,0.75)" : "rgba(74,222,128,0.75)", fontWeight: 500 }}>
-                📂 {p.category_name}
-              </span>
-            )}
-            {p.supplier && (
-              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>
-                🏢 {p.supplier}
-              </span>
-            )}
-            {p.payer && (
-              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>
-                👤 {p.payer}
-              </span>
-            )}
-          </div>
-        </div>
+        {/* Dynamic body */}
+        <ConfirmCardBody p={p} cfg={cfg} />
 
         {/* Divider */}
-        <div style={{
-          height: "1px",
-          background: "rgba(255,255,255,0.06)",
-          marginBottom: "14px",
-        }} />
+        <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", marginBottom: "14px" }} />
 
         {/* Error banner */}
         {confirmError && (
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            background: "rgba(239,68,68,0.12)",
-            border: "1px solid rgba(239,68,68,0.3)",
-            borderRadius: "10px",
-            padding: "9px 12px",
-            marginBottom: "10px",
-            fontSize: "12px",
-            color: "#fca5a5",
-            direction: "rtl",
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-              <circle cx="12" cy="12" r="10" stroke="#f87171" strokeWidth="2"/>
-              <path d="M12 7v5M12 16v1" stroke="#f87171" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "10px", padding: "9px 12px", marginBottom: "10px", fontSize: "12px", color: "#fca5a5", direction: "rtl" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10" stroke="#f87171" strokeWidth="2"/><path d="M12 7v5M12 16v1" stroke="#f87171" strokeWidth="2" strokeLinecap="round"/></svg>
             <span style={{ flex: 1 }}>{confirmError}</span>
-            <button
-              type="button"
-              onClick={() => setConfirmError(null)}
-              style={{ background: "none", border: "none", color: "rgba(252,165,165,0.6)", cursor: "pointer", padding: "0 2px", fontSize: "12px", lineHeight: 1 }}
-            >✕</button>
+            <button type="button" onClick={() => setConfirmError(null)} style={{ background: "none", border: "none", color: "rgba(252,165,165,0.6)", cursor: "pointer", padding: "0 2px", fontSize: "12px", lineHeight: 1 }}>✕</button>
           </div>
         )}
 
@@ -222,80 +276,20 @@ function ConfirmCard({
             type="button"
             onClick={() => handle(true)}
             disabled={confirm.isPending}
-            style={{
-              flex: 1,
-              padding: "11px 0",
-              borderRadius: "12px",
-              background: confirm.isPending
-                ? "rgba(45,102,68,0.4)"
-                : "linear-gradient(135deg, #2D6644 0%, #1e4d32 100%)",
-              border: "none",
-              color: "#fff",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: confirm.isPending ? "not-allowed" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "7px",
-              transition: "all 0.18s ease",
-              fontFamily: "Rubik, sans-serif",
-              boxShadow: confirm.isPending ? "none" : "0 2px 12px rgba(45,102,68,0.35)",
-            }}
-            onMouseEnter={e => {
-              if (!confirm.isPending) {
-                (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)";
-                (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 16px rgba(45,102,68,0.5)";
-              }
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
-              (e.currentTarget as HTMLButtonElement).style.boxShadow = confirm.isPending ? "none" : "0 2px 12px rgba(45,102,68,0.35)";
-            }}
+            style={{ flex: 1, padding: "11px 0", borderRadius: "12px", background: confirm.isPending ? "rgba(45,102,68,0.4)" : "linear-gradient(135deg, #2D6644 0%, #1e4d32 100%)", border: "none", color: "#fff", fontSize: "14px", fontWeight: 600, cursor: confirm.isPending ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "7px", transition: "all 0.18s ease", fontFamily: "Rubik, sans-serif", boxShadow: confirm.isPending ? "none" : "0 2px 12px rgba(45,102,68,0.35)" }}
+            onMouseEnter={e => { if (!confirm.isPending) { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 16px rgba(45,102,68,0.5)"; } }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = confirm.isPending ? "none" : "0 2px 12px rgba(45,102,68,0.35)"; }}
           >
-            {confirm.isPending ? (
-              <span style={{
-                width: "14px", height: "14px", borderRadius: "50%",
-                border: "2px solid rgba(255,255,255,0.3)",
-                borderTopColor: "#fff",
-                animation: "spin 0.7s linear infinite",
-                display: "inline-block",
-              }} />
-            ) : (
-              <Check size={15} strokeWidth={2.5} />
-            )}
+            {confirm.isPending ? <span style={{ width: "14px", height: "14px", borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", animation: "spin 0.7s linear infinite", display: "inline-block" }} /> : <Check size={15} strokeWidth={2.5} />}
             {confirm.isPending ? "מבצע..." : "אישור"}
           </button>
           <button
             type="button"
             onClick={() => handle(false)}
             disabled={confirm.isPending}
-            style={{
-              flex: 1,
-              padding: "11px 0",
-              borderRadius: "12px",
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              color: "rgba(255,255,255,0.55)",
-              fontSize: "14px",
-              cursor: confirm.isPending ? "not-allowed" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "7px",
-              fontFamily: "Rubik, sans-serif",
-              transition: "all 0.15s ease",
-            }}
-            onMouseEnter={e => {
-              if (!confirm.isPending) {
-                (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.1)";
-                (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.8)";
-              }
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)";
-              (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.55)";
-            }}
+            style={{ flex: 1, padding: "11px 0", borderRadius: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.55)", fontSize: "14px", cursor: confirm.isPending ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "7px", fontFamily: "Rubik, sans-serif", transition: "all 0.15s ease" }}
+            onMouseEnter={e => { if (!confirm.isPending) { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.1)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.8)"; } }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.55)"; }}
           >
             <XCircle size={15} />
             ביטול
@@ -319,7 +313,7 @@ function BatchConfirmCard({ draftIds, previews, convId, onDone }: BatchConfirmCa
   const confirm = useConfirmAiBatch();
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
-  const total = previews.reduce((s, p) => s + p.amount, 0);
+  const total = previews.reduce((s, p) => s + (p.amount ?? 0), 0);
 
   const handleConfirm = async (approved: boolean) => {
     setConfirmError(null);
@@ -358,7 +352,7 @@ function BatchConfirmCard({ draftIds, previews, convId, onDone }: BatchConfirmCa
               {p.description}
             </span>
             <span style={{ fontSize: "13px", fontWeight: "600", color: "#fff", flexShrink: 0 }}>
-              ₪{p.amount.toLocaleString("he-IL")}
+              ₪{(p.amount ?? 0).toLocaleString("he-IL")}
             </span>
           </div>
         ))}

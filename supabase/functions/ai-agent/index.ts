@@ -4,7 +4,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const MODEL = "claude-haiku-4-5-20251001";
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
 
-// Standard Supabase CORS — function is protected by JWT auth inside the handler
 const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -33,7 +32,17 @@ function isUUID(s: string | null | undefined): s is string {
   if (!s) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
+function makeSlug(label: string, hint?: string): string {
+  const base = (hint || label)
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-_]/g, "")
+    .slice(0, 28)
+    .replace(/^-+|-+$/g, "");
+  return (base || "src") + "-" + Date.now().toString().slice(-4);
+}
 
+// ── Build budget context ────────────────────────────────────────────────────────
 async function buildCtx(uc: ReturnType<typeof createClient>, yearId: string, srcs: { slug: string; label: string }[]) {
   const [pR, eR, iR, cR] = await Promise.all([
     uc.from("budget_categories").select("id,name,source,planned_amount").eq("school_year_id", yearId).order("source").order("order_index"),
@@ -74,119 +83,124 @@ async function buildCtx(uc: ReturnType<typeof createClient>, yearId: string, src
   }).join("\n");
 }
 
+// ── System prompt ───────────────────────────────────────────────────────────────
 function buildSys(ctx: string, srcs: { slug: string; label: string }[], year: { name: string } | null) {
   const today = todayIL();
   const dayHe = new Date().toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const srcStr = srcs.map(s => s.slug + "=" + s.label).join(", ");
   return [
-    "אתה מנהל כלכלי דיגיטלי חכם של בית הספר במערכת הכרם. אתה מביא ערך אמיתי בשלושה תחומים: הכנסת נתונים, ניתוח תקציב מעמיק, ותכנון פעילויות בית ספריות.",
+    "אתה מנהל כלכלי דיגיטלי חכם של בית הספר במערכת הכרם. אתה מביא ערך אמיתי בשבעה תחומים.",
     "היום: " + dayHe + " (" + today + ") | שנת לימודים: " + (year?.name ?? "לא קיימת") + " | מקורות: " + srcStr,
     "\nסיכום תקציב שוטף (כולל פירוט סעיפים):\n" + ctx,
 
     "\n=== יכולת 1: הכנסת הוצאות והכנסות ===",
     "כשמישהו רוצה להכניס הוצאה או הכנסה:",
-    "א. אסוף: תיאור ברור, סכום, מקור תקציב, תאריך. אם חסר — שאל שאלה אחת בכל פעם. אל תציין דוגמאות כשאתה שואל על תיאור ההוצאה/הכנסה.",
+    "א. אסוף: תיאור ברור, סכום, מקור תקציב, תאריך. אם חסר — שאל שאלה אחת בכל פעם.",
     "ב. קרא get_budget_categories לפי המקור — הצג את הסעיפים ושאל לאיזה שייך.",
     "ג. אל תשאל על: ספק, אישורים, מי ביצע, חשבון בנק.",
     "ד. כשיש כל הפרטים — צור טיוטה עם add_expense/add_income ובקש אישור קצר.",
     "ה. אחרי אישור — ציין את היתרה החדשה בסעיף ובמקור.",
 
     "\n=== יכולת 2: ניתוח תקציב, מגמות וחריגות ===",
-    "כשמישהו שואל על מצב התקציב, מגמות, חריגות, המלצות, 'מה הכי גבוה', 'איפה אפשר לקצץ':",
-    "א. קרא get_expense_analysis — מחזיר: 5 הקטגוריות הגבוהות, קטגוריות בחריגה (>100%), קטגוריות ב-80%+, קטגוריות מנוצלות חלקית.",
-    "ב. קרא get_monthly_trend — מחזיר: הוצאות/הכנסות לפי חודש, לזיהוי חודשים בעייתיים.",
-    "ג. הצג ממצאים ברורים: מה הכי גבוה (עם ₪), מה חרג (כמה ₪ מעל), מה מדאיג, איפה אפשר לחסוך.",
-    "ד. תן המלצות ספציפיות המבוססות על הנתונים — לא עצות כלליות.",
-    "ה. סכומים תמיד עם ₪ מוחלטים, לא רק אחוזים.",
+    "כשמישהו שואל על מצב התקציב, מגמות, חריגות, המלצות:",
+    "א. קרא get_expense_analysis — מחזיר: 5 הקטגוריות הגבוהות, חריגות, קטגוריות ב-80%+.",
+    "ב. קרא get_monthly_trend — הוצאות/הכנסות לפי חודש.",
+    "ג. הצג ממצאים ברורים: מה הכי גבוה, מה חרג, איפה אפשר לחסוך.",
 
     "\n=== יכולת 3: תכנון פעילויות בית ספריות ===",
-    "כשמישהו מתכנן טיול, אירוע, כנס, ימי גיבוש, חגיגה, תחרות, קייטנה, סיור, הצגה, פעילות חינוכית וכו':",
+    "כשמישהו מתכנן טיול, אירוע, כנס, ימי גיבוש, קייטנה וכו':",
     "שלב א — הבנת הפעילות (שאל שאלה אחת בכל פעם):",
-    "  1. מה הפעילות ולאיזה שכבה/כיתה? (קרא get_grades אחרי שתדע — לקבל מספר תלמידים)",
-    "  2. ממה מורכבת ההוצאה? הצע רשימת פריטים רלוונטיים ושאל מה רלוונטי:",
-    "     • הסעה/אוטובוס — כמה? עלות משוערת?",
-    "     • כניסה לאטרקציה/שמירה/מוזיאון — עלות לתלמיד?",
-    "     • לינה — כמה לילות? עלות ללילה?",
-    "     • ארוחות — מי אחראי? עלות?",
-    "     • מדריך/מנחה — עלות?",
-    "     • ציוד/חומרים — עלות?",
-    "     • הוצאות נוספות?",
-    "  3. מאיזה מקור תקציב? (קרא get_budget_summary לאחר שתדע את המקור)",
-    "שלב ב — חישוב ותקצוב:",
-    "  • הצג טבלת עלויות: פריט | עלות כוללת | עלות לתלמיד",
-    "  • סה\"כ פעילות + עלות לתלמיד",
-    "  • יתרת תקציב לפני הפעילות ← אחרי הפעילות",
-    "  • אם התקציב מספיק — אמור זאת בבירור",
-    "  • אם לא מספיק — הצע חלופות (קיצוץ פריט, מקור נוסף, חלוקה לשנים)",
-    "שלב ג — הצע רישום:",
-    "  • שאל: 'רוצה שאכניס את ההוצאות למערכת?' ואם כן — עבור על כל פריט ורשום עם אישור.",
+    "  1. מה הפעילות ולאיזה שכבה/כיתה? (קרא get_grades אחרי שתדע)",
+    "  2. ממה מורכבת ההוצאה? הצע פריטים: הסעה, כניסה, לינה, ארוחות, מדריך, ציוד",
+    "  3. מאיזה מקור תקציב? (קרא get_budget_summary)",
+    "שלב ב — חישוב: טבלת עלויות, סה\"כ, עלות לתלמיד, יתרה לפני/אחרי.",
+    "שלב ג — שאל: 'רוצה שאכניס את ההוצאות?' → אם כן, קרא add_expenses_batch.",
+
+    "\n=== יכולת 4: ניהול סעיפי תקציב ===",
+    "כשמישהו רוצה לשנות תקציב מתוכנן לסעיף: קרא get_budget_categories ← קרא set_category_budget עם ה-ID.",
+    "כשמישהו רוצה להוסיף סעיף חדש: שאל שם, מקור, סכום מתוכנן ← קרא create_budget_category.",
+    "כשמישהו רוצה לשנות שם סעיף: קרא get_budget_categories ← קרא rename_budget_category.",
+    "כשמישהו רוצה למחוק סעיף: קרא get_budget_categories ← קרא get_budget_summary לבדיקת הוצאות קיימות ← הזהר אם יש הוצאות ← קרא delete_budget_category.",
+
+    "\n=== יכולת 5: ניהול כיתות ותלמידים ===",
+    "כשמישהו רוצה לשנות מספר תלמידים / שם כיתה: קרא get_grades ← קרא set_grade עם ה-ID.",
+    "כשמישהו רוצה להוסיף כיתה חדשה: שאל שם ומספר תלמידים ← קרא create_grade.",
+
+    "\n=== יכולת 6: מקורות תקציב חדשים ===",
+    "כשמישהו רוצה להוסיף מקור תקציב (כמו 'מינהל', 'קרן', 'משרד חינוך'):",
+    "שאל רק שם התצוגה ← קרא create_budget_source. המזהה נוצר אוטומטית.",
+
+    "\n=== יכולת 7: עריכה ומחיקה של הוצאות/הכנסות ===",
+    "כשמישהו רוצה לערוך הוצאה: קרא get_expenses עם פילטר מתאים ← הצג מה מצאת ← שאל מה לשנות ← קרא update_expense עם ה-ID.",
+    "כשמישהו רוצה למחוק הוצאה: קרא get_expenses ← הצג ← קרא delete_expense.",
+    "כשמישהו רוצה לערוך/למחוק הכנסה: קרא get_income ← קרא update_income / delete_income.",
+    "תמיד הצג מה עומד להשתנות לפני בקשת האישור.",
 
     "\n=== כללי שימוש בכלים ===",
     "ALWAYS call tools before answering. Never invent numbers.",
-    "ניתוח תקציב: קרא get_expense_analysis + get_monthly_trend",
-    "תכנון פעילות: קרא get_grades (מספר תלמידים) + get_budget_summary (יתרות)",
-    "גבייה מהורים: קרא get_horim_summary + get_parent_collections",
-    "הכנסת נתונים: קרא get_budget_categories לפני add_expense/add_income",
-    "budget_category_id חייב להיות UUID מ-get_budget_categories — אסור להשתמש בשם",
+    "get_expenses ו-get_income מחזירים id — השתמש בו ל-update/delete.",
+    "budget_category_id חייב להיות UUID מ-get_budget_categories — אסור להשתמש בשם.",
 
     "\n=== פורמט תשובות ===",
     "עברית טבעית וחמה, ישירה, ללא Markdown (אסור: ##, **, |, ---, מספרים ממוספרים עם נקודה)",
     "לשון ניטרלית — לא נקבה, לא זכר",
     "שאלות: אחת בכל הודעה בלבד",
-    "בתכנון פעילות: הצג סיכום מפורט ומסודר עם כל הפריטים אחרי איסוף הנתונים",
     "סכומים תמיד עם ₪ ופסיקי אלפים (₪12,345)",
   ].join("\n");
 }
 
+// ── Tools definition ────────────────────────────────────────────────────────────
 function buildTools(srcs: { slug: string; label: string }[]) {
   const sd = srcs.map(s => s.slug + "=" + s.label).join(", ");
   const td = "YYYY-MM-DD";
   return [
+    // ── Read tools ──
     {
       name: "get_expenses",
-      description: "שאילת הוצאות לפי מקור ותאריך. השתמש לפני כל ניתוח הוצאות ספציפי.",
+      description: "שאילת הוצאות לפי מקור ותאריך. מחזיר id לשימוש ב-update/delete. השתמש לפני כל עריכה/מחיקה.",
       input_schema: { type: "object", properties: { source: { type: "string", description: sd }, from_date: { type: "string", description: td }, to_date: { type: "string", description: td }, limit: { type: "number" } } },
     },
     {
       name: "get_income",
-      description: "שאילת הכנסות לפי מקור ותאריך.",
+      description: "שאילת הכנסות לפי מקור ותאריך. מחזיר id לשימוש ב-update/delete.",
       input_schema: { type: "object", properties: { source: { type: "string", description: sd }, from_date: { type: "string", description: td }, to_date: { type: "string", description: td }, limit: { type: "number" } } },
     },
     {
       name: "get_budget_categories",
-      description: "סעיפי תקציב לפי מקור עם תקציב מתוכנן. חובה לקרוא לפני add_expense/add_income. מחזיר id (UUID), name, planned_amount.",
+      description: "סעיפי תקציב לפי מקור עם id ותקציב מתוכנן. חובה לקרוא לפני add/set/rename/delete על סעיפים.",
       input_schema: { type: "object", required: ["source"], properties: { source: { type: "string", description: sd } } },
     },
     {
       name: "get_budget_summary",
-      description: "סיכום מפורט של כל הסעיפים: תוכנן, הוצא, נותר, אחוז ניצול. קרא לפני כל שאלה על יתרות תקציב, כמה אפשר להוציא, תכנון הוצאות עתידיות.",
+      description: "סיכום מפורט של כל הסעיפים: תוכנן, הוצא, נותר, אחוז ניצול.",
       input_schema: { type: "object", properties: { source: { type: "string", description: "מקור לסינון (אופציונלי): " + sd } } },
     },
     {
       name: "get_expense_analysis",
-      description: "ניתוח מעמיק של ההוצאות: 5 הקטגוריות הגבוהות ביותר, קטגוריות בחריגה (>100%), קטגוריות ב-80%+, קטגוריות מנוצלות חלקית. קרא לכל שאלה על מגמות, חריגות, המלצות לחיסכון, 'מה הכי גבוה'.",
+      description: "ניתוח מעמיק: 5 הקטגוריות הגבוהות, חריגות, קרובות ל-100%. קרא לכל שאלה על מגמות.",
       input_schema: { type: "object", properties: {} },
     },
     {
       name: "get_monthly_trend",
-      description: "הוצאות והכנסות מקובצות לפי חודש — לזיהוי מגמות עונתיות וחודשים עם הוצאות גבוהות. קרא לניתוח מגמות וזמן.",
+      description: "הוצאות והכנסות מקובצות לפי חודש — לזיהוי מגמות.",
       input_schema: { type: "object", properties: {} },
     },
     {
       name: "get_horim_summary",
-      description: "סיכום גבייית הורים לפי סעיף: יעד 100% ו-85%, נגבה, חסר, אחוז גבייה.",
+      description: "סיכום גביית הורים לפי סעיף: יעד, נגבה, חסר.",
       input_schema: { type: "object", properties: {} },
     },
     {
       name: "get_grades",
-      description: "כל השכבות/כיתות עם מספר תלמידים. קרא לפני תכנון פעילויות, שאלות על שכבות/כיתות, חישוב עלות לתלמיד.",
+      description: "כל השכבות/כיתות עם id ומספר תלמידים. קרא לפני set_grade/create_grade ולפני תכנון פעילויות.",
       input_schema: { type: "object", properties: {} },
     },
     {
       name: "get_parent_collections",
-      description: "פירוט גבייית הורים לפי שכבה וסעיף.",
-      input_schema: { type: "object", properties: { section_name: { type: "string", description: "סינון לפי שם סעיף (אופציונלי)" } } },
+      description: "פירוט גביית הורים לפי שכבה וסעיף.",
+      input_schema: { type: "object", properties: { section_name: { type: "string" } } },
     },
+    // ── Add expense / income ──
     {
       name: "add_expense",
       description: "יוצר טיוטת הוצאה לאישור. קרא רק אחרי get_budget_categories וכשיש כל הפרטים.",
@@ -194,25 +208,15 @@ function buildTools(srcs: { slug: string; label: string }[]) {
     },
     {
       name: "add_expenses_batch",
-      description: "יוצר מספר הוצאות בבת אחת אחרי תכנון פעילות. קרא רק כשהמשתמש אמר 'כן' או אישר בפירוש את הכנסת כל ההוצאות. קרא get_budget_categories קודם לכל מקור.",
+      description: "יוצר מספר הוצאות בבת אחת אחרי תכנון פעילות. קרא רק כשהמשתמש אישר בפירוש.",
       input_schema: {
-        type: "object",
-        required: ["expenses"],
+        type: "object", required: ["expenses"],
         properties: {
           expenses: {
-            type: "array",
-            description: "רשימת ההוצאות להכנסה",
+            type: "array", description: "רשימת ההוצאות",
             items: {
-              type: "object",
-              required: ["description", "amount", "source", "expense_date"],
-              properties: {
-                description: { type: "string" },
-                amount: { type: "number" },
-                source: { type: "string", description: sd },
-                expense_date: { type: "string", description: td },
-                budget_category_id: { type: "string", description: "UUID מ-get_budget_categories בלבד" },
-                supplier: { type: "string" },
-              },
+              type: "object", required: ["description", "amount", "source", "expense_date"],
+              properties: { description: { type: "string" }, amount: { type: "number" }, source: { type: "string", description: sd }, expense_date: { type: "string", description: td }, budget_category_id: { type: "string" }, supplier: { type: "string" } },
             },
           },
         },
@@ -221,7 +225,66 @@ function buildTools(srcs: { slug: string; label: string }[]) {
     {
       name: "add_income",
       description: "יוצר טיוטת הכנסה לאישור. קרא רק אחרי get_budget_categories וכשיש כל הפרטים.",
-      input_schema: { type: "object", required: ["description", "amount", "source", "income_date"], properties: { description: { type: "string" }, amount: { type: "number" }, source: { type: "string", description: sd }, income_date: { type: "string", description: td }, budget_category_id: { type: "string", description: "UUID מ-get_budget_categories בלבד" }, payer: { type: "string" } } },
+      input_schema: { type: "object", required: ["description", "amount", "source", "income_date"], properties: { description: { type: "string" }, amount: { type: "number" }, source: { type: "string", description: sd }, income_date: { type: "string", description: td }, budget_category_id: { type: "string" }, payer: { type: "string" } } },
+    },
+    // ── Budget category management ──
+    {
+      name: "set_category_budget",
+      description: "עדכון תקציב מתוכנן לסעיף קיים. קרא get_budget_categories קודם לקבלת ה-ID.",
+      input_schema: { type: "object", required: ["category_id", "new_amount"], properties: { category_id: { type: "string", description: "UUID מ-get_budget_categories" }, new_amount: { type: "number" } } },
+    },
+    {
+      name: "create_budget_category",
+      description: "יצירת סעיף תקציב חדש במקור מסוים.",
+      input_schema: { type: "object", required: ["name", "source"], properties: { name: { type: "string" }, source: { type: "string", description: sd }, planned_amount: { type: "number", description: "תקציב מתוכנן (ברירת מחדל 0)" } } },
+    },
+    {
+      name: "rename_budget_category",
+      description: "שינוי שם סעיף תקציב. קרא get_budget_categories קודם.",
+      input_schema: { type: "object", required: ["category_id", "new_name"], properties: { category_id: { type: "string" }, new_name: { type: "string" } } },
+    },
+    {
+      name: "delete_budget_category",
+      description: "מחיקת סעיף תקציב. קרא get_budget_summary קודם — אם יש הוצאות, הזהר ובקש אישור מפורש.",
+      input_schema: { type: "object", required: ["category_id"], properties: { category_id: { type: "string" } } },
+    },
+    // ── Grade management ──
+    {
+      name: "set_grade",
+      description: "עדכון שם ו/או מספר תלמידים בכיתה קיימת. קרא get_grades קודם לקבלת ה-ID.",
+      input_schema: { type: "object", required: ["grade_id"], properties: { grade_id: { type: "string" }, new_name: { type: "string" }, new_student_count: { type: "number" } } },
+    },
+    {
+      name: "create_grade",
+      description: "הוספת כיתה/שכבה חדשה לשנת הלימודים הנוכחית.",
+      input_schema: { type: "object", required: ["name", "student_count"], properties: { name: { type: "string" }, student_count: { type: "number" } } },
+    },
+    // ── Budget source management ──
+    {
+      name: "create_budget_source",
+      description: "הוספת מקור תקציב חדש לארגון (כמו 'מינהל', 'קרן אינטגרציה'). המזהה נוצר אוטומטית.",
+      input_schema: { type: "object", required: ["label"], properties: { label: { type: "string", description: "שם תצוגה, למשל 'מינהל'" }, slug: { type: "string", description: "מזהה אנגלי קצר (אופציונלי), למשל 'minahal'" } } },
+    },
+    // ── Edit/delete expense & income ──
+    {
+      name: "update_expense",
+      description: "עריכת הוצאה קיימת. קרא get_expenses קודם לקבלת ה-ID. ציין רק השדות שמשתנים.",
+      input_schema: { type: "object", required: ["expense_id"], properties: { expense_id: { type: "string" }, description: { type: "string" }, amount: { type: "number" }, expense_date: { type: "string", description: td }, budget_category_id: { type: "string" } } },
+    },
+    {
+      name: "delete_expense",
+      description: "מחיקת הוצאה קיימת. קרא get_expenses קודם לאישור הפרטים.",
+      input_schema: { type: "object", required: ["expense_id"], properties: { expense_id: { type: "string" } } },
+    },
+    {
+      name: "update_income",
+      description: "עריכת הכנסה קיימת. קרא get_income קודם לקבלת ה-ID.",
+      input_schema: { type: "object", required: ["income_id"], properties: { income_id: { type: "string" }, description: { type: "string" }, amount: { type: "number" }, income_date: { type: "string", description: td }, budget_category_id: { type: "string" } } },
+    },
+    {
+      name: "delete_income",
+      description: "מחיקת הכנסה קיימת. קרא get_income קודם לאישור הפרטים.",
+      input_schema: { type: "object", required: ["income_id"], properties: { income_id: { type: "string" } } },
     },
   ];
 }
@@ -229,11 +292,12 @@ function buildTools(srcs: { slug: string; label: string }[]) {
 type CC = { type: string; text?: string; id?: string; name?: string; input?: unknown };
 type CM = { role: "user" | "assistant"; content: string | CC[] };
 
+// ── Main Claude call loop ───────────────────────────────────────────────────────
 async function callClaude(
   key: string, sys: string, msgs: CM[], tools: unknown[],
   uc: ReturnType<typeof createClient>,
   sc: ReturnType<typeof createClient>,
-  uid: string, cid: string, yid: string,
+  uid: string, cid: string, yid: string, orgId: string,
   srcs: { slug: string; label: string }[],
 ): Promise<{ reply: string; draft: { id: string; action_type: string; preview: unknown } | null; batchDraft: { ids: string[]; previews: unknown[]; total: number } | null }> {
   let cur: CM[] = [...msgs];
@@ -241,7 +305,7 @@ async function callClaude(
   let batchDraft: { ids: string[]; previews: unknown[]; total: number } | null = null;
   const today = todayIL();
 
-  for (let iter = 0; iter < 12; iter++) {
+  for (let iter = 0; iter < 14; iter++) {
     const r = await fetch(CLAUDE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
@@ -264,7 +328,7 @@ async function callClaude(
 
         // ── get_expenses ──────────────────────────────────────────────────────
         if (blk.name === "get_expenses") {
-          let q = uc.from("expenses").select("description,amount,source,expense_date,supplier,budget_category_id").eq("school_year_id", yid).order("expense_date", { ascending: false }).limit(Number(inp.limit) || 100);
+          let q = uc.from("expenses").select("id,description,amount,source,expense_date,supplier,budget_category_id").eq("school_year_id", yid).order("expense_date", { ascending: false }).limit(Number(inp.limit) || 50);
           if (inp.source) q = q.eq("source", inp.source as string);
           if (inp.from_date) q = q.gte("expense_date", inp.from_date as string);
           if (inp.to_date) q = q.lte("expense_date", inp.to_date as string);
@@ -273,7 +337,7 @@ async function callClaude(
 
         // ── get_income ────────────────────────────────────────────────────────
         } else if (blk.name === "get_income") {
-          let q = uc.from("income").select("description,amount,source,income_date,payer").eq("school_year_id", yid).order("income_date", { ascending: false }).limit(Number(inp.limit) || 100);
+          let q = uc.from("income").select("id,description,amount,source,income_date,payer,budget_category_id").eq("school_year_id", yid).order("income_date", { ascending: false }).limit(Number(inp.limit) || 50);
           if (inp.source) q = q.eq("source", inp.source as string);
           if (inp.from_date) q = q.gte("income_date", inp.from_date as string);
           if (inp.to_date) q = q.lte("income_date", inp.to_date as string);
@@ -308,7 +372,7 @@ async function callClaude(
           }));
           tr.push({ type: "tool_result", tool_use_id: blk.id, content: JSON.stringify(summary) });
 
-        // ── get_expense_analysis (NEW) ────────────────────────────────────────
+        // ── get_expense_analysis ──────────────────────────────────────────────
         } else if (blk.name === "get_expense_analysis") {
           const [catsR, expsR] = await Promise.all([
             uc.from("budget_categories").select("id,name,source,planned_amount").eq("school_year_id", yid),
@@ -332,42 +396,19 @@ async function callClaude(
           const overBudget = analysis.filter(c => c.pct_used > 100).sort((a, b) => (b.spent - b.planned) - (a.spent - a.planned));
           const near80 = analysis.filter(c => c.pct_used >= 80 && c.pct_used <= 100).sort((a, b) => b.pct_used - a.pct_used);
           const underused = analysis.filter(c => c.pct_used < 30 && c.planned > 0).sort((a, b) => b.remaining - a.remaining).slice(0, 5);
-          const srcLabels = Object.entries(expBySrc).reduce((acc: Record<string, number>, [slug, amt]) => {
-            const lbl = srcs.find(s => s.slug === slug)?.label ?? slug;
-            acc[lbl] = (acc[lbl] ?? 0) + amt;
-            return acc;
-          }, {});
-          tr.push({ type: "tool_result", tool_use_id: blk.id, content: JSON.stringify({
-            top_5_by_spend: top5,
-            over_budget: overBudget,
-            near_budget_80pct_plus: near80,
-            potentially_underutilized: underused,
-            total_by_source: srcLabels,
-            total_categories: analysis.length,
-          }) });
+          const srcLabels = Object.entries(expBySrc).reduce((acc: Record<string, number>, [slug, amt]) => { const lbl = srcs.find(s => s.slug === slug)?.label ?? slug; acc[lbl] = (acc[lbl] ?? 0) + amt; return acc; }, {});
+          tr.push({ type: "tool_result", tool_use_id: blk.id, content: JSON.stringify({ top_5_by_spend: top5, over_budget: overBudget, near_budget_80pct_plus: near80, potentially_underutilized: underused, total_by_source: srcLabels }) });
 
-        // ── get_monthly_trend (NEW) ───────────────────────────────────────────
+        // ── get_monthly_trend ─────────────────────────────────────────────────
         } else if (blk.name === "get_monthly_trend") {
           const [expsR, incsR] = await Promise.all([
             uc.from("expenses").select("source,amount,expense_date").eq("school_year_id", yid).order("expense_date"),
             uc.from("income").select("source,amount,income_date").eq("school_year_id", yid).order("income_date"),
           ]);
           const byMonth: Record<string, { expenses: number; income: number; expense_count: number; income_count: number }> = {};
-          for (const e of (expsR.data ?? [])) {
-            const m = String(e.expense_date).slice(0, 7);
-            if (!byMonth[m]) byMonth[m] = { expenses: 0, income: 0, expense_count: 0, income_count: 0 };
-            byMonth[m].expenses += Number(e.amount);
-            byMonth[m].expense_count += 1;
-          }
-          for (const i of (incsR.data ?? [])) {
-            const m = String(i.income_date).slice(0, 7);
-            if (!byMonth[m]) byMonth[m] = { expenses: 0, income: 0, expense_count: 0, income_count: 0 };
-            byMonth[m].income += Number(i.amount);
-            byMonth[m].income_count += 1;
-          }
-          const trend = Object.entries(byMonth)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([month, v]) => ({ month, ...v, net: v.income - v.expenses }));
+          for (const e of (expsR.data ?? [])) { const m = String(e.expense_date).slice(0, 7); if (!byMonth[m]) byMonth[m] = { expenses: 0, income: 0, expense_count: 0, income_count: 0 }; byMonth[m].expenses += Number(e.amount); byMonth[m].expense_count += 1; }
+          for (const i of (incsR.data ?? [])) { const m = String(i.income_date).slice(0, 7); if (!byMonth[m]) byMonth[m] = { expenses: 0, income: 0, expense_count: 0, income_count: 0 }; byMonth[m].income += Number(i.amount); byMonth[m].income_count += 1; }
+          const trend = Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b)).map(([month, v]) => ({ month, ...v, net: v.income - v.expenses }));
           tr.push({ type: "tool_result", tool_use_id: blk.id, content: JSON.stringify({ monthly_trend: trend }) });
 
         // ── get_horim_summary ─────────────────────────────────────────────────
@@ -413,26 +454,21 @@ async function callClaude(
           const gsaMap: Record<string, number> = {};
           for (const g of (gsaR.data ?? [])) gsaMap[g.grade_id + ":" + g.parent_section_id] = Number(g.amount_per_student);
           const colMap: Record<string, number> = {};
-          for (const c of (colR.data ?? [])) {
-            const k = c.grade_id + ":" + c.parent_section_id;
-            colMap[k] = (colMap[k] ?? 0) + Number(c.amount);
-          }
-          const result = sections
-            .filter(s => !filterSec || s.name.toLowerCase().includes(filterSec))
-            .map(sec => {
-              const gradeRows = grades.map(g => {
-                const amt = gsaMap[g.id + ":" + sec.id] ?? 0;
-                if (amt === 0) return null;
-                const t100 = amt * g.student_count;
-                const t85 = Math.round(t100 * 0.85);
-                const coll = colMap[g.id + ":" + sec.id] ?? 0;
-                return { grade: g.name, students: g.student_count, amount_per_student: amt, target_100: t100, target_85: t85, collected: coll, remaining: Math.max(0, t85 - coll), pct_of_85: t85 > 0 ? Math.round((coll / t85) * 100) : 0 };
-              }).filter(Boolean);
-              if (gradeRows.length === 0) return null;
-              const totColl = gradeRows.reduce((s: number, r) => s + (r as { collected: number }).collected, 0);
-              const totT85  = gradeRows.reduce((s: number, r) => s + (r as { target_85: number }).target_85, 0);
-              return { section: sec.name, total_collected: totColl, total_target_85: totT85, collection_pct: totT85 > 0 ? Math.round((totColl / totT85) * 100) : 0, by_grade: gradeRows };
+          for (const c of (colR.data ?? [])) { const k = c.grade_id + ":" + c.parent_section_id; colMap[k] = (colMap[k] ?? 0) + Number(c.amount); }
+          const result = sections.filter(s => !filterSec || s.name.toLowerCase().includes(filterSec)).map(sec => {
+            const gradeRows = grades.map(g => {
+              const amt = gsaMap[g.id + ":" + sec.id] ?? 0;
+              if (amt === 0) return null;
+              const t100 = amt * g.student_count;
+              const t85 = Math.round(t100 * 0.85);
+              const coll = colMap[g.id + ":" + sec.id] ?? 0;
+              return { grade: g.name, students: g.student_count, amount_per_student: amt, target_100: t100, target_85: t85, collected: coll, remaining: Math.max(0, t85 - coll), pct_of_85: t85 > 0 ? Math.round((coll / t85) * 100) : 0 };
             }).filter(Boolean);
+            if (gradeRows.length === 0) return null;
+            const totColl = gradeRows.reduce((s: number, r) => s + (r as { collected: number }).collected, 0);
+            const totT85 = gradeRows.reduce((s: number, r) => s + (r as { target_85: number }).target_85, 0);
+            return { section: sec.name, total_collected: totColl, total_target_85: totT85, collection_pct: totT85 > 0 ? Math.round((totColl / totT85) * 100) : 0, by_grade: gradeRows };
+          }).filter(Boolean);
           tr.push({ type: "tool_result", tool_use_id: blk.id, content: JSON.stringify(result) });
 
         // ── add_expense / add_income ──────────────────────────────────────────
@@ -441,32 +477,25 @@ async function callClaude(
           const lbl = srcs.find(s => s.slug === src)?.label ?? src;
           const rawCatId = inp.budget_category_id ? String(inp.budget_category_id) : null;
           const catId = isUUID(rawCatId) ? rawCatId : null;
-          if (rawCatId && !catId) console.warn("non-UUID budget_category_id:", rawCatId);
           let catName: string | null = null;
-          if (catId) {
-            const { data: catR } = await uc.from("budget_categories").select("name").eq("id", catId).maybeSingle();
-            catName = catR?.name ?? null;
-          }
+          if (catId) { const { data: catR } = await uc.from("budget_categories").select("name").eq("id", catId).maybeSingle(); catName = catR?.name ?? null; }
           if (blk.name === "add_expense") {
             const d = String(inp.expense_date ?? today);
             const payload = { school_year_id: yid, description: String(inp.description ?? ""), amount: Number(inp.amount ?? 0), source: src, expense_date: d, bank_account: "school", target_grade_ids: [], budget_category_id: catId, supplier: inp.supplier ? String(inp.supplier) : null, created_by: uid };
             const preview = { type: "add_expense", description: String(inp.description ?? ""), amount: Number(inp.amount ?? 0), source_slug: src, source_label: lbl, date: d, budget_category_id: catId, category_name: catName, supplier: inp.supplier ? String(inp.supplier) : null };
             const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: blk.name, status: "draft", payload, preview }).select("id,action_type,preview").single();
-            if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); }
-            else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. סכם ובקש אישור." }); }
+            if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. סכם ובקש אישור." }); }
           } else {
             const d = String(inp.income_date ?? today);
             const payload = { school_year_id: yid, description: String(inp.description ?? ""), amount: Number(inp.amount ?? 0), source: src, income_date: d, bank_account: "school", budget_category_id: catId, payer: inp.payer ? String(inp.payer) : null, created_by: uid };
             const preview = { type: "add_income", description: String(inp.description ?? ""), amount: Number(inp.amount ?? 0), source_slug: src, source_label: lbl, date: d, budget_category_id: catId, category_name: catName, payer: inp.payer ? String(inp.payer) : null };
             const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: blk.name, status: "draft", payload, preview }).select("id,action_type,preview").single();
-            if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); }
-            else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. סכם ובקש אישור." }); }
+            if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. סכם ובקש אישור." }); }
           }
+
+        // ── add_expenses_batch ────────────────────────────────────────────────
         } else if (blk.name === "add_expenses_batch") {
-          const expenses = (inp.expenses ?? []) as Array<{
-            description: string; amount: number; source: string;
-            expense_date: string; budget_category_id?: string; supplier?: string;
-          }>;
+          const expenses = (inp.expenses ?? []) as Array<{ description: string; amount: number; source: string; expense_date: string; budget_category_id?: string; supplier?: string }>;
           const batchItems: { id: string; action_type: string; preview: unknown }[] = [];
           for (const exp of expenses) {
             const src = normSrc(String(exp.source ?? ""), srcs);
@@ -474,10 +503,7 @@ async function callClaude(
             const rawCatId = exp.budget_category_id ?? null;
             const catId = isUUID(rawCatId) ? rawCatId : null;
             let catName: string | null = null;
-            if (catId) {
-              const { data: catR } = await uc.from("budget_categories").select("name").eq("id", catId).maybeSingle();
-              catName = catR?.name ?? null;
-            }
+            if (catId) { const { data: catR } = await uc.from("budget_categories").select("name").eq("id", catId).maybeSingle(); catName = catR?.name ?? null; }
             const d = String(exp.expense_date ?? today);
             const payload = { school_year_id: yid, description: String(exp.description ?? ""), amount: Number(exp.amount ?? 0), source: src, expense_date: d, bank_account: "school", target_grade_ids: [], budget_category_id: catId, supplier: exp.supplier ? String(exp.supplier) : null, created_by: uid };
             const preview = { type: "add_expense", description: String(exp.description ?? ""), amount: Number(exp.amount ?? 0), source_slug: src, source_label: lbl, date: d, budget_category_id: catId, category_name: catName, supplier: exp.supplier ? String(exp.supplier) : null };
@@ -486,6 +512,155 @@ async function callClaude(
           }
           batchDraft = { ids: batchItems.map(b => b.id), previews: batchItems.map(b => b.preview), total: batchItems.length };
           tr.push({ type: "tool_result", tool_use_id: blk.id, content: `נוצרו ${batchItems.length} טיוטות. ציין שיש ${batchItems.length} הוצאות שמחכות לאישור אחד.` });
+
+        // ── set_category_budget ───────────────────────────────────────────────
+        } else if (blk.name === "set_category_budget") {
+          const catId = String(inp.category_id ?? "");
+          const newAmount = Number(inp.new_amount ?? 0);
+          if (!isUUID(catId)) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: ID לא תקין. קרא get_budget_categories קודם." }); continue; }
+          const { data: cat } = await sc.from("budget_categories").select("id,name,source,planned_amount").eq("id", catId).eq("school_year_id", yid).maybeSingle();
+          if (!cat) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "סעיף לא נמצא." }); continue; }
+          const lbl = srcs.find(s => s.slug === cat.source)?.label ?? cat.source;
+          const preview = { type: "set_category_budget", category_id: catId, category_name: cat.name, source_label: lbl, old_amount: Number(cat.planned_amount), new_amount: newAmount };
+          const payload = { category_id: catId, new_amount: newAmount };
+          const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "set_category_budget", status: "draft", payload, preview }).select("id,action_type,preview").single();
+          if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. בקש אישור." }); }
+
+        // ── create_budget_category ────────────────────────────────────────────
+        } else if (blk.name === "create_budget_category") {
+          const src = normSrc(String(inp.source ?? ""), srcs);
+          const lbl = srcs.find(s => s.slug === src)?.label ?? src;
+          const name = String(inp.name ?? "");
+          const planned = Number(inp.planned_amount ?? 0);
+          const { data: maxIdx } = await sc.from("budget_categories").select("order_index").eq("school_year_id", yid).eq("source", src).order("order_index", { ascending: false }).limit(1).maybeSingle();
+          const orderIndex = ((maxIdx as { order_index: number } | null)?.order_index ?? 0) + 1;
+          const preview = { type: "create_budget_category", name, source_label: lbl, planned_amount: planned };
+          const payload = { school_year_id: yid, name, source: src, planned_amount: planned, order_index: orderIndex };
+          const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "create_budget_category", status: "draft", payload, preview }).select("id,action_type,preview").single();
+          if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. בקש אישור." }); }
+
+        // ── rename_budget_category ────────────────────────────────────────────
+        } else if (blk.name === "rename_budget_category") {
+          const catId = String(inp.category_id ?? "");
+          const newName = String(inp.new_name ?? "");
+          if (!isUUID(catId)) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: ID לא תקין." }); continue; }
+          const { data: cat } = await sc.from("budget_categories").select("id,name,source").eq("id", catId).eq("school_year_id", yid).maybeSingle();
+          if (!cat) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "סעיף לא נמצא." }); continue; }
+          const lbl = srcs.find(s => s.slug === cat.source)?.label ?? cat.source;
+          const preview = { type: "rename_budget_category", category_id: catId, old_name: cat.name, new_name: newName, source_label: lbl };
+          const payload = { category_id: catId, new_name: newName };
+          const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "rename_budget_category", status: "draft", payload, preview }).select("id,action_type,preview").single();
+          if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. בקש אישור." }); }
+
+        // ── delete_budget_category ────────────────────────────────────────────
+        } else if (blk.name === "delete_budget_category") {
+          const catId = String(inp.category_id ?? "");
+          if (!isUUID(catId)) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: ID לא תקין." }); continue; }
+          const { data: cat } = await sc.from("budget_categories").select("id,name,source").eq("id", catId).eq("school_year_id", yid).maybeSingle();
+          if (!cat) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "סעיף לא נמצא." }); continue; }
+          const { count } = await sc.from("expenses").select("id", { count: "exact", head: true }).eq("budget_category_id", catId);
+          const lbl = srcs.find(s => s.slug === cat.source)?.label ?? cat.source;
+          const preview = { type: "delete_budget_category", category_id: catId, name: cat.name, source_label: lbl, has_expenses: (count ?? 0) > 0, expense_count: count ?? 0 };
+          const payload = { category_id: catId, name: cat.name };
+          const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "delete_budget_category", status: "draft", payload, preview }).select("id,action_type,preview").single();
+          if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. " + ((count ?? 0) > 0 ? `שים לב: לסעיף זה יש ${count} הוצאות רשומות.` : "") + " בקש אישור." }); }
+
+        // ── set_grade ─────────────────────────────────────────────────────────
+        } else if (blk.name === "set_grade") {
+          const gradeId = String(inp.grade_id ?? "");
+          if (!isUUID(gradeId)) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: ID לא תקין. קרא get_grades קודם." }); continue; }
+          const { data: grade } = await sc.from("grades").select("id,name,student_count").eq("id", gradeId).eq("school_year_id", yid).maybeSingle();
+          if (!grade) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "כיתה לא נמצאה." }); continue; }
+          const newName = inp.new_name ? String(inp.new_name) : null;
+          const newCount = inp.new_student_count != null ? Number(inp.new_student_count) : null;
+          const preview = { type: "set_grade", grade_id: gradeId, grade_name: grade.name, old_name: grade.name, new_name: newName ?? grade.name, old_count: Number(grade.student_count), new_count: newCount ?? Number(grade.student_count) };
+          const payload = { grade_id: gradeId, new_name: newName ?? grade.name, new_student_count: newCount ?? Number(grade.student_count) };
+          const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "set_grade", status: "draft", payload, preview }).select("id,action_type,preview").single();
+          if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. בקש אישור." }); }
+
+        // ── create_grade ──────────────────────────────────────────────────────
+        } else if (blk.name === "create_grade") {
+          const name = String(inp.name ?? "");
+          const studentCount = Number(inp.student_count ?? 0);
+          const { data: maxIdx } = await sc.from("grades").select("order_index").eq("school_year_id", yid).order("order_index", { ascending: false }).limit(1).maybeSingle();
+          const orderIndex = ((maxIdx as { order_index: number } | null)?.order_index ?? 0) + 1;
+          const preview = { type: "create_grade", name, student_count: studentCount };
+          const payload = { school_year_id: yid, name, student_count: studentCount, order_index: orderIndex };
+          const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "create_grade", status: "draft", payload, preview }).select("id,action_type,preview").single();
+          if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. בקש אישור." }); }
+
+        // ── create_budget_source ──────────────────────────────────────────────
+        } else if (blk.name === "create_budget_source") {
+          const label = String(inp.label ?? "");
+          const slug = makeSlug(label, inp.slug ? String(inp.slug) : undefined);
+          const { data: maxIdx } = await sc.from("org_budget_sources").select("order_index").eq("org_id", orgId).order("order_index", { ascending: false }).limit(1).maybeSingle();
+          const orderIndex = ((maxIdx as { order_index: number } | null)?.order_index ?? 0) + 1;
+          const preview = { type: "create_budget_source", label, slug };
+          const payload = { org_id: orgId, label, slug, order_index: orderIndex };
+          const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "create_budget_source", status: "draft", payload, preview }).select("id,action_type,preview").single();
+          if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה נוצרה. בקש אישור." }); }
+
+        // ── update_expense ────────────────────────────────────────────────────
+        } else if (blk.name === "update_expense") {
+          const expId = String(inp.expense_id ?? "");
+          if (!isUUID(expId)) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: ID לא תקין. קרא get_expenses קודם." }); continue; }
+          const { data: exp } = await sc.from("expenses").select("id,description,amount,source,expense_date,budget_category_id").eq("id", expId).eq("school_year_id", yid).maybeSingle();
+          if (!exp) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "הוצאה לא נמצאה." }); continue; }
+          const lbl = srcs.find(s => s.slug === exp.source)?.label ?? exp.source;
+          const newDesc = inp.description ? String(inp.description) : exp.description;
+          const newAmount = inp.amount != null ? Number(inp.amount) : Number(exp.amount);
+          const newDate = inp.expense_date ? String(inp.expense_date) : exp.expense_date;
+          const rawCatId = inp.budget_category_id ? String(inp.budget_category_id) : exp.budget_category_id;
+          const catId = isUUID(rawCatId) ? rawCatId : null;
+          let catName: string | null = null;
+          if (catId) { const { data: catR } = await uc.from("budget_categories").select("name").eq("id", catId).maybeSingle(); catName = catR?.name ?? null; }
+          const preview = { type: "update_expense", expense_id: expId, source_label: lbl, old_description: exp.description, new_description: newDesc, old_amount: Number(exp.amount), new_amount: newAmount, old_date: exp.expense_date, new_date: newDate, category_name: catName };
+          const payload = { expense_id: expId, description: newDesc, amount: newAmount, expense_date: newDate, budget_category_id: catId };
+          const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "update_expense", status: "draft", payload, preview }).select("id,action_type,preview").single();
+          if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה עריכה נוצרה. הצג שינויים ובקש אישור." }); }
+
+        // ── delete_expense ────────────────────────────────────────────────────
+        } else if (blk.name === "delete_expense") {
+          const expId = String(inp.expense_id ?? "");
+          if (!isUUID(expId)) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: ID לא תקין." }); continue; }
+          const { data: exp } = await sc.from("expenses").select("id,description,amount,source,expense_date").eq("id", expId).eq("school_year_id", yid).maybeSingle();
+          if (!exp) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "הוצאה לא נמצאה." }); continue; }
+          const lbl = srcs.find(s => s.slug === exp.source)?.label ?? exp.source;
+          const preview = { type: "delete_expense", expense_id: expId, description: exp.description, amount: Number(exp.amount), source_label: lbl, date: exp.expense_date };
+          const payload = { expense_id: expId };
+          const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "delete_expense", status: "draft", payload, preview }).select("id,action_type,preview").single();
+          if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה מחיקה נוצרה. הצג מה עומד להימחק ובקש אישור." }); }
+
+        // ── update_income ─────────────────────────────────────────────────────
+        } else if (blk.name === "update_income") {
+          const incId = String(inp.income_id ?? "");
+          if (!isUUID(incId)) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: ID לא תקין. קרא get_income קודם." }); continue; }
+          const { data: inc } = await sc.from("income").select("id,description,amount,source,income_date,budget_category_id").eq("id", incId).eq("school_year_id", yid).maybeSingle();
+          if (!inc) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "הכנסה לא נמצאה." }); continue; }
+          const lbl = srcs.find(s => s.slug === inc.source)?.label ?? inc.source;
+          const newDesc = inp.description ? String(inp.description) : inc.description;
+          const newAmount = inp.amount != null ? Number(inp.amount) : Number(inc.amount);
+          const newDate = inp.income_date ? String(inp.income_date) : inc.income_date;
+          const rawCatId = inp.budget_category_id ? String(inp.budget_category_id) : inc.budget_category_id;
+          const catId = isUUID(rawCatId) ? rawCatId : null;
+          let catName: string | null = null;
+          if (catId) { const { data: catR } = await uc.from("budget_categories").select("name").eq("id", catId).maybeSingle(); catName = catR?.name ?? null; }
+          const preview = { type: "update_income", income_id: incId, source_label: lbl, old_description: inc.description, new_description: newDesc, old_amount: Number(inc.amount), new_amount: newAmount, old_date: inc.income_date, new_date: newDate, category_name: catName };
+          const payload = { income_id: incId, description: newDesc, amount: newAmount, income_date: newDate, budget_category_id: catId };
+          const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "update_income", status: "draft", payload, preview }).select("id,action_type,preview").single();
+          if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה עריכה נוצרה. הצג שינויים ובקש אישור." }); }
+
+        // ── delete_income ─────────────────────────────────────────────────────
+        } else if (blk.name === "delete_income") {
+          const incId = String(inp.income_id ?? "");
+          if (!isUUID(incId)) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: ID לא תקין." }); continue; }
+          const { data: inc } = await sc.from("income").select("id,description,amount,source,income_date").eq("id", incId).eq("school_year_id", yid).maybeSingle();
+          if (!inc) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "הכנסה לא נמצאה." }); continue; }
+          const lbl = srcs.find(s => s.slug === inc.source)?.label ?? inc.source;
+          const preview = { type: "delete_income", income_id: incId, description: inc.description, amount: Number(inc.amount), source_label: lbl, date: inc.income_date };
+          const payload = { income_id: incId };
+          const { data: dd, error: de } = await sc.from("ai_action_drafts").insert({ user_id: uid, conversation_id: cid, school_year_id: yid, action_type: "delete_income", status: "draft", payload, preview }).select("id,action_type,preview").single();
+          if (de) { tr.push({ type: "tool_result", tool_use_id: blk.id, content: "שגיאה: " + de.message }); } else { draft = dd; tr.push({ type: "tool_result", tool_use_id: blk.id, content: "טיוטה מחיקה נוצרה. הצג מה עומד להימחק ובקש אישור." }); }
         }
       }
       cur.push({ role: "user", content: tr });
@@ -496,50 +671,143 @@ async function callClaude(
   return { reply: "✅", draft, batchDraft };
 }
 
+// ── handleConfirm ────────────────────────────────────────────────────────────
 async function handleConfirm(
   sc: ReturnType<typeof createClient>, uc: ReturnType<typeof createClient>,
   uid: string, cid: string | null, draftId: string, approved: boolean,
 ) {
   const { data: dr, error } = await sc.from("ai_action_drafts").select("*").eq("id", draftId).eq("user_id", uid).in("status", ["draft", "failed"]).maybeSingle();
   if (error || !dr) return json({ error: "טיוט לא נמצא" }, 404);
+
   if (!approved) {
     await sc.from("ai_action_drafts").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", draftId);
     const msg = "ביטלתי את הפעולה.";
     if (cid) await uc.from("ai_messages").insert({ conversation_id: cid, user_id: uid, role: "assistant", content: msg });
     return json({ reply: msg, executed: false });
   }
+
   try {
-    const pl = { ...(dr.payload as Record<string, unknown>) };
-    if (!pl.bank_account) pl.bank_account = "school";
-    if (dr.action_type === "add_expense" && !pl.target_grade_ids) pl.target_grade_ids = [];
-    if (!pl.school_year_id) {
-      const memR = await uc.from("organization_members").select("organization_id").eq("user_id", uid).eq("status", "active").maybeSingle();
-      if (memR.data) {
-        const yrR = await uc.from("school_years").select("id").eq("organization_id", memR.data.organization_id).eq("is_active", true).maybeSingle();
-        pl.school_year_id = yrR.data?.id ?? null;
-      }
-    }
-    const rawCatId = pl.budget_category_id != null ? String(pl.budget_category_id) : null;
-    if (!isUUID(rawCatId)) pl.budget_category_id = null;
-    const tbl = dr.action_type === "add_expense" ? "expenses" : "income";
-    const sel = dr.action_type === "add_expense" ? "id,description,amount,source,expense_date,budget_category_id" : "id,description,amount,source,income_date,budget_category_id";
-    const { data: ins, error: ie } = await sc.from(tbl).insert(pl).select(sel).single();
-    if (ie) { console.error("Insert error:", JSON.stringify(ie)); throw ie; }
-    await sc.from("ai_action_drafts").update({ status: "executed", updated_at: new Date().toISOString(), executed_at: new Date().toISOString() }).eq("id", draftId);
-    sc.from("ai_activity_log").insert({ user_id: uid, conversation_id: cid, action_draft_id: draftId, action_type: dr.action_type, target_table: tbl, target_id: (ins as Record<string, unknown>)?.id, after: ins }).then(() => {}).catch(() => {});
+    const pl = dr.payload as Record<string, unknown>;
     const p = dr.preview as Record<string, unknown>;
-    const lbl = dr.action_type === "add_expense" ? "הוצאה" : "הכנסה";
-    const catPart = p.category_name ? " בסעיף " + String(p.category_name) : "";
-    const msg = "נרשם " + lbl + " ₪" + new Intl.NumberFormat("he-IL").format(Number(p.amount ?? 0)) + " — " + String(p.description ?? "") + " (" + String(p.source_label ?? "") + catPart + "). הדף עודכן.";
+    const fmt = (n: number) => new Intl.NumberFormat("he-IL").format(n);
+    let msg = "";
+
+    // ── add_expense / add_income ──────────────────────────────────────────────
+    if (dr.action_type === "add_expense" || dr.action_type === "add_income") {
+      const payload = { ...pl };
+      if (!payload.bank_account) payload.bank_account = "school";
+      if (dr.action_type === "add_expense" && !payload.target_grade_ids) payload.target_grade_ids = [];
+      const rawCatId = payload.budget_category_id != null ? String(payload.budget_category_id) : null;
+      if (!isUUID(rawCatId)) payload.budget_category_id = null;
+      const tbl = dr.action_type === "add_expense" ? "expenses" : "income";
+      const { data: ins, error: ie } = await sc.from(tbl).insert(payload).select("id").single();
+      if (ie) throw ie;
+      sc.from("ai_activity_log").insert({ user_id: uid, conversation_id: cid, action_draft_id: draftId, action_type: dr.action_type, target_table: tbl, target_id: (ins as { id: string })?.id, after: ins }).then(() => {}).catch(() => {});
+      const lbl = dr.action_type === "add_expense" ? "הוצאה" : "הכנסה";
+      const catPart = p.category_name ? " בסעיף " + String(p.category_name) : "";
+      msg = "נרשמ" + (dr.action_type === "add_expense" ? "ה" : "ה") + " " + lbl + " ₪" + fmt(Number(p.amount ?? 0)) + " — " + String(p.description ?? "") + " (" + String(p.source_label ?? "") + catPart + "). הדף עודכן.";
+
+    // ── set_category_budget ───────────────────────────────────────────────────
+    } else if (dr.action_type === "set_category_budget") {
+      const { error: ue } = await sc.from("budget_categories").update({ planned_amount: pl.new_amount }).eq("id", pl.category_id as string);
+      if (ue) throw ue;
+      msg = `עודכן התקציב המתוכנן לסעיף "${p.category_name}" (${p.source_label}) לסכום ₪${fmt(Number(p.new_amount ?? 0))}.`;
+
+    // ── create_budget_category ────────────────────────────────────────────────
+    } else if (dr.action_type === "create_budget_category") {
+      const { error: ie } = await sc.from("budget_categories").insert(pl);
+      if (ie) throw ie;
+      msg = `נוצר סעיף תקציב חדש "${p.name}" (${p.source_label}) עם תקציב מתוכנן ₪${fmt(Number(p.planned_amount ?? 0))}.`;
+
+    // ── rename_budget_category ────────────────────────────────────────────────
+    } else if (dr.action_type === "rename_budget_category") {
+      const { error: ue } = await sc.from("budget_categories").update({ name: pl.new_name }).eq("id", pl.category_id as string);
+      if (ue) throw ue;
+      msg = `שם הסעיף שונה מ-"${p.old_name}" ל-"${p.new_name}" (${p.source_label}).`;
+
+    // ── delete_budget_category ────────────────────────────────────────────────
+    } else if (dr.action_type === "delete_budget_category") {
+      const { error: de } = await sc.from("budget_categories").delete().eq("id", pl.category_id as string);
+      if (de) throw de;
+      msg = `סעיף "${p.name}" נמחק.`;
+
+    // ── set_grade ─────────────────────────────────────────────────────────────
+    } else if (dr.action_type === "set_grade") {
+      const updates: Record<string, unknown> = {};
+      if (pl.new_name) updates.name = pl.new_name;
+      if (pl.new_student_count != null) updates.student_count = pl.new_student_count;
+      const { error: ue } = await sc.from("grades").update(updates).eq("id", pl.grade_id as string);
+      if (ue) throw ue;
+      const parts: string[] = [];
+      if (p.old_name !== p.new_name) parts.push(`שם: "${p.old_name}" ← "${p.new_name}"`);
+      if (p.old_count !== p.new_count) parts.push(`תלמידים: ${p.old_count} ← ${p.new_count}`);
+      msg = `כיתה עודכנה: ${parts.join(", ")}.`;
+
+    // ── create_grade ──────────────────────────────────────────────────────────
+    } else if (dr.action_type === "create_grade") {
+      const { error: ie } = await sc.from("grades").insert(pl);
+      if (ie) throw ie;
+      msg = `כיתה "${p.name}" נוספה עם ${p.student_count} תלמידים.`;
+
+    // ── create_budget_source ──────────────────────────────────────────────────
+    } else if (dr.action_type === "create_budget_source") {
+      const { error: ie } = await sc.from("org_budget_sources").insert(pl);
+      if (ie) throw ie;
+      msg = `מקור תקציב "${p.label}" נוסף. כעת ניתן להשתמש בו בהוצאות והכנסות.`;
+
+    // ── update_expense ────────────────────────────────────────────────────────
+    } else if (dr.action_type === "update_expense") {
+      const updates: Record<string, unknown> = {
+        description: pl.description,
+        amount: pl.amount,
+        expense_date: pl.expense_date,
+        budget_category_id: isUUID(pl.budget_category_id as string) ? pl.budget_category_id : null,
+      };
+      const { error: ue } = await sc.from("expenses").update(updates).eq("id", pl.expense_id as string);
+      if (ue) throw ue;
+      msg = `הוצאה "${p.new_description}" עודכנה (₪${fmt(Number(p.new_amount ?? 0))}, ${p.new_date}).`;
+
+    // ── delete_expense ────────────────────────────────────────────────────────
+    } else if (dr.action_type === "delete_expense") {
+      const { error: de } = await sc.from("expenses").delete().eq("id", pl.expense_id as string);
+      if (de) throw de;
+      msg = `הוצאה "${p.description}" (₪${fmt(Number(p.amount ?? 0))}) נמחקה.`;
+
+    // ── update_income ─────────────────────────────────────────────────────────
+    } else if (dr.action_type === "update_income") {
+      const updates: Record<string, unknown> = {
+        description: pl.description,
+        amount: pl.amount,
+        income_date: pl.income_date,
+        budget_category_id: isUUID(pl.budget_category_id as string) ? pl.budget_category_id : null,
+      };
+      const { error: ue } = await sc.from("income").update(updates).eq("id", pl.income_id as string);
+      if (ue) throw ue;
+      msg = `הכנסה "${p.new_description}" עודכנה (₪${fmt(Number(p.new_amount ?? 0))}, ${p.new_date}).`;
+
+    // ── delete_income ─────────────────────────────────────────────────────────
+    } else if (dr.action_type === "delete_income") {
+      const { error: de } = await sc.from("income").delete().eq("id", pl.income_id as string);
+      if (de) throw de;
+      msg = `הכנסה "${p.description}" (₪${fmt(Number(p.amount ?? 0))}) נמחקה.`;
+
+    } else {
+      return json({ error: "סוג פעולה לא מוכר: " + dr.action_type }, 400);
+    }
+
+    await sc.from("ai_action_drafts").update({ status: "executed", updated_at: new Date().toISOString(), executed_at: new Date().toISOString() }).eq("id", draftId);
     if (cid) await uc.from("ai_messages").insert({ conversation_id: cid, user_id: uid, role: "assistant", content: msg });
-    return json({ reply: msg, executed: true, result: ins });
+    return json({ reply: msg, executed: true });
+
   } catch (err) {
-    const errMsg = "שגיאה: " + String(err);
+    console.error("handleConfirm error:", String(err));
+    const errMsg = "שגיאה בביצוע: " + String(err);
     if (cid) await uc.from("ai_messages").insert({ conversation_id: cid, user_id: uid, role: "assistant", content: errMsg });
     return json({ error: errMsg, executed: false }, 500);
   }
 }
 
+// ── handleConfirmBatch ────────────────────────────────────────────────────────
 async function handleConfirmBatch(
   sc: ReturnType<typeof createClient>, uc: ReturnType<typeof createClient>,
   uid: string, cid: string | null, draftIds: string[], approved: boolean,
@@ -550,8 +818,7 @@ async function handleConfirmBatch(
     if (cid) await uc.from("ai_messages").insert({ conversation_id: cid, user_id: uid, role: "assistant", content: msg });
     return json({ reply: msg, executed: false });
   }
-  let success = 0;
-  let failed = 0;
+  let success = 0, failed = 0;
   for (const draftId of draftIds) {
     const { data: dr } = await sc.from("ai_action_drafts").select("*").eq("id", draftId).eq("user_id", uid).in("status", ["draft", "failed"]).maybeSingle();
     if (!dr) continue;
@@ -565,15 +832,14 @@ async function handleConfirmBatch(
       if (ie) throw ie;
       await sc.from("ai_action_drafts").update({ status: "executed", updated_at: new Date().toISOString(), executed_at: new Date().toISOString() }).eq("id", draftId);
       success++;
-    } catch {
-      failed++;
-    }
+    } catch { failed++; }
   }
   const msg = `נרשמו ${success} הוצאות בהצלחה${failed > 0 ? ` (${failed} נכשלו)` : ""}. הדף עודכן.`;
   if (cid) await uc.from("ai_messages").insert({ conversation_id: cid, user_id: uid, role: "assistant", content: msg });
   return json({ reply: msg, executed: true, count: success });
 }
 
+// ── Serve ─────────────────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
@@ -588,10 +854,11 @@ serve(async (req) => {
     if (ae || !user) return json({ error: "Unauthorized" }, 401);
 
     const body = await req.json() as { type?: string; message?: string; conversation_id?: string; action_draft_id?: string; draft_ids?: string[]; approved?: boolean };
+
     if (body.type === "confirm" && body.action_draft_id)
       return handleConfirm(sc, uc, user.id, body.conversation_id ?? null, body.action_draft_id, body.approved ?? false);
-    if (body.type === "confirm_batch" && Array.isArray((body as { draft_ids?: string[] }).draft_ids))
-      return handleConfirmBatch(sc, uc, user.id, (body as { conversation_id?: string }).conversation_id ?? null, (body as { draft_ids: string[] }).draft_ids, (body as { approved?: boolean }).approved ?? false);
+    if (body.type === "confirm_batch" && Array.isArray(body.draft_ids))
+      return handleConfirmBatch(sc, uc, user.id, body.conversation_id ?? null, body.draft_ids, body.approved ?? false);
     if (!body.message) return json({ error: "message required" }, 400);
 
     const memR = await uc.from("organization_members").select("organization_id").eq("user_id", user.id).eq("status", "active").maybeSingle();
@@ -632,7 +899,7 @@ serve(async (req) => {
 
     const [_save, { reply, draft, batchDraft }] = await Promise.all([
       uc.from("ai_messages").insert({ conversation_id: cid, user_id: user.id, role: "user", content: body.message }),
-      callClaude(apiKey, buildSys(ctx, srcs, year), hist, buildTools(srcs), uc, sc, user.id, cid, yid, srcs),
+      callClaude(apiKey, buildSys(ctx, srcs, year), hist, buildTools(srcs), uc, sc, user.id, cid, yid, orgId, srcs),
     ]);
 
     const [savedR] = await Promise.all([
