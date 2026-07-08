@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Plus, X, AlertTriangle, Pencil, Trash2, Search } from "lucide-react";
 import { CategorySearchSelect } from "@/components/ui/category-search-select";
 import { useCountUp } from "@/hooks/use-count-up";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { toast } from "sonner";
 import {
   useExpenses,
@@ -14,7 +15,7 @@ import {
   type NewExpense,
   type Expense,
 } from "@/hooks/use-expenses";
-import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES } from "@/hooks/use-budget-sources";
+import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 
 export const Route = createFileRoute("/_authenticated/expenses/")({
   component: ExpensesPage,
@@ -173,19 +174,37 @@ function ExpenseForm({
 function Modal({ title, subtitle, onClose, children }: {
   title: string; subtitle: string; onClose: () => void; children: React.ReactNode;
 }) {
+  const isMobile = useIsMobile();
   return (
     <div style={{
-      position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.4)",
-      display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
+      position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.45)",
+      display: "flex",
+      alignItems: isMobile ? "flex-end" : "center",
+      justifyContent: "center",
+      padding: isMobile ? 0 : "20px",
     }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{
-        background: "#fff", borderRadius: "18px", width: "100%", maxWidth: "480px",
-        boxShadow: "0 24px 80px rgba(0,0,0,0.2)", overflow: "hidden",
+      <div className={isMobile ? "hk-bottom-sheet" : ""} style={{
+        background: "#fff",
+        borderRadius: isMobile ? "20px 20px 0 0" : "18px",
+        width: "100%",
+        maxWidth: isMobile ? "100%" : "480px",
+        maxHeight: isMobile ? "92dvh" : "90vh",
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.18), 0 24px 80px rgba(0,0,0,0.2)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
       }}>
         <div style={{
-          padding: "20px 24px", borderBottom: "1px solid #EAE5DE",
+          padding: "20px 20px 16px", borderBottom: "1px solid #EAE5DE",
           display: "flex", justifyContent: "space-between", alignItems: "center",
+          flexShrink: 0,
         }}>
+          {isMobile && (
+            <div style={{
+              position: "absolute", top: "8px", left: "50%", transform: "translateX(-50%)",
+              width: "36px", height: "4px", borderRadius: "2px", background: "#E8E2D9",
+            }} />
+          )}
           <div>
             <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>{title}</div>
             <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>{subtitle}</div>
@@ -194,7 +213,9 @@ function Modal({ title, subtitle, onClose, children }: {
             <X size={18} />
           </button>
         </div>
-        {children}
+        <div style={{ overflowY: "auto", flex: 1, WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -265,6 +286,7 @@ function EditExpenseModal({ expense, onClose }: { expense: Expense; onClose: () 
 // ─── Delete Confirmation ──────────────────────────────────────────────────────
 
 function DeleteConfirm({ expense, onClose }: { expense: Expense; onClose: () => void }) {
+  const isMobile = useIsMobile();
   const deleteExpense = useDeleteExpense();
   const handleDelete = async () => {
     try {
@@ -275,13 +297,26 @@ function DeleteConfirm({ expense, onClose }: { expense: Expense; onClose: () => 
   };
   return (
     <div style={{
-      position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.4)",
-      display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
+      position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.45)",
+      display: "flex",
+      alignItems: isMobile ? "flex-end" : "center",
+      justifyContent: "center",
+      padding: isMobile ? 0 : "20px",
     }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{
-        background: "#fff", borderRadius: "16px", width: "100%", maxWidth: "380px",
-        padding: "28px 28px 24px", boxShadow: "0 24px 80px rgba(0,0,0,0.2)",
+      <div className={isMobile ? "hk-bottom-sheet" : ""} style={{
+        background: "#fff",
+        borderRadius: isMobile ? "20px 20px 0 0" : "16px",
+        width: "100%",
+        maxWidth: isMobile ? "100%" : "380px",
+        padding: isMobile ? "28px 20px calc(20px + env(safe-area-inset-bottom, 0px))" : "28px 28px 24px",
+        boxShadow: "0 24px 80px rgba(0,0,0,0.2)",
       }}>
+        {isMobile && (
+          <div style={{
+            position: "absolute", top: "8px", left: "50%", transform: "translateX(-50%)",
+            width: "36px", height: "4px", borderRadius: "2px", background: "#E8E2D9",
+          }} />
+        )}
         <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: "#FEF2F2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
           <Trash2 size={20} color="#DC2626" />
         </div>
@@ -292,11 +327,11 @@ function DeleteConfirm({ expense, onClose }: { expense: Expense; onClose: () => 
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
           <button onClick={onClose} style={{
-            flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px",
+            flex: 1, padding: "12px 0", border: "1px solid #E8E2D9", borderRadius: "10px",
             background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)",
           }}>ביטול</button>
           <button onClick={handleDelete} disabled={deleteExpense.isPending} style={{
-            flex: 1, padding: "10px 0", border: "none", borderRadius: "8px",
+            flex: 1, padding: "12px 0", border: "none", borderRadius: "10px",
             background: deleteExpense.isPending ? "#888" : "#DC2626",
             color: "#fff", fontSize: "14px", fontWeight: "500",
             cursor: deleteExpense.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
@@ -309,9 +344,82 @@ function DeleteConfirm({ expense, onClose }: { expense: Expense; onClose: () => 
   );
 }
 
+// ─── Mobile Card Row ──────────────────────────────────────────────────────────
+
+function ExpenseMobileCard({
+  e, onEdit, onDelete, sources,
+}: {
+  e: Expense;
+  onEdit: (e: Expense) => void;
+  onDelete: (e: Expense) => void;
+  sources: OrgBudgetSource[];
+}) {
+  const style = getSourceStyle(sources, e.source);
+  const label = getSourceLabel(sources, e.source);
+  return (
+    <div style={{
+      padding: "14px 16px",
+      borderBottom: "1px solid #F3EEE8",
+      display: "flex",
+      alignItems: "center",
+      gap: "12px",
+    }}>
+      {/* Source dot */}
+      <div style={{
+        width: "9px", height: "9px", borderRadius: "50%",
+        background: style.color, flexShrink: 0,
+      }} />
+
+      {/* Main content */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+          <span className="num" style={{ fontSize: "17px", fontWeight: "600", color: "#1A1A1A" }}>
+            {fmt(e.amount)}
+          </span>
+          <span className="num" style={{ fontSize: "11px", color: "#AAA099", whiteSpace: "nowrap" }}>
+            {new Date(e.expense_date).toLocaleDateString("he-IL")}
+          </span>
+        </div>
+        <div style={{ fontSize: "13px", color: "#6B6560", marginTop: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {e.supplier ?? e.description ?? "—"}
+        </div>
+        <div style={{ display: "flex", gap: "6px", marginTop: "6px", alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{
+            padding: "2px 8px", borderRadius: "99px",
+            fontSize: "10px", fontWeight: "600",
+            background: style.bg_color, color: style.color,
+          }}>{label}</span>
+          {e.budget_categories?.name && (
+            <span style={{ fontSize: "11px", color: "#AAA099" }}>· {e.budget_categories.name}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+        <button onClick={() => onEdit(e)} style={{
+          background: "#F7F4EF", border: "none", borderRadius: "9px",
+          width: "36px", height: "36px", display: "flex", alignItems: "center",
+          justifyContent: "center", cursor: "pointer", color: "#6B6560",
+        }}>
+          <Pencil size={14} />
+        </button>
+        <button onClick={() => onDelete(e)} style={{
+          background: "#FEF2F2", border: "none", borderRadius: "9px",
+          width: "36px", height: "36px", display: "flex", alignItems: "center",
+          justifyContent: "center", cursor: "pointer", color: "#DC2626",
+        }}>
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ExpensesPage() {
+  const isMobile = useIsMobile();
   const [filter, setFilter] = useState<BudgetSource | "all">("all");
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
@@ -358,9 +466,9 @@ export default function ExpensesPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
 
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>הוצאות</h1>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: isMobile ? "wrap" : "nowrap" }}>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ margin: 0, fontSize: isMobile ? "22px" : "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>הוצאות</h1>
             <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099" }}>
               {isLoading ? "טוען..." : q
                 ? `${visibleExpenses.length} מתוך ${(expenses ?? []).length} הוצאות · ${fmt(total)}`
@@ -368,11 +476,15 @@ export default function ExpensesPage() {
             </p>
           </div>
           <button onClick={() => setShowAdd(true)} style={{
-            display: "flex", alignItems: "center", gap: "7px", padding: "10px 18px",
+            display: "flex", alignItems: "center", gap: "7px",
+            padding: isMobile ? "11px 0" : "10px 18px",
+            width: isMobile ? "100%" : "auto",
+            justifyContent: "center",
             background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
             border: "none", borderRadius: "10px", color: "#fff",
             fontSize: "14px", fontWeight: "500", cursor: "pointer",
             fontFamily: "var(--font-sans)", boxShadow: "0 4px 12px rgba(26,61,43,0.3)",
+            flexShrink: 0,
           }}>
             <Plus size={16} />הוסף הוצאה
           </button>
@@ -476,23 +588,8 @@ export default function ExpensesPage() {
           </div>
         </div>
 
-        {/* Table */}
+        {/* List / Table */}
         <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
-          <div style={{ overflowX: "auto" }}>
-          <div style={{
-            display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 1fr 72px",
-            minWidth: "580px",
-            padding: "12px 20px", borderBottom: "1px solid #EAE5DE",
-            fontSize: "11px", fontWeight: "600", color: "#AAA099",
-            letterSpacing: "0.04em", textTransform: "uppercase", gap: "12px",
-          }}>
-            <span>תאריך</span>
-            <span style={{ textAlign: "right" }}>סכום</span>
-            <span>מקור</span>
-            <span>קטגוריה</span>
-            <span>ספק</span>
-            <span></span>
-          </div>
 
           {isLoading ? (
             <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>טוען...</div>
@@ -503,70 +600,96 @@ export default function ExpensesPage() {
                 {q ? `אין תוצאות עבור "${search}"` : "אין הוצאות להצגה"}
               </div>
               <div style={{ color: "#7A7470", fontSize: "12px", marginTop: "4px" }}>
-                {q ? "נסו/י מילת חיפוש אחרת" : "לחץ/י על \"הוסף הוצאה\" להתחלה"}
+                {q ? 'נסו/י מילת חיפוש אחרת' : 'לחצו על "הוסף הוצאה" להתחלה'}
               </div>
             </div>
+          ) : isMobile ? (
+            /* ── Mobile: card list ── */
+            visibleExpenses.map((e) => (
+              <ExpenseMobileCard
+                key={e.id}
+                e={e}
+                sources={sources}
+                onEdit={setEditingExpense}
+                onDelete={setDeletingExpense}
+              />
+            ))
           ) : (
-            visibleExpenses.map((e, i) => {
-              const style = getSourceStyle(sources, e.source);
-              const label = getSourceLabel(sources, e.source);
-              return (
-                <div key={e.id} style={{
-                  display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 1fr 72px",
-                  minWidth: "580px",
-                  padding: "14px 20px", gap: "12px",
-                  borderBottom: i < visibleExpenses.length - 1 ? "1px solid #F3EEE8" : "none",
-                  alignItems: "center", transition: "background 0.1s",
-                }}
-                  onMouseEnter={(el) => (el.currentTarget.style.background = "#FAFAF8")}
-                  onMouseLeave={(el) => (el.currentTarget.style.background = "transparent")}
-                >
-                  <span className="num" style={{ fontSize: "13px", color: "#6B6560" }}>
-                    {new Date(e.expense_date).toLocaleDateString("he-IL")}
-                  </span>
-                  <span className="num" style={{ fontSize: "14px", fontWeight: "500", color: "#1A1A1A", textAlign: "right" }}>
-                    {fmt(e.amount)}
-                  </span>
-                  <span style={{
-                    display: "inline-flex", alignItems: "center",
-                    padding: "3px 10px", borderRadius: "99px",
-                    fontSize: "11px", fontWeight: "600",
-                    background: style.bg_color, color: style.color, whiteSpace: "nowrap",
-                  }}>
-                    {label}
-                  </span>
-                  <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {e.budget_categories?.name ?? "—"}
-                  </span>
-                  <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {e.supplier ?? e.description ?? "—"}
-                  </span>
-                  {/* Actions */}
-                  <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
-                    <button
-                      onClick={() => setEditingExpense(e)}
-                      title="ערוך"
-                      style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
-                      onMouseEnter={(el) => { el.currentTarget.style.background = "#F0F0EE"; el.currentTarget.style.color = "#1A1A1A"; }}
-                      onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      onClick={() => setDeletingExpense(e)}
-                      title="מחק"
-                      style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
-                      onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
-                      onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
-                    >
-                      <Trash2 size={13} />
-                    </button>
+            /* ── Desktop: scrollable table ── */
+            <div style={{ overflowX: "auto" }}>
+              <div style={{
+                display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 1fr 72px",
+                minWidth: "580px",
+                padding: "12px 20px", borderBottom: "1px solid #EAE5DE",
+                fontSize: "11px", fontWeight: "600", color: "#AAA099",
+                letterSpacing: "0.04em", textTransform: "uppercase", gap: "12px",
+              }}>
+                <span>תאריך</span>
+                <span style={{ textAlign: "right" }}>סכום</span>
+                <span>מקור</span>
+                <span>קטגוריה</span>
+                <span>ספק</span>
+                <span></span>
+              </div>
+              {visibleExpenses.map((e, i) => {
+                const style = getSourceStyle(sources, e.source);
+                const label = getSourceLabel(sources, e.source);
+                return (
+                  <div key={e.id} style={{
+                    display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 1fr 72px",
+                    minWidth: "580px",
+                    padding: "14px 20px", gap: "12px",
+                    borderBottom: i < visibleExpenses.length - 1 ? "1px solid #F3EEE8" : "none",
+                    alignItems: "center", transition: "background 0.1s",
+                  }}
+                    onMouseEnter={(el) => (el.currentTarget.style.background = "#FAFAF8")}
+                    onMouseLeave={(el) => (el.currentTarget.style.background = "transparent")}
+                  >
+                    <span className="num" style={{ fontSize: "13px", color: "#6B6560" }}>
+                      {new Date(e.expense_date).toLocaleDateString("he-IL")}
+                    </span>
+                    <span className="num" style={{ fontSize: "14px", fontWeight: "500", color: "#1A1A1A", textAlign: "right" }}>
+                      {fmt(e.amount)}
+                    </span>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center",
+                      padding: "3px 10px", borderRadius: "99px",
+                      fontSize: "11px", fontWeight: "600",
+                      background: style.bg_color, color: style.color, whiteSpace: "nowrap",
+                    }}>
+                      {label}
+                    </span>
+                    <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {e.budget_categories?.name ?? "—"}
+                    </span>
+                    <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {e.supplier ?? e.description ?? "—"}
+                    </span>
+                    <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                      <button
+                        onClick={() => setEditingExpense(e)}
+                        title="ערוך"
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                        onMouseEnter={(el) => { el.currentTarget.style.background = "#F0F0EE"; el.currentTarget.style.color = "#1A1A1A"; }}
+                        onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => setDeletingExpense(e)}
+                        title="מחק"
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                        onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
+                        onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           )}
-          </div>{/* /overflowX scroll */}
         </div>
       </div>
     </>

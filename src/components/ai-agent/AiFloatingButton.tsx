@@ -1,9 +1,16 @@
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useAiAgent } from "./AiAgentContext";
 
 export function AiFloatingButton() {
   const { isOpen, open } = useAiAgent();
+  const isMobile = useIsMobile();
 
   if (isOpen) return null;
+
+  // On mobile: sit above the bottom tab bar (60px) + extra spacing
+  const bottomOffset = isMobile
+    ? "calc(68px + env(safe-area-inset-bottom, 0px))"
+    : "28px";
 
   return (
     <button
@@ -12,11 +19,11 @@ export function AiFloatingButton() {
       aria-label="פתח סוכן AI"
       style={{
         position: "fixed",
-        bottom: "28px",
-        left: "28px",
+        bottom: bottomOffset,
+        left: isMobile ? "16px" : "28px",
         zIndex: 1000,
-        width: "52px",
-        height: "52px",
+        width: isMobile ? "46px" : "52px",
+        height: isMobile ? "46px" : "52px",
         borderRadius: "50%",
         background: "linear-gradient(145deg, #2D6644 0%, #1A3D2B 100%)",
         border: "none",

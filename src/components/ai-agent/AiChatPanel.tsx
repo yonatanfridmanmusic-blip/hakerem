@@ -863,7 +863,7 @@ export function AiChatPanel() {
   const isMobile = useIsMobile();
   const { isOpen, close, currentConvId, setCurrentConvId } = useAiAgent();
   const [input, setInput] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [pendingDrafts, setPendingDrafts] = useState<Record<string, ActionDraft>>({});
   const [pendingBatchDrafts, setPendingBatchDrafts] = useState<Record<string, BatchDraft>>({});
   const [mounted, setMounted] = useState(false);
