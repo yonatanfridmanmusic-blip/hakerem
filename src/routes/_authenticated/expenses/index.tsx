@@ -25,10 +25,62 @@ export const Route = createFileRoute("/_authenticated/expenses/")({
 
 // ─── Receipt helpers ──────────────────────────────────────────────────────────
 
+/**
+ * Compress a receipt file before storage.
+ * - Images (JPEG/PNG/WEBP/HEIC): resize to ≤1800px, re-encode as JPEG @ 82%.
+ *   Typical phone photo: 5–8 MB → 150–400 KB (≈95% reduction).
+ * - PDFs: returned as-is (invoice PDFs are already compact vector files).
+ */
+async function compressReceiptFile(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;   // PDFs: skip
+
+  const MAX_SIDE = 1800;
+  const QUALITY  = 0.82;
+
+  return new Promise<File>((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+
+      // Skip if already small enough
+      if (width <= MAX_SIDE && height <= MAX_SIDE && file.size < 300_000) {
+        resolve(file);
+        return;
+      }
+
+      const ratio  = Math.min(1, MAX_SIDE / width, MAX_SIDE / height);
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(width  * ratio);
+      canvas.height = Math.round(height * ratio);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const baseName = file.name.replace(/\.[^.]+$/, "");
+            resolve(new File([blob], `${baseName}.jpg`, { type: "image/jpeg" }));
+          } else {
+            resolve(file);   // fallback: use original
+          }
+        },
+        "image/jpeg",
+        QUALITY,
+      );
+    };
+
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 async function uploadReceipt(file: File): Promise<string> {
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+  const compressed = await compressReceiptFile(file);
+  const ext  = compressed.name.split(".").pop()?.toLowerCase() ?? "jpg";
   const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-  const { error } = await supabase.storage.from("receipts").upload(path, file, { upsert: false });
+  const { error } = await supabase.storage.from("receipts").upload(path, compressed, { upsert: false });
   if (error) throw error;
   return path;
 }
@@ -153,7 +205,10 @@ function ExpenseForm({
     if (!file) return;
     setParsing(true);
     try {
-      const parsed = await parseReceiptFile(file);
+      const fileToUse = await compressReceiptFile(file);
+      // Keep the compressed version so uploadReceipt doesn't re-compress
+      setReceiptFile(fileToUse);
+      const parsed = await parseReceiptFile(fileToUse);
       setParsedResult(parsed);
       setForm((prev) => ({
         ...prev,
@@ -682,7 +737,10 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
       await Promise.allSettled(
         batch.map(async (it) => {
           try {
-            const parsed = await parseReceiptFile(it.file);
+            const compressed = await compressReceiptFile(it.file);
+            // Replace with compressed version so uploadReceipt doesn't re-compress
+            setItems((prev) => prev.map((x) => x.id === it.id ? { ...x, file: compressed } : x));
+            const parsed = await parseReceiptFile(compressed);
             setItemStatus(it.id, { status: "ready", parsed });
           } catch {
             setItemStatus(it.id, { status: "error", error: "לא ניתן לקרוא את המסמך" });
