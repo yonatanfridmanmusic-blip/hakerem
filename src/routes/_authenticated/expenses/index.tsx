@@ -140,6 +140,7 @@ function ExpenseForm({
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
+  const [parsedResult, setParsedResult] = useState<ParsedReceipt | null>(null);
   const { data: categories } = useBudgetCategories(form.source);
   const { data: orgSources } = useOrgBudgetSources();
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
@@ -148,10 +149,12 @@ function ExpenseForm({
   const handleFileSelect = async (file: File | null) => {
     setReceiptFile(file);
     setAutofilled(false);
+    setParsedResult(null);
     if (!file) return;
     setParsing(true);
     try {
       const parsed = await parseReceiptFile(file);
+      setParsedResult(parsed);
       setForm((prev) => ({
         ...prev,
         amount: parsed.amount != null && (prev.amount === "" || prev.amount === "0")
@@ -264,19 +267,69 @@ function ExpenseForm({
             style={{ display: "none" }} />
         </label>
         {parsing && (
-          <div style={{ marginTop: "6px", fontSize: "12px", color: "#2D6644", display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ marginTop: "8px", fontSize: "12px", color: "#2D6644", display: "flex", alignItems: "center", gap: "6px" }}>
             <div style={{ width: "12px", height: "12px", border: "2px solid #2D6644", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite", flexShrink: 0 }} />
-            קורא את הקבלה...
+            קורא את הקבלה עם AI...
           </div>
         )}
-        {!parsing && autofilled && (
-          <div style={{ marginTop: "6px", fontSize: "12px", color: "#2D6644", display: "flex", alignItems: "center", gap: "6px" }}>
-            <Check size={13} /> פרטים מולאו אוטומטית
+
+        {/* AI Review Card — shown after successful parse */}
+        {!parsing && autofilled && parsedResult && (
+          <div style={{
+            marginTop: "10px",
+            background: "linear-gradient(135deg, #EDF8F2, #E4F5EC)",
+            border: "1.5px solid #A8D9BC",
+            borderRadius: "10px",
+            padding: "12px 14px",
+          }}>
+            <div style={{
+              fontSize: "12px", fontWeight: "700", color: "#1A3D2B",
+              marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px",
+            }}>
+              <Check size={13} color="#2D6644" />
+              AI זיהה — בדוק לפני שמירה
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 14px" }}>
+              {parsedResult.amount != null && (
+                <div style={{ fontSize: "13px" }}>
+                  <span style={{ color: "#6B8F7D", fontSize: "11px" }}>סכום</span>
+                  <div style={{ fontWeight: "600", color: "#1A1A1A" }}>{fmt(parsedResult.amount)}</div>
+                </div>
+              )}
+              {parsedResult.supplier && (
+                <div style={{ fontSize: "13px" }}>
+                  <span style={{ color: "#6B8F7D", fontSize: "11px" }}>ספק</span>
+                  <div style={{ fontWeight: "600", color: "#1A1A1A" }}>{parsedResult.supplier}</div>
+                </div>
+              )}
+              {parsedResult.date && (
+                <div style={{ fontSize: "13px" }}>
+                  <span style={{ color: "#6B8F7D", fontSize: "11px" }}>תאריך</span>
+                  <div style={{ fontWeight: "600", color: "#1A1A1A" }}>{parsedResult.date}</div>
+                </div>
+              )}
+              {parsedResult.invoice_number && (
+                <div style={{ fontSize: "13px" }}>
+                  <span style={{ color: "#6B8F7D", fontSize: "11px" }}>מס׳ חשבונית</span>
+                  <div style={{ fontWeight: "600", color: "#1A1A1A" }}>{parsedResult.invoice_number}</div>
+                </div>
+              )}
+              {parsedResult.description && (
+                <div style={{ fontSize: "13px", gridColumn: "span 2" }}>
+                  <span style={{ color: "#6B8F7D", fontSize: "11px" }}>תיאור</span>
+                  <div style={{ fontWeight: "500", color: "#1A1A1A" }}>{parsedResult.description}</div>
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: "8px", fontSize: "11px", color: "#6B8F7D", borderTop: "1px solid #C8E8D4", paddingTop: "7px" }}>
+              הפרטים מולאו בטופס — ניתן לערוך לפני השמירה
+            </div>
           </div>
         )}
+
         {receiptFile && (
-          <button type="button" onClick={() => { setReceiptFile(null); setAutofilled(false); }} style={{
-            marginTop: "4px", background: "none", border: "none",
+          <button type="button" onClick={() => { setReceiptFile(null); setAutofilled(false); setParsedResult(null); }} style={{
+            marginTop: "6px", background: "none", border: "none",
             cursor: "pointer", fontSize: "12px", color: "#AAA099",
             display: "flex", alignItems: "center", gap: "4px", padding: 0,
             fontFamily: "var(--font-sans)",
