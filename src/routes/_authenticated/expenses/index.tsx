@@ -739,6 +739,8 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
     const queued = items.filter((it) => it.status === "queued" || it.status === "error");
     if (!queued.length) return;
     setProcessing(true);
+
+    // Pass 1: batches of 3 concurrent requests
     for (let i = 0; i < queued.length; i += 3) {
       const batch = queued.slice(i, i + 3);
       batch.forEach((it) => setItemStatus(it.id, { status: "parsing" }));
@@ -746,7 +748,6 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
         batch.map(async (it) => {
           try {
             const compressed = await compressReceiptFile(it.file);
-            // Replace with compressed version so uploadReceipt doesn't re-compress
             setItems((prev) => prev.map((x) => x.id === it.id ? { ...x, file: compressed } : x));
             const parsed = await parseReceiptFile(compressed);
             setItemStatus(it.id, { status: "ready", parsed, error: undefined });
@@ -756,6 +757,23 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
         })
       );
     }
+
+    // Pass 2: auto-retry failures one-by-one (avoids concurrent load timeout)
+    const snapshot = (() => {
+      let failed: ImportItem[] = [];
+      setItems((prev) => { failed = prev.filter((it) => it.status === "error"); return prev; });
+      return failed;
+    })();
+    for (const it of snapshot) {
+      setItemStatus(it.id, { status: "parsing" });
+      try {
+        const parsed = await parseReceiptFile(it.file);
+        setItemStatus(it.id, { status: "ready", parsed, error: undefined });
+      } catch {
+        setItemStatus(it.id, { status: "error", error: "לא ניתן לקרוא את המסמך" });
+      }
+    }
+
     setProcessing(false);
   };
 
