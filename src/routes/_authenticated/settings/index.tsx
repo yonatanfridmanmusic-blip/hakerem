@@ -918,6 +918,37 @@ function TeamTab() {
   const setRoleFor = (memberId: string, role: "viewer" | "admin") =>
     setRoleMap((prev) => ({ ...prev, [memberId]: role }));
 
+  // Approve a member: update status + toast + email notification
+  const handleApproveMember = (memberId: string, role: "viewer" | "admin") => {
+    updateStatus.mutate(
+      { memberId, status: "active", role },
+      {
+        onSuccess: () => {
+          toast.success("איש הצוות אושר בהצלחה ✓");
+          // Send approval email (best-effort — don't block on result)
+          const orgId = membership?.organization?.id;
+          if (orgId) {
+            void supabase.functions.invoke("notify-member-approved", {
+              body: { member_id: memberId, organization_id: orgId },
+            });
+          }
+        },
+        onError: () => toast.error("שגיאה באישור איש הצוות"),
+      },
+    );
+  };
+
+  // Reject a member: update status + toast
+  const handleRejectMember = (memberId: string) => {
+    updateStatus.mutate(
+      { memberId, status: "rejected" },
+      {
+        onSuccess: () => toast.success("הבקשה נדחתה"),
+        onError: () => toast.error("שגיאה בדחיית הבקשה"),
+      },
+    );
+  };
+
   // Profile name editing
   const { data: currentProfile } = useCurrentProfile();
   const [displayName, setDisplayName] = useState("");
@@ -1225,7 +1256,7 @@ function TeamTab() {
                     type="button"
                     style={btnPrimary}
                     disabled={updateStatus.isPending}
-                    onClick={() => updateStatus.mutate({ memberId: m.id, status: "active", role: getRoleFor(m.id) })}
+                    onClick={() => handleApproveMember(m.id, getRoleFor(m.id))}
                   >
                     אשר
                   </button>
@@ -1233,7 +1264,7 @@ function TeamTab() {
                     type="button"
                     style={btnDanger}
                     disabled={updateStatus.isPending}
-                    onClick={() => updateStatus.mutate({ memberId: m.id, status: "rejected" })}
+                    onClick={() => handleRejectMember(m.id)}
                   >
                     דחה
                   </button>
@@ -1318,7 +1349,7 @@ function TeamTab() {
                 <button
                   type="button"
                   style={{ ...btnOutline, fontSize: "12px", padding: "6px 12px" }}
-                  onClick={() => updateStatus.mutate({ memberId: m.id, status: "active", role: getRoleFor(m.id) })}
+                  onClick={() => handleApproveMember(m.id, getRoleFor(m.id))}
                 >
                   אשר בכל זאת
                 </button>

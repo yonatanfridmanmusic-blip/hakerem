@@ -900,15 +900,16 @@ export function AiChatPanel() {
   }, [messages, send.isPending, optimisticMsg]);
 
   useEffect(() => {
-    if (isOpen) setTimeout(() => inputRef.current?.focus(), 150);
-  }, [isOpen]);
+    // Don't auto-focus on mobile — would pop the keyboard immediately on panel open
+    if (isOpen && !isMobile) setTimeout(() => inputRef.current?.focus(), 150);
+  }, [isOpen, isMobile]);
 
-  // Refocus input after response arrives
+  // Refocus input after response arrives (desktop only)
   useEffect(() => {
-    if (!send.isPending) {
+    if (!send.isPending && !isMobile) {
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [send.isPending]);
+  }, [send.isPending, isMobile]);
 
   // Close panel on Escape key
   useEffect(() => {
@@ -926,10 +927,10 @@ export function AiChatPanel() {
     if (!msg || send.isPending) return;
     setSendError(null);
     setInput("");
-    // Reset textarea height and keep focus
+    // Reset textarea height and keep focus (desktop only — on mobile, keyboard should not re-open)
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
-      inputRef.current.focus();
+      if (!isMobile) inputRef.current.focus();
     }
     // Show message immediately (optimistic)
     setOptimisticMsg(msg);
@@ -953,7 +954,7 @@ export function AiChatPanel() {
             if (inputRef.current) {
               inputRef.current.style.height = "auto";
               inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 120)}px`;
-              inputRef.current.focus();
+              if (!isMobile) inputRef.current.focus();
             }
           }, 0);
           const errMsg = err instanceof Error ? err.message : "שגיאה בשליחה";
@@ -979,7 +980,7 @@ export function AiChatPanel() {
     setInput("");
     setOptimisticMsg(null);
     setSendError(null);
-    setTimeout(() => inputRef.current?.focus(), 50);
+    if (!isMobile) setTimeout(() => inputRef.current?.focus(), 50);
   };
 
   if (!isOpen) return null;
@@ -1257,7 +1258,9 @@ export function AiChatPanel() {
 
             {/* ── Input ── */}
             <div style={{
-              padding: "10px 16px 16px",
+              padding: isMobile
+                ? "10px 16px calc(16px + env(safe-area-inset-bottom, 0px))"
+                : "10px 16px 16px",
               borderTop: "1px solid rgba(255,255,255,0.055)",
               flexShrink: 0,
               background: "rgba(0,0,0,0.12)",
@@ -1326,7 +1329,8 @@ export function AiChatPanel() {
                   ref={inputRef}
                   value={input}
                   onChange={e => { setInput(e.target.value); if (sendError) setSendError(null); }}
-                  onKeyDown={handleKeyDown}
+                  onKeyDown={isMobile ? undefined : handleKeyDown}
+                  enterKeyHint={isMobile ? "send" : undefined}
                   placeholder="שאל שאלה או בקש פעולה..."
                   readOnly={send.isPending}
                   rows={1}
@@ -1394,15 +1398,17 @@ export function AiChatPanel() {
                   />
                 </button>
               </form>
-              <div style={{
-                marginTop: "8px",
-                fontSize: "10.5px",
-                color: "rgba(255,255,255,0.16)",
-                textAlign: "center",
-                letterSpacing: "0.01em",
-              }}>
-                Enter לשליחה · Shift+Enter לשורה חדשה · תמיד שואל אישור לפני ביצוע
-              </div>
+              {!isMobile && (
+                <div style={{
+                  marginTop: "8px",
+                  fontSize: "10.5px",
+                  color: "rgba(255,255,255,0.16)",
+                  textAlign: "center",
+                  letterSpacing: "0.01em",
+                }}>
+                  Enter לשליחה · Shift+Enter לשורה חדשה · תמיד שואל אישור לפני ביצוע
+                </div>
+              )}
             </div>
           </div>
         </div>
