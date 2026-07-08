@@ -709,6 +709,14 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Bulk defaults ──────────────────────────────────────────────────────────
+  const [bulkSource, setBulkSource] = useState<string>(defaultSource);
+  const [bulkCategoryId, setBulkCategoryId] = useState<string>("");
+  const { data: bulkCategories } = useBudgetCategories(bulkSource);
+  const { data: orgSources } = useOrgBudgetSources();
+  const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
+  const activeSourceColor = sources.find(s => s.slug === bulkSource)?.color ?? "#2D6644";
+
   const addFiles = (files: FileList | File[]) => {
     const arr = Array.from(files).filter(
       (f) => f.type === "application/pdf" || f.type.startsWith("image/")
@@ -764,8 +772,9 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
         await addExpense.mutateAsync({
           expense_date: p.date ?? today(),
           amount: p.amount ?? 0,
-          source: defaultSource,
+          source: bulkSource,
           bank_account: "school",
+          budget_category_id: bulkCategoryId || null,
           supplier: p.supplier ?? null,
           description: p.description ?? null,
           receipt_url,
@@ -868,6 +877,49 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
               style={{ display: "none" }}
               onChange={(e) => { addFiles(e.target.files ?? new FileList()); e.target.value = ""; }}
             />
+          </div>
+
+          {/* ── Bulk defaults ───────────────────────────────────────────────── */}
+          <div style={{
+            background: "#F7F4EF", borderRadius: "10px",
+            padding: "12px 14px", display: "flex", flexDirection: "column", gap: "10px",
+          }}>
+            <div style={{ fontSize: "12px", fontWeight: "600", color: "#6B6560" }}>ברירות מחדל לייבוא</div>
+
+            {/* Source pills */}
+            <div>
+              <div style={{ fontSize: "11px", color: "#AAA099", marginBottom: "6px" }}>מקור תקציב</div>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {sources.map((src) => {
+                  const active = bulkSource === src.slug;
+                  return (
+                    <button key={src.slug} type="button"
+                      onClick={() => { setBulkSource(src.slug); setBulkCategoryId(""); }}
+                      style={{
+                        flex: "1 1 auto", minWidth: "72px", padding: "7px 10px", borderRadius: "8px",
+                        border: `1.5px solid ${active ? src.color : "#E8E2D9"}`,
+                        background: active ? src.bg_color : "#fff",
+                        color: active ? src.color : "#888079",
+                        fontSize: "12px", fontWeight: active ? "600" : "400",
+                        cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
+                      }}>
+                      {src.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Category selector */}
+            <div>
+              <div style={{ fontSize: "11px", color: "#AAA099", marginBottom: "6px" }}>קטגוריה ברירת מחדל (אופציונלי)</div>
+              <CategorySearchSelect
+                value={bulkCategoryId}
+                onChange={setBulkCategoryId}
+                categories={bulkCategories ?? []}
+                sourceColor={activeSourceColor}
+              />
+            </div>
           </div>
 
           {/* File list */}
