@@ -58,12 +58,36 @@ type ParsedReceipt = {
 
 async function parseReceiptFile(file: File): Promise<ParsedReceipt> {
   const file_base64 = await fileToBase64(file);
-  const { data, error } = await supabase.functions.invoke("parse-receipt", {
-    body: { file_base64, file_media_type: file.type },
+  const file_media_type = file.type || "application/pdf";
+
+  // Use raw fetch — supabase.functions.invoke can silently drop large payloads
+  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) ?? "";
+  const supabaseKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string) ?? "";
+  const sessionResp = await supabase.auth.getSession();
+  const token = sessionResp.data.session?.access_token ?? supabaseKey;
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/parse-receipt`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+      "apikey": supabaseKey,
+    },
+    body: JSON.stringify({ file_base64, file_media_type }),
   });
-  if (error) throw error;
-  if (!data?.success) throw new Error(data?.error ?? "Parse failed");
-  return (data.data ?? {}) as ParsedReceipt;
+
+  if (!res.ok) {
+    let errMsg = `שגיאת שרת ${res.status}`;
+    try {
+      const errBody = await res.json() as { error?: string };
+      if (errBody.error) errMsg = errBody.error;
+    } catch { /* ignore json parse error */ }
+    throw new Error(errMsg);
+  }
+
+  const result = await res.json() as { success: boolean; data?: ParsedReceipt; error?: string };
+  if (!result.success) throw new Error(result.error ?? "Parse failed");
+  return (result.data ?? {}) as ParsedReceipt;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -137,8 +161,10 @@ function ExpenseForm({
         description: parsed.description && prev.description === "" ? parsed.description : prev.description,
       }));
       setAutofilled(true);
-    } catch {
-      toast.error("לא הצלחנו לקרוא את הקבלה אוטומטית");
+    } catch (err) {
+      console.error("[parse-receipt] client error:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`לא ניתן לקרוא את הקבלה: ${msg}`);
     } finally {
       setParsing(false);
     }

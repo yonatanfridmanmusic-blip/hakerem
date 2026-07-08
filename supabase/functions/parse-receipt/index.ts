@@ -7,32 +7,48 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req: Request) => {
+  console.log(`[parse-receipt] ${req.method} from ${req.headers.get("origin") ?? "unknown"}`);
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
+    // Use CLAUDE_API_KEY — same secret used by ai-agent
+    const apiKey = Deno.env.get("CLAUDE_API_KEY") ?? Deno.env.get("ANTHROPIC_API_KEY");
+    console.log(`[parse-receipt] apiKey present: ${!!apiKey}`);
+    if (!apiKey) throw new Error("Missing CLAUDE_API_KEY secret — set it in Supabase Edge Function secrets");
 
-    const { file_base64, file_media_type } = (await req.json()) as {
-      file_base64: string;
-      file_media_type: string;
-    };
+    let bodyText: string;
+    try {
+      bodyText = await req.text();
+    } catch (e) {
+      throw new Error(`Failed to read request body: ${e}`);
+    }
+    console.log(`[parse-receipt] body length: ${bodyText.length}`);
 
-    if (!file_base64 || !file_media_type) {
-      throw new Error("Missing file_base64 or file_media_type");
+    let parsed: { file_base64?: string; file_media_type?: string };
+    try {
+      parsed = JSON.parse(bodyText);
+    } catch (e) {
+      throw new Error(`Invalid JSON body: ${e}`);
     }
 
-    const isPdf = file_media_type === "application/pdf";
-    const isImage = file_media_type.startsWith("image/");
+    const { file_base64, file_media_type } = parsed;
+
+    if (!file_base64) throw new Error("Missing file_base64");
+    // Default to PDF if browser doesn't set MIME type
+    const mediaType = (file_media_type && file_media_type.length > 0) ? file_media_type : "application/pdf";
+    console.log(`[parse-receipt] mediaType: ${mediaType}, base64 length: ${file_base64.length}`);
+
+    const isPdf = mediaType === "application/pdf";
+    const isImage = mediaType.startsWith("image/");
     if (!isPdf && !isImage) {
-      throw new Error(`Unsupported media type: ${file_media_type}`);
+      throw new Error(`Unsupported media type: ${mediaType}`);
     }
 
     const anthropic = new Anthropic({ apiKey });
 
-    // Build the content block (document for PDF, image for raster)
     // deno-lint-ignore no-explicit-any
     const contentBlock: any = isPdf
       ? {
@@ -43,18 +59,16 @@ Deno.serve(async (req: Request) => {
           type: "image",
           source: {
             type: "base64",
-            media_type: file_media_type as
-              | "image/jpeg"
-              | "image/png"
-              | "image/webp"
-              | "image/gif",
+            media_type: mediaType as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
             data: file_base64,
           },
         };
 
+    console.log(`[parse-receipt] calling Claude (${isPdf ? "PDF" : "image"} document)...`);
+
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 500,
+      max_tokens: 512,
       system:
         "אתה עוזר חשבונאות לבית ספר ישראלי. תפקידך לחלץ מידע ממסמכים פיננסיים (קבלות, חשבוניות). החזר JSON בלבד ללא שום הסבר נוסף.",
       messages: [
@@ -64,15 +78,7 @@ Deno.serve(async (req: Request) => {
             contentBlock,
             {
               type: "text",
-              text: `חלץ מהמסמך הבא את הפרטים הפיננסיים והחזר JSON בלבד:
-{
-  "amount": <סכום כולל לתשלום כמספר עשרוני - ללא סימן מטבע>,
-  "supplier": "<שם הספק / בית העסק / החברה>",
-  "date": "<תאריך המסמך בפורמט YYYY-MM-DD>",
-  "description": "<תיאור קצר של מה נרכש בעברית>",
-  "invoice_number": "<מספר חשבונית/קבלה אם קיים>"
-}
-שדות שאינם קיימים במסמך — החזר null. החזר JSON בלבד, ללא שום טקסט נוסף.`,
+              text: `חלץ מהמסמך הבא את הפרטים הפיננסיים והחזר JSON בלבד:\n{\n  "amount": <סכום כולל לתשלום כמספר עשרוני - ללא סימן מטבע>,\n  "supplier": "<שם הספק / בית העסק / החברה>",\n  "date": "<תאריך המסמך בפורמט YYYY-MM-DD>",\n  "description": "<תיאור קצר של מה נרכש בעברית>",\n  "invoice_number": "<מספר חשבונית/קבלה אם קיים>"\n}\nשדות שאינם קיימים במסמך — החזר null. החזר JSON בלבד, ללא שום טקסט נוסף.`,
             },
           ],
         },
@@ -80,19 +86,18 @@ Deno.serve(async (req: Request) => {
     });
 
     const raw =
-      message.content[0].type === "text"
-        ? message.content[0].text.trim()
-        : "{}";
+      message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
+    console.log(`[parse-receipt] Claude raw response: ${raw.slice(0, 200)}`);
 
-    // Extract JSON even if model adds surrounding text
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     const data = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    console.log(`[parse-receipt] parsed data: ${JSON.stringify(data)}`);
 
     return new Response(JSON.stringify({ success: true, data }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("parse-receipt error:", err);
+    console.error("[parse-receipt] error:", String(err));
     return new Response(
       JSON.stringify({ success: false, error: String(err) }),
       {
