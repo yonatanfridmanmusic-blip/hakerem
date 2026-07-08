@@ -711,7 +711,7 @@ export default function HorimPage() {
         {/* Summary hero */}
         <div style={{
           background: "linear-gradient(135deg, #9B3880 0%, #7A2760 55%, #561A43 100%)",
-          borderRadius: "20px", padding: "28px 32px",
+          borderRadius: "20px", padding: isMobile ? "22px 18px" : "28px 32px",
           display: "flex", justifyContent: "space-between", alignItems: "flex-end",
           flexWrap: "wrap", gap: "20px",
           boxShadow: "0 16px 56px rgba(86,26,67,0.35), 0 1px 0 rgba(255,255,255,0.08) inset",
@@ -722,7 +722,7 @@ export default function HorimPage() {
             <div style={{ fontSize: "11px", color: "rgba(220,150,200,0.8)", fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px" }}>
               סה״כ גבייה — כל השכבות
             </div>
-            <div className="num" style={{ fontSize: "48px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
+            <div className="num" style={{ fontSize: isMobile ? "36px" : "48px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
               {fmt(animCollected)}
             </div>
             {hasTarget ? (
@@ -739,22 +739,22 @@ export default function HorimPage() {
               </div>
             )}
           </div>
-          <div style={{ textAlign: "left", position: "relative" }}>
+          <div style={{ textAlign: isMobile ? "right" : "left", position: "relative", width: isMobile ? "100%" : "auto" }}>
             {hasTarget ? (
               <>
                 <div className="num" style={{
-                  fontSize: "58px", fontWeight: "200",
+                  fontSize: isMobile ? "42px" : "58px", fontWeight: "200",
                   background: "linear-gradient(135deg, #F0A0D8 0%, #D060B0 100%)",
                   WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
                   letterSpacing: "-3px", lineHeight: 1,
                 }}>
                   {animPct}%
                 </div>
-                <div style={{ fontSize: "11px", color: "rgba(220,150,200,0.6)", marginTop: "4px", textAlign: "center" }}>מהיעד נגבה</div>
+                <div style={{ fontSize: "11px", color: "rgba(220,150,200,0.6)", marginTop: "4px", textAlign: isMobile ? "right" : "center" }}>מהיעד נגבה</div>
               </>
             ) : (
               <div style={{
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                display: "flex", flexDirection: "column", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center",
                 padding: "12px 20px", borderRadius: "12px",
                 border: "1px dashed rgba(220,150,200,0.35)",
                 background: "rgba(255,255,255,0.05)",

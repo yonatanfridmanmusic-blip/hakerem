@@ -477,6 +477,7 @@ function AddCategoryRow({
   targetYearId: string | null;
   onDone: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const addMutation = useAddBudgetCategory();
@@ -511,14 +512,65 @@ function AddCategoryRow({
   };
 
   const inputStyle: React.CSSProperties = {
-    padding: "6px 10px",
+    padding: "8px 12px",
     border: `1.5px solid ${color}`,
-    borderRadius: "7px",
-    fontSize: "13px",
+    borderRadius: "9px",
+    fontSize: "14px",
     fontFamily: "var(--font-sans)",
     outline: "none",
     direction: "rtl",
+    width: "100%",
+    boxSizing: "border-box",
   };
+
+  // Mobile: stacked form
+  if (isMobile) {
+    return (
+      <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "10px", background: "#FAFAF8", borderTop: "1px solid #EAE5DE" }}>
+        <input
+          ref={nameRef}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") onDone(); }}
+          placeholder="שם הקטגוריה"
+          style={{ ...inputStyle }}
+        />
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") onDone(); }}
+          placeholder="סכום מתוכנן"
+          style={{ ...inputStyle, direction: "ltr", textAlign: "right" }}
+        />
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button
+            onClick={save}
+            disabled={addMutation.isPending}
+            style={{
+              flex: 1, padding: "11px", borderRadius: "9px",
+              border: "none", background: color, color: "#fff",
+              fontSize: "14px", fontWeight: "500", cursor: "pointer",
+              fontFamily: "var(--font-sans)",
+            }}
+          >
+            {addMutation.isPending ? "..." : "שמור קטגוריה"}
+          </button>
+          <button
+            onClick={onDone}
+            style={{
+              padding: "11px 16px", borderRadius: "9px",
+              border: "1px solid #E8E2D9", background: "#fff",
+              cursor: "pointer", color: "#AAA099",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -541,7 +593,7 @@ function AddCategoryRow({
           if (e.key === "Escape") onDone();
         }}
         placeholder="שם הקטגוריה"
-        style={{ ...inputStyle, direction: "rtl" }}
+        style={{ ...inputStyle, direction: "rtl", width: "auto" }}
       />
       <input
         type="number"
@@ -552,7 +604,7 @@ function AddCategoryRow({
           if (e.key === "Escape") onDone();
         }}
         placeholder="0"
-        style={{ ...inputStyle, direction: "ltr", textAlign: "right" }}
+        style={{ ...inputStyle, direction: "ltr", textAlign: "right", width: "auto" }}
       />
       <span />
       <span />
@@ -673,8 +725,10 @@ function SourceTab({
         <div
           style={{
             display: "flex",
+            flexDirection: isMobile ? "column" : "row",
             justifyContent: "space-between",
-            alignItems: "center",
+            alignItems: isMobile ? "flex-start" : "center",
+            gap: isMobile ? "14px" : "0",
             position: "relative",
             zIndex: 1,
           }}
@@ -695,7 +749,7 @@ function SourceTab({
             <div
               className="num"
               style={{
-                fontSize: "38px",
+                fontSize: isMobile ? "30px" : "38px",
                 fontWeight: "200",
                 letterSpacing: "-1.5px",
                 color: "#fff",
@@ -708,7 +762,7 @@ function SourceTab({
 
           {/* Stats — only show used/balance for the active/current year */}
           {isCurrentYear ? (
-            <div style={{ display: "flex", gap: "28px", alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: isMobile ? "20px" : "28px", alignItems: "center", flexWrap: "wrap" }}>
               <div style={{ textAlign: "center" }}>
                 <div
                   style={{
@@ -974,14 +1028,15 @@ function SourceTab({
           style={{
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: "6px",
-            padding: "8px 14px",
-            alignSelf: "flex-start",
+            padding: isMobile ? "12px" : "8px 14px",
+            alignSelf: isMobile ? "stretch" : "flex-start",
             border: `1px dashed ${srcCfg.color}`,
-            borderRadius: "8px",
+            borderRadius: "10px",
             background: srcCfg.bg,
             color: srcCfg.textColor,
-            fontSize: "13px",
+            fontSize: isMobile ? "14px" : "13px",
             cursor: "pointer",
             fontFamily: "var(--font-sans)",
             transition: "all 0.12s",
@@ -1018,8 +1073,10 @@ export default function BudgetPage() {
       <div
         style={{
           display: "flex",
+          flexDirection: isMobile ? "column" : "row",
           justifyContent: "space-between",
           alignItems: "flex-start",
+          gap: isMobile ? "12px" : "0",
         }}
       >
         <div>

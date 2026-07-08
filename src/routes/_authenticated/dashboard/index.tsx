@@ -187,16 +187,16 @@ function SourceCard({ s }: { s: SourceSummary }) {
       </div>
 
       {/* Right: big pct */}
-      <div style={{ textAlign: "left", position: "relative" }}>
+      <div style={{ textAlign: isMobile ? "right" : "left", position: "relative", width: isMobile ? "100%" : "auto" }}>
         <div className="num" style={{
-          fontSize: isMobile ? "44px" : "64px", fontWeight: "200",
+          fontSize: isMobile ? "40px" : "64px", fontWeight: "200",
           background: hero.pctGradient,
           WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
           letterSpacing: "-3px", lineHeight: 1,
         }}>
           {s.planned > 0 || s.used > 0 ? `${animBudgetPct}%` : "—"}
         </div>
-        <div style={{ fontSize: "11px", color: hero.tertiaryText, marginTop: "4px", textAlign: "center" }}>
+        <div style={{ fontSize: "11px", color: hero.tertiaryText, marginTop: "4px", textAlign: isMobile ? "right" : "center" }}>
           {s.planned > 0 ? "מהתקציב נוצל" : displayPct > 0 ? "מהתקציב נוצל" : "טרם הוגדר תקציב"}
         </div>
       </div>
@@ -1497,8 +1497,9 @@ export default function DashboardPage() {
           type="button"
           onClick={() => setShowNewYearWizard(true)}
           style={{
-            display: "flex", alignItems: "center", gap: "7px",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "7px",
             padding: "9px 16px",
+            width: isMobile ? "100%" : "auto",
             background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
             color: "#fff", border: "none", borderRadius: "10px",
             fontSize: "13px", fontWeight: "500", fontFamily: "Rubik, sans-serif",
@@ -1542,16 +1543,16 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div style={{ textAlign: "left", position: "relative" }}>
+        <div style={{ textAlign: isMobile ? "right" : "left", position: "relative", width: isMobile ? "100%" : "auto" }}>
           <div className="num" style={{
-            fontSize: isMobile ? "44px" : "64px", fontWeight: "200",
+            fontSize: isMobile ? "40px" : "64px", fontWeight: "200",
             background: "linear-gradient(135deg, #7EE8A6 0%, #4DC483 100%)",
             WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
             letterSpacing: "-3px", lineHeight: 1,
           }}>
             {isLoading ? "—" : `${animPct}%`}
           </div>
-          <div style={{ fontSize: "11px", color: "rgba(122,170,142,0.6)", marginTop: "4px", textAlign: "center" }}>
+          <div style={{ fontSize: "11px", color: "rgba(122,170,142,0.6)", marginTop: "4px", textAlign: isMobile ? "right" : "center" }}>
             מהתקציב נוצל
           </div>
         </div>
