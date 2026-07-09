@@ -37,7 +37,7 @@ export const Route = createFileRoute("/_authenticated/settings/")({
   component: SettingsPage,
 });
 
-type Tab = "years" | "grades" | "categories" | "sources" | "team" | "license";
+type Tab = "years" | "grades" | "categories" | "sources" | "team" | "license" | "notifications";
 
 // ─── Source config (matches rest of app) ──────────────────────────────────
 
@@ -119,7 +119,8 @@ function SettingsPage() {
     { key: "categories", label: "קטגוריות תקציב" },
     { key: "sources",    label: "מקורות תקציב" },
     { key: "team",       label: "צוות" },
-    { key: "license",    label: "רישיון" },
+    { key: "license",       label: "רישיון" },
+    { key: "notifications", label: "התראות" },
   ];
 
   return (
@@ -181,7 +182,8 @@ function SettingsPage() {
       {tab === "categories" && <CategoriesTab />}
       {tab === "sources"    && <SourcesTab />}
       {tab === "team"       && <TeamTab />}
-      {tab === "license"    && <LicenseTab />}
+      {tab === "license"        && <LicenseTab />}
+      {tab === "notifications"  && <NotificationsTab />}
     </div>
   );
 }
@@ -1541,6 +1543,157 @@ function LicenseTab() {
             ✓ {success}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Notifications tab ────────────────────────────────────────────────────────
+
+function NotificationsTab() {
+  const [alertStatus, setAlertStatus]   = useState<"idle" | "loading" | "ok" | "err">("idle");
+  const [summaryStatus, setSummaryStatus] = useState<"idle" | "loading" | "ok" | "err">("idle");
+
+  async function callFunction(fn: "budget-alerts" | "weekly-summary", setStatus: (s: typeof alertStatus) => void) {
+    setStatus("loading");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setStatus("err"); return; }
+      const res = await fetch(
+        `https://jzadxvhtshfgqouxoprq.supabase.co/functions/v1/${fn}`,
+        {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+          body: "{}",
+        },
+      );
+      setStatus(res.ok ? "ok" : "err");
+    } catch {
+      setStatus("err");
+    }
+  }
+
+  const card = (
+    title: string,
+    subtitle: string,
+    description: string,
+    schedule: string,
+    icon: string,
+    status: typeof alertStatus,
+    onSend: () => void,
+  ) => (
+    <div style={{
+      background: "#fff",
+      border: "1px solid #E5EDE8",
+      borderRadius: "14px",
+      padding: "22px 24px",
+      marginBottom: "16px",
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+            <span style={{ fontSize: "22px" }}>{icon}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "15px", color: "#1A3D2B" }}>{title}</div>
+              <div style={{ fontSize: "12px", color: "#888", marginTop: "1px" }}>{subtitle}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: "13px", color: "#555", lineHeight: 1.6, marginBottom: "12px" }}>
+            {description}
+          </div>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: "6px",
+            background: "#F0FAF5", borderRadius: "6px", padding: "4px 10px",
+            fontSize: "12px", color: "#2D6644", fontWeight: 500,
+          }}>
+            🕐 {schedule}
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px" }}>
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={status === "loading"}
+            style={{
+              padding: "10px 20px",
+              borderRadius: "9px",
+              border: "none",
+              background: status === "ok"  ? "linear-gradient(135deg,#2D6644,#1A3D2B)"
+                        : status === "err" ? "linear-gradient(135deg,#DC2626,#991B1B)"
+                        : "linear-gradient(135deg,#2D6644,#1A3D2B)",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: "13px",
+              cursor: status === "loading" ? "not-allowed" : "pointer",
+              opacity: status === "loading" ? 0.7 : 1,
+              fontFamily: "Rubik, sans-serif",
+              whiteSpace: "nowrap",
+              minWidth: "110px",
+            }}
+          >
+            {status === "loading" ? "שולח..." : status === "ok" ? "✓ נשלח!" : status === "err" ? "✗ שגיאה" : "שלח עכשיו"}
+          </button>
+          {status === "ok" && (
+            <div style={{ fontSize: "11px", color: "#2D6644" }}>בדוק את תיבת הדואר שלך</div>
+          )}
+          {status === "err" && (
+            <div style={{ fontSize: "11px", color: "#DC2626" }}>נסה שוב בעוד רגע</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{
+        background: "linear-gradient(135deg, rgba(45,102,68,0.06), rgba(26,61,43,0.03))",
+        border: "1px solid #D4EDE0",
+        borderRadius: "12px",
+        padding: "16px 20px",
+        marginBottom: "24px",
+        fontSize: "13px",
+        color: "#1A3D2B",
+        lineHeight: 1.7,
+      }}>
+        <strong>📬 התראות אוטומטיות</strong> — המערכת שולחת מייל לבעל הארגון וכל המנהלים באופן אוטומטי.
+        ניתן גם לשלוח ידנית בכל עת באמצעות הכפתורים למטה.
+      </div>
+
+      {card(
+        "התראת חריגה תקציבית",
+        "שולח מדי יום בשעה 10:00",
+        "בודק אם מקור תקציבי חרג מ-100% או עבר 80% מהתקציב המאושר. אם יש חריגה — נשלח מייל אדום. אם יש אזהרה — מייל צהוב.",
+        "כל יום ב-10:00 (אם יש חריגה/אזהרה)",
+        "🔴",
+        alertStatus,
+        () => callFunction("budget-alerts", setAlertStatus),
+      )}
+
+      {card(
+        "דוח שבועי למנהל",
+        "שולח כל יום ראשון בשעה 10:00",
+        "מסכם את המצב הכולל: ניצול תקציב לפי מקור, הוצאות השבוע, מצב גבייה מהורים, ותובנות AI בעברית.",
+        "כל יום ראשון ב-10:00",
+        "📊",
+        summaryStatus,
+        () => callFunction("weekly-summary", setSummaryStatus),
+      )}
+
+      <div style={{
+        background: "#FFFBEB",
+        border: "1px solid #F5C842",
+        borderRadius: "10px",
+        padding: "14px 18px",
+        fontSize: "12px",
+        color: "#92400E",
+        lineHeight: 1.7,
+      }}>
+        <strong>⚙️ הגדרת CRON_SECRET</strong> — כדי שהמשלוח האוטומטי יפעל, יש להגדיר בפאנל Supabase:
+        <br />
+        Dashboard → Edge Functions → Secrets → הוסף: <code style={{ background: "#FEF9C3", padding: "1px 5px", borderRadius: "3px" }}>CRON_SECRET</code> עם ערך כלשהו,
+        ואז הרץ ב-SQL Editor: <code style={{ background: "#FEF9C3", padding: "1px 5px", borderRadius: "3px" }}>ALTER DATABASE postgres SET app.cron_secret = 'same_value';</code>
       </div>
     </div>
   );
