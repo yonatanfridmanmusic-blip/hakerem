@@ -1681,20 +1681,6 @@ function NotificationsTab() {
         () => callFunction("weekly-summary", setSummaryStatus),
       )}
 
-      <div style={{
-        background: "#FFFBEB",
-        border: "1px solid #F5C842",
-        borderRadius: "10px",
-        padding: "14px 18px",
-        fontSize: "12px",
-        color: "#92400E",
-        lineHeight: 1.7,
-      }}>
-        <strong>⚙️ הגדרת CRON_SECRET</strong> — כדי שהמשלוח האוטומטי יפעל, יש להגדיר בפאנל Supabase:
-        <br />
-        Dashboard → Edge Functions → Secrets → הוסף: <code style={{ background: "#FEF9C3", padding: "1px 5px", borderRadius: "3px" }}>CRON_SECRET</code> עם ערך כלשהו,
-        ואז הרץ ב-SQL Editor: <code style={{ background: "#FEF9C3", padding: "1px 5px", borderRadius: "3px" }}>ALTER DATABASE postgres SET app.cron_secret = 'same_value';</code>
-      </div>
     </div>
   );
 }
