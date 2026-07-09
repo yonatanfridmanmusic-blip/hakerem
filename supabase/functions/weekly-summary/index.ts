@@ -45,17 +45,20 @@ function statusEmoji(pctVal: number) {
   return "🟢";
 }
 
-async function sendEmail(to: string[], subject: string, html: string): Promise<void> {
+async function sendEmail(to: string[], subject: string, html: string): Promise<string> {
   if (!RESEND_KEY) throw new Error("RESEND_API_KEY secret is not set");
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({ from: "הכרם <noreply@hakerem.app>", to, subject, html }),
   });
+  const resBody = await res.text();
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Resend ${res.status}: ${body}`);
+    throw new Error(`Resend ${res.status}: ${resBody}`);
   }
+  const { id } = JSON.parse(resBody);
+  console.log(`[weekly-summary] Resend accepted — email ID: ${id}, to: ${to.join(", ")}`);
+  return id;
 }
 
 async function generateAiSummary(dataContext: string, orgName: string): Promise<string> {
@@ -263,8 +266,8 @@ async function processOrg(
   </p>
 </div>`;
 
-  await sendEmail(adminEmails, `📊 דוח שבועי — ${orgName} · ${yearName}`, html);
-  console.log(`[weekly-summary] Sent to ${adminEmails.length} recipients for org ${orgName}`);
+  const emailId = await sendEmail(adminEmails, `📊 דוח שבועי — ${orgName} · ${yearName}`, html);
+  console.log(`[weekly-summary] Sent to ${adminEmails.length} recipients for org ${orgName} — Resend ID: ${emailId}`);
 }
 
 Deno.serve(async (req) => {
@@ -315,15 +318,21 @@ Deno.serve(async (req) => {
       const org = year.organizations as { id: string; name: string } | null;
       if (!org) continue;
 
+      // Two-step: members → profiles (direct FK join to auth.users doesn't work via PostgREST)
       const { data: members } = await supabase
         .from("organization_members")
-        .select("user_id, role, profiles(email, full_name)")
+        .select("user_id, role")
         .eq("organization_id", org.id)
         .eq("status", "active")
         .in("role", ["owner", "admin"]);
 
-      const adminEmails = (members ?? [])
-        .map(m => (m.profiles as { email: string | null } | null)?.email)
+      const userIds = (members ?? []).map(m => m.user_id).filter(Boolean);
+      const { data: profileRows } = userIds.length
+        ? await supabase.from("profiles").select("id, email").in("id", userIds)
+        : { data: [] };
+
+      const adminEmails = (profileRows ?? [])
+        .map(p => p.email)
         .filter((e): e is string => !!e);
 
       await processOrg(supabase, org.id, org.name, year.id, year.name, adminEmails);

@@ -259,16 +259,21 @@ Deno.serve(async (req) => {
       const org = year.organizations as { id: string; name: string } | null;
       if (!org) continue;
 
-      // Get admin + owner emails for this org
+      // Get admin + owner emails for this org (two-step: members → profiles)
       const { data: members } = await supabase
         .from("organization_members")
-        .select("user_id, role, profiles(email, full_name)")
+        .select("user_id, role")
         .eq("organization_id", org.id)
         .eq("status", "active")
         .in("role", ["owner", "admin"]);
 
-      const adminEmails = (members ?? [])
-        .map(m => (m.profiles as { email: string | null } | null)?.email)
+      const userIds = (members ?? []).map(m => m.user_id).filter(Boolean);
+      const { data: profileRows } = userIds.length
+        ? await supabase.from("profiles").select("id, email").in("id", userIds)
+        : { data: [] };
+
+      const adminEmails = (profileRows ?? [])
+        .map(p => p.email)
         .filter((e): e is string => !!e);
 
       console.log(`[budget-alerts] Org ${org.name}: ${adminEmails.length} recipient(s): ${adminEmails.join(", ")}`);
