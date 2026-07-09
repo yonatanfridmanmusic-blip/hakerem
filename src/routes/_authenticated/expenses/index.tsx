@@ -1126,7 +1126,12 @@ export default function ExpensesPage() {
   const [filter, setFilter] = useState<BudgetSource | "all">("all");
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(() => {
+    // Auto-open when redirected from onboarding wizard
+    const flag = sessionStorage.getItem("openBulkImport");
+    if (flag) { sessionStorage.removeItem("openBulkImport"); return true; }
+    return false;
+  });
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deletingExpense, setDeletingExpense] = useState<Expense | null>(null);
 

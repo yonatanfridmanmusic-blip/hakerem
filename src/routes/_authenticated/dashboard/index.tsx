@@ -132,6 +132,8 @@ function SourceCard({ s }: { s: SourceSummary }) {
   void animCashPct;
 
   const hero = SOURCE_HERO[s.source] ?? SOURCE_HERO["_default"];
+  const isOverrun = s.planned > 0 && s.used > s.planned;
+  const overrunAmount = isOverrun ? s.used - s.planned : 0;
 
   return (
     <div
@@ -141,24 +143,40 @@ function SourceCard({ s }: { s: SourceSummary }) {
         borderRadius: "20px", padding: isMobile ? "24px 20px" : "32px 36px",
         display: "flex", justifyContent: "space-between", alignItems: "flex-end",
         flexWrap: "wrap", gap: "24px",
-        boxShadow: hero.shadow,
+        boxShadow: isOverrun
+          ? `${hero.shadow}, 0 0 0 2.5px rgba(239,68,68,0.7), 0 0 32px rgba(239,68,68,0.25)`
+          : hero.shadow,
         position: "relative", overflow: "hidden",
         cursor: "pointer",
         transition: "transform 0.15s ease, box-shadow 0.15s ease",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = "translateY(-2px)";
-        e.currentTarget.style.boxShadow = hero.shadow.replace("0 16px 56px", "0 20px 64px");
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow = hero.shadow;
       }}
     >
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: hero.glow }} />
 
+      {/* Overrun banner — red strip at top of card */}
+      {isOverrun && (
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0,
+          background: "linear-gradient(90deg, rgba(220,38,38,0.92), rgba(185,28,28,0.92))",
+          padding: "7px 20px", display: "flex", alignItems: "center", gap: "7px",
+          zIndex: 2,
+        }}>
+          <AlertTriangle size={13} color="#FCA5A5" style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: "12px", fontWeight: "600", color: "#fff", flex: 1 }}>
+            חריגה תקציבית — {fmt(overrunAmount)} מעל התקציב המאושר
+          </span>
+          <span style={{ fontSize: "11px", color: "rgba(255,200,200,0.8)" }}>לחץ לפירוט ←</span>
+        </div>
+      )}
+
       {/* Left: label + balance + details */}
-      <div style={{ position: "relative" }}>
+      <div style={{ position: "relative", marginTop: isOverrun ? "28px" : 0 }}>
         <div style={{ fontSize: "12px", color: hero.subtleText, fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px" }}>
           {s.label} — {cashLabel}
         </div>
@@ -184,13 +202,22 @@ function SourceCard({ s }: { s: SourceSummary }) {
         {/* Budget bar */}
         {s.planned > 0 ? (
           <div style={{ marginTop: "18px", minWidth: "220px", maxWidth: "360px" }}>
-            <Bar pct={s.pct} gradient={hero.barGradient} />
-            <div style={{ marginTop: "6px", fontSize: "12px", color: hero.subtleText }}>
-              <span className="num">{fmt(animUsed)}</span>
-              <span style={{ color: hero.tertiaryText, margin: "0 4px" }}>מתוך</span>
-              <span className="num">{fmt(animPlanned)}</span>
-              <span style={{ color: hero.tertiaryText, marginRight: "4px" }}>מתוכנן</span>
-            </div>
+            <Bar pct={s.pct} gradient={isOverrun ? "linear-gradient(90deg, #F87171, #DC2626)" : hero.barGradient} />
+            {isOverrun ? (
+              <div style={{ marginTop: "6px", fontSize: "12px", color: "#FCA5A5", display: "flex", alignItems: "center", gap: "5px" }}>
+                <span className="num">{fmt(animUsed)}</span>
+                <span style={{ color: "rgba(252,165,165,0.6)", margin: "0 2px" }}>מתוך</span>
+                <span className="num">{fmt(animPlanned)}</span>
+                <span style={{ color: "rgba(252,165,165,0.6)", marginRight: "2px" }}>מתוכנן</span>
+              </div>
+            ) : (
+              <div style={{ marginTop: "6px", fontSize: "12px", color: hero.subtleText }}>
+                <span className="num">{fmt(animUsed)}</span>
+                <span style={{ color: hero.tertiaryText, margin: "0 4px" }}>מתוך</span>
+                <span className="num">{fmt(animPlanned)}</span>
+                <span style={{ color: hero.tertiaryText, marginRight: "4px" }}>מתוכנן</span>
+              </div>
+            )}
           </div>
         ) : s.used > 0 ? (
           <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "6px" }}>
@@ -1442,6 +1469,55 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                 </div>
               ))}
             </div>
+
+            {/* ── Optional bulk import CTA ── */}
+            {mode === "first" && (
+              <div style={{
+                marginBottom: "16px",
+                border: "1.5px dashed #D4C9B8",
+                borderRadius: "14px",
+                padding: "20px",
+                background: "#FAFAF8",
+                textAlign: "right",
+              }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                  <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "linear-gradient(135deg,#EDF8F2,#D4EDE0)", border: "1px solid #B6DFC8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2D6644" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#1A1A1A", marginBottom: "5px" }}>
+                      ייבוא נתונים קיימים
+                      <span style={{ marginRight: "8px", fontSize: "11px", fontWeight: "400", color: "#AAA099", background: "#F0EBE4", borderRadius: "99px", padding: "2px 8px" }}>אופציונלי</span>
+                    </div>
+                    <div style={{ fontSize: "12.5px", color: "#6B6560", lineHeight: 1.6 }}>
+                      אם בית הספר כבר פעיל השנה וברשותך חשבוניות קיימות — ניתן לייבא אותן עכשיו בצובר.
+                      המערכת תקרא את הפרטים אוטומטית ותציע קטגוריה לכל קובץ.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sessionStorage.setItem("openBulkImport", "1");
+                        onComplete();
+                      }}
+                      style={{
+                        marginTop: "12px",
+                        padding: "8px 16px", border: "1.5px solid #2D6644", borderRadius: "8px",
+                        background: "#fff", color: "#2D6644", fontSize: "13px", fontWeight: "500",
+                        cursor: "pointer", fontFamily: "Rubik, sans-serif",
+                        display: "inline-flex", alignItems: "center", gap: "6px",
+                      }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                      פתח ייבוא מסמכים
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <button type="button" onClick={onComplete}
               style={{ width: "100%", padding: "15px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15.5px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 6px 20px rgba(26,61,43,0.35)" }}>
