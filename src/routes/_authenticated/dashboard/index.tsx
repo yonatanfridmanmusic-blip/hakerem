@@ -245,6 +245,74 @@ function SourceCard({ s }: { s: SourceSummary }) {
   );
 }
 
+// ─── Budget Alert Banner ──────────────────────────────────────────────────────
+
+function BudgetAlertBanner({ sources }: { sources: SourceSummary[] }) {
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
+  const overruns = sources.filter(s => s.planned > 0 && s.used > s.planned && !dismissed.has(`over-${s.source}`));
+  const warnings = sources.filter(s => s.planned > 0 && s.pct >= 80 && s.used <= s.planned && !dismissed.has(`warn-${s.source}`));
+
+  if (!overruns.length && !warnings.length) return null;
+
+  const dismiss = (key: string) => setDismissed(prev => new Set([...prev, key]));
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+      {overruns.map(s => (
+        <div key={s.source} style={{
+          display: "flex", alignItems: "center", gap: "10px",
+          background: "linear-gradient(135deg, #FEF2F2, #FFF5F5)",
+          border: "1.5px solid #FECACA", borderRadius: "12px", padding: "12px 16px",
+          boxShadow: "0 2px 8px rgba(220,38,38,0.08)",
+        }}>
+          <AlertTriangle size={16} color="#DC2626" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: "13.5px", fontWeight: "600", color: "#991B1B" }}>{s.label}</span>
+            <span style={{ fontSize: "13px", color: "#B91C1C", marginRight: "6px" }}>
+              {" "}— חריגה של {fmt(s.used - s.planned)} מעל התקציב ({s.pct}%)
+            </span>
+          </div>
+          <Link to="/budget"
+            style={{ fontSize: "12px", color: "#DC2626", fontWeight: "600", textDecoration: "none",
+              padding: "4px 10px", border: "1px solid #FECACA", borderRadius: "6px",
+              background: "#fff", whiteSpace: "nowrap" }}>
+            לפירוט ←
+          </Link>
+          <button onClick={() => dismiss(`over-${s.source}`)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#FECACA", padding: "2px", lineHeight: 1, fontSize: "14px" }}
+            title="סגור">✕</button>
+        </div>
+      ))}
+      {warnings.map(s => (
+        <div key={s.source} style={{
+          display: "flex", alignItems: "center", gap: "10px",
+          background: "linear-gradient(135deg, #FFFBEB, #FFFDF5)",
+          border: "1.5px solid #FDE68A", borderRadius: "12px", padding: "12px 16px",
+          boxShadow: "0 2px 8px rgba(217,119,6,0.08)",
+        }}>
+          <AlertTriangle size={16} color="#D97706" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: "13.5px", fontWeight: "600", color: "#92400E" }}>{s.label}</span>
+            <span style={{ fontSize: "13px", color: "#B45309", marginRight: "6px" }}>
+              {" "}— {s.pct}% מהתקציב נוצל (נותר {fmt(s.planned - s.used)})
+            </span>
+          </div>
+          <Link to="/budget"
+            style={{ fontSize: "12px", color: "#D97706", fontWeight: "600", textDecoration: "none",
+              padding: "4px 10px", border: "1px solid #FDE68A", borderRadius: "6px",
+              background: "#fff", whiteSpace: "nowrap" }}>
+            לפירוט ←
+          </Link>
+          <button onClick={() => dismiss(`warn-${s.source}`)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#FDE68A", padding: "2px", lineHeight: 1, fontSize: "14px" }}
+            title="סגור">✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SkeletonCard() {
   return (
     <div style={{
@@ -1717,6 +1785,9 @@ export default function DashboardPage() {
           שגיאה בטעינת הנתונים — נסה לרענן את הדף
         </div>
       )}
+
+      {/* Budget alert banners */}
+      {!isLoading && data && <BudgetAlertBanner sources={data.sources} />}
 
       {/* Source cards — large hero style, one per row */}
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>

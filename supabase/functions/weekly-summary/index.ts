@@ -45,14 +45,17 @@ function statusEmoji(pctVal: number) {
   return "🟢";
 }
 
-async function sendEmail(to: string[], subject: string, html: string) {
-  if (!RESEND_KEY) { console.warn("RESEND_API_KEY not set"); return; }
+async function sendEmail(to: string[], subject: string, html: string): Promise<void> {
+  if (!RESEND_KEY) throw new Error("RESEND_API_KEY secret is not set");
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({ from: "הכרם <noreply@hakerem.app>", to, subject, html }),
   });
-  if (!res.ok) console.error("Resend error:", await res.text());
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Resend ${res.status}: ${body}`);
+  }
 }
 
 async function generateAiSummary(dataContext: string, orgName: string): Promise<string> {

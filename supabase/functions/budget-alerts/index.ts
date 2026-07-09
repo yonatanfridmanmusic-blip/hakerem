@@ -41,14 +41,17 @@ function pctBar(pct: number): string {
   </div>`;
 }
 
-async function sendEmail(to: string[], subject: string, html: string) {
-  if (!RESEND_KEY) { console.warn("RESEND_API_KEY not set"); return; }
+async function sendEmail(to: string[], subject: string, html: string): Promise<void> {
+  if (!RESEND_KEY) throw new Error("RESEND_API_KEY secret is not set");
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({ from: "הכרם <noreply@hakerem.app>", to, subject, html }),
   });
-  if (!res.ok) console.error("Resend error:", await res.text());
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Resend ${res.status}: ${body}`);
+  }
 }
 
 interface SourceRow { source: string; label: string; planned: number; used: number; pct: number; }
@@ -61,8 +64,8 @@ async function processOrg(
   yearName: string,
   adminEmails: string[],
   orgSlug?: string | null,
-) {
-  if (!adminEmails.length) return;
+): Promise<boolean> {
+  if (!adminEmails.length) { console.warn(`[budget-alerts] No emails for org ${orgName}`); return false; }
 
   // 1. Budget categories (planned per source)
   const { data: cats } = await supabase
@@ -99,8 +102,8 @@ async function processOrg(
   const warnings  = sources.filter(s => s.planned > 0 && s.pct >= 80 && s.used <= s.planned);
 
   if (!overruns.length && !warnings.length) {
-    console.log(`[budget-alerts] Org ${orgName}: no alerts needed`);
-    return;
+    console.log(`[budget-alerts] Org ${orgName}: no alerts — all sources under 80%`);
+    return false;
   }
 
   const hasOverrun = overruns.length > 0;
@@ -198,7 +201,8 @@ async function processOrg(
 </div>`;
 
   await sendEmail(adminEmails, subject, html);
-  console.log(`[budget-alerts] Sent alert to ${adminEmails.length} recipient(s) for org ${orgName}`);
+  console.log(`[budget-alerts] ✓ Sent to ${adminEmails.join(", ")} for org ${orgName}`);
+  return true;
 }
 
 Deno.serve(async (req) => {
@@ -249,6 +253,8 @@ Deno.serve(async (req) => {
     if (yearErr) throw yearErr;
 
     let processed = 0;
+    let emails_sent = 0;
+    let skipped_no_alerts = 0;
     for (const year of years ?? []) {
       const org = year.organizations as { id: string; name: string } | null;
       if (!org) continue;
@@ -265,12 +271,15 @@ Deno.serve(async (req) => {
         .map(m => (m.profiles as { email: string | null } | null)?.email)
         .filter((e): e is string => !!e);
 
-      await processOrg(supabase, org.id, org.name, year.id, year.name, adminEmails);
+      console.log(`[budget-alerts] Org ${org.name}: ${adminEmails.length} recipient(s): ${adminEmails.join(", ")}`);
+
+      const sent = await processOrg(supabase, org.id, org.name, year.id, year.name, adminEmails);
       processed++;
+      if (sent) emails_sent++; else skipped_no_alerts++;
     }
 
     return new Response(
-      JSON.stringify({ ok: true, orgs_processed: processed }),
+      JSON.stringify({ ok: true, orgs_processed: processed, emails_sent, skipped_no_alerts }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {

@@ -16,7 +16,10 @@ export interface Expense {
   description: string | null;
   bank_account: "school" | "parents" | null;
   receipt_url: string | null;
+  created_by: string | null;
+  created_at: string | null;
   budget_categories?: { name: string } | null;
+  creator?: { full_name: string | null; email: string | null } | null;
 }
 
 export interface NewExpense {
@@ -45,7 +48,7 @@ export function useExpenses(sourceFilter?: BudgetSource | "all") {
 
       let query = supabase
         .from("expenses")
-        .select("id, expense_date, amount, source, budget_category_id, activity_name, supplier, description, bank_account, receipt_url, budget_categories(name)")
+        .select("id, expense_date, amount, source, budget_category_id, activity_name, supplier, description, bank_account, receipt_url, created_by, created_at, budget_categories(name), creator:profiles!expenses_created_by_fkey(full_name, email)")
         .eq("school_year_id", yearId)
         .order("expense_date", { ascending: false });
 
@@ -55,7 +58,8 @@ export function useExpenses(sourceFilter?: BudgetSource | "all") {
 
       const { data, error } = await query;
       if (error) throw error;
-      return (data ?? []).map((r) => ({ ...r, amount: Number(r.amount) })) as Expense[];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => ({ ...r, amount: Number(r.amount) })) as Expense[];
     },
     staleTime: 1000 * 60,
   });

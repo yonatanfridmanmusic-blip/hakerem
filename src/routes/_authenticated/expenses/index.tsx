@@ -657,6 +657,14 @@ function ExpenseMobileCard({
           {e.budget_categories?.name && (
             <span style={{ fontSize: "11px", color: "#AAA099" }}>· {e.budget_categories.name}</span>
           )}
+          {e.creator && (
+            <span style={{
+              fontSize: "10px", color: "#C8C2BB",
+              display: "inline-flex", alignItems: "center", gap: "3px",
+            }}>
+              · הוסף ע״י {e.creator.full_name ?? e.creator.email ?? "?"}
+            </span>
+          )}
         </div>
       </div>
 

@@ -1551,15 +1551,22 @@ function LicenseTab() {
 // ─── Notifications tab ────────────────────────────────────────────────────────
 
 function NotificationsTab() {
-  const [alertStatus, setAlertStatus]   = useState<"idle" | "loading" | "ok" | "err">("idle");
-  const [summaryStatus, setSummaryStatus] = useState<"idle" | "loading" | "ok" | "err">("idle");
+  const [alertStatus, setAlertStatus]   = useState<"idle" | "loading" | "ok" | "skipped" | "err">("idle");
+  const [summaryStatus, setSummaryStatus] = useState<"idle" | "loading" | "ok" | "skipped" | "err">("idle");
+  const [alertMsg, setAlertMsg]   = useState<string>("");
+  const [summaryMsg, setSummaryMsg] = useState<string>("");
 
-  async function callFunction(fn: "budget-alerts" | "weekly-summary", setStatus: (s: typeof alertStatus) => void) {
+  async function callFunction(
+    fn: "budget-alerts" | "weekly-summary",
+    setStatus: (s: "idle" | "loading" | "ok" | "skipped" | "err") => void,
+    setMsg: (m: string) => void,
+  ) {
     setStatus("loading");
+    setMsg("");
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      if (!token) { setStatus("err"); return; }
+      if (!token) { setStatus("err"); setMsg("לא מחובר"); return; }
       const res = await fetch(
         `https://jzadxvhtshfgqouxoprq.supabase.co/functions/v1/${fn}`,
         {
@@ -1568,9 +1575,22 @@ function NotificationsTab() {
           body: "{}",
         },
       );
-      setStatus(res.ok ? "ok" : "err");
-    } catch {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      if (!res.ok) {
+        setStatus("err");
+        setMsg(String(body.error ?? `שגיאת שרת ${res.status}`));
+      } else if (fn === "budget-alerts" && (body.emails_sent as number) === 0) {
+        setStatus("skipped");
+        setMsg("אין חריגות — כל המקורות מתחת ל-80%");
+      } else {
+        setStatus("ok");
+        setMsg(fn === "budget-alerts"
+          ? `נשלח ל-${body.emails_sent ?? "?"} ארגון`
+          : "הדוח השבועי נשלח");
+      }
+    } catch (e) {
       setStatus("err");
+      setMsg(String(e));
     }
   }
 
@@ -1581,6 +1601,7 @@ function NotificationsTab() {
     schedule: string,
     icon: string,
     status: typeof alertStatus,
+    msg: string,
     onSend: () => void,
   ) => (
     <div style={{
@@ -1619,8 +1640,9 @@ function NotificationsTab() {
               padding: "10px 20px",
               borderRadius: "9px",
               border: "none",
-              background: status === "ok"  ? "linear-gradient(135deg,#2D6644,#1A3D2B)"
-                        : status === "err" ? "linear-gradient(135deg,#DC2626,#991B1B)"
+              background: status === "ok"     ? "linear-gradient(135deg,#2D6644,#1A3D2B)"
+                        : status === "skipped" ? "linear-gradient(135deg,#6B6560,#4A4540)"
+                        : status === "err"     ? "linear-gradient(135deg,#DC2626,#991B1B)"
                         : "linear-gradient(135deg,#2D6644,#1A3D2B)",
               color: "#fff",
               fontWeight: 700,
@@ -1632,13 +1654,12 @@ function NotificationsTab() {
               minWidth: "110px",
             }}
           >
-            {status === "loading" ? "שולח..." : status === "ok" ? "✓ נשלח!" : status === "err" ? "✗ שגיאה" : "שלח עכשיו"}
+            {status === "loading" ? "שולח..." : status === "ok" ? "✓ נשלח!" : status === "skipped" ? "אין התראות" : status === "err" ? "✗ שגיאה" : "שלח עכשיו"}
           </button>
-          {status === "ok" && (
-            <div style={{ fontSize: "11px", color: "#2D6644" }}>בדוק את תיבת הדואר שלך</div>
-          )}
-          {status === "err" && (
-            <div style={{ fontSize: "11px", color: "#DC2626" }}>נסה שוב בעוד רגע</div>
+          {msg && (
+            <div style={{ fontSize: "11px", color: status === "err" ? "#DC2626" : status === "skipped" ? "#6B6560" : "#2D6644", maxWidth: "160px", textAlign: "left" }}>
+              {msg}
+            </div>
           )}
         </div>
       </div>
@@ -1668,7 +1689,8 @@ function NotificationsTab() {
         "כל יום ב-10:00 (אם יש חריגה/אזהרה)",
         "🔴",
         alertStatus,
-        () => callFunction("budget-alerts", setAlertStatus),
+        alertMsg,
+        () => callFunction("budget-alerts", setAlertStatus, setAlertMsg),
       )}
 
       {card(
@@ -1678,7 +1700,8 @@ function NotificationsTab() {
         "כל יום ראשון ב-10:00",
         "📊",
         summaryStatus,
-        () => callFunction("weekly-summary", setSummaryStatus),
+        summaryMsg,
+        () => callFunction("weekly-summary", setSummaryStatus, setSummaryMsg),
       )}
 
     </div>
