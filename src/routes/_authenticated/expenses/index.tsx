@@ -699,8 +699,9 @@ type ImportItem = {
   status: ImportStatus;
   parsed?: ParsedReceipt;
   error?: string;
-  categoryId?: string;    // per-item: AI-suggested or manually chosen
-  duplicate?: Expense;    // existing expense with same amount+date+supplier
+  categoryId?: string;        // per-item: AI-suggested or manually chosen
+  duplicate?: Expense;        // existing DB expense with same amount+date+supplier
+  batchDuplicateOf?: string;  // ID of another item in the same import batch
 };
 
 function findDuplicate(parsed: ParsedReceipt, expenses: Expense[]): Expense | undefined {
@@ -718,7 +719,7 @@ function findDuplicate(parsed: ParsedReceipt, expenses: Expense[]): Expense | un
 function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defaultSource: string }) {
   const isMobile = useIsMobile();
   const addExpense = useAddExpense();
-  const { data: allExpenses } = useExpenses();
+  const { data: allExpenses } = useExpenses("all"); // all sources, active year
   const [items, setItems] = useState<ImportItem[]>([]);
   const [processing, setProcessing] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -802,6 +803,32 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
       }
     }
 
+    // Pass 3: intra-batch duplicate check — flag items that duplicate OTHER items in this batch
+    setItems((prev) => {
+      const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+      const readyWithKey = prev
+        .filter((it) => it.status === "ready" && it.parsed?.amount && it.parsed?.date && it.parsed?.supplier)
+        .map((it) => ({
+          id: it.id,
+          amount: it.parsed!.amount!,
+          date: it.parsed!.date!,
+          supplier: norm(it.parsed!.supplier!),
+        }));
+
+      return prev.map((it) => {
+        if (it.status !== "ready" || !it.parsed?.amount || !it.parsed?.date || !it.parsed?.supplier) return it;
+        // Find an earlier item in the batch with the same key (first occurrence wins, later ones flagged)
+        const myIdx = readyWithKey.findIndex((r) => r.id === it.id);
+        const batchDup = readyWithKey.slice(0, myIdx).find(
+          (r) => Math.abs(r.amount - it.parsed!.amount!) < 0.01 &&
+                 r.date === it.parsed!.date &&
+                 r.supplier === norm(it.parsed!.supplier!)
+        );
+        if (batchDup && !it.batchDuplicateOf) return { ...it, batchDuplicateOf: batchDup.id };
+        return it;
+      });
+    });
+
     setProcessing(false);
   };
 
@@ -847,7 +874,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
   const readyCount = items.filter((it) => it.status === "ready").length;
   const savedCount = items.filter((it) => it.status === "saved").length;
   const pendingCount = items.filter((it) => it.status === "queued" || it.status === "error").length;
-  const duplicateCount = items.filter((it) => it.status === "ready" && !!it.duplicate).length;
+  const duplicateCount = items.filter((it) => it.status === "ready" && (!!it.duplicate || !!it.batchDuplicateOf)).length;
 
   return (
     <div style={{
@@ -960,7 +987,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
           {items.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               {items.map((it) => {
-                const isDuplicate = !!it.duplicate;
+                const isDuplicate = !!it.duplicate || !!it.batchDuplicateOf;
                 const borderColor = it.status === "saved" ? "#D4EDE0"
                   : it.status === "error" ? "#FECACA"
                   : isDuplicate ? "#F5C842"
@@ -1005,8 +1032,8 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                       </div>
                     </div>
 
-                    {/* Duplicate warning */}
-                    {it.status === "ready" && isDuplicate && (
+                    {/* Duplicate warning — DB duplicate */}
+                    {it.status === "ready" && !!it.duplicate && (
                       <div style={{
                         marginTop: "8px",
                         padding: "8px 10px",
@@ -1020,13 +1047,33 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                         <div style={{ fontWeight: "600", marginBottom: "2px" }}>⚠ הוצאה דומה כבר קיימת במערכת</div>
                         <div>
                           {[
-                            it.duplicate!.supplier,
-                            it.duplicate!.amount != null ? fmt(it.duplicate!.amount) : null,
-                            it.duplicate!.expense_date,
+                            it.duplicate.supplier,
+                            it.duplicate.amount != null ? fmt(it.duplicate.amount) : null,
+                            it.duplicate.expense_date,
                           ].filter(Boolean).join(" · ")}
                         </div>
                         <div style={{ marginTop: "4px", fontSize: "10px", color: "#B45309" }}>
                           ניתן לייבא בכל זאת — לאחר הייבוא בדוק ומחק את הכפיל
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Duplicate warning — intra-batch duplicate */}
+                    {it.status === "ready" && !it.duplicate && !!it.batchDuplicateOf && (
+                      <div style={{
+                        marginTop: "8px",
+                        padding: "8px 10px",
+                        background: "#FEF9C3",
+                        border: "1px solid #F5C842",
+                        borderRadius: "8px",
+                        fontSize: "11px",
+                        color: "#92400E",
+                        lineHeight: 1.5,
+                      }}>
+                        <div style={{ fontWeight: "600", marginBottom: "2px" }}>⚠ כפיל בתוך הייבוא הנוכחי</div>
+                        <div>קובץ זה זהה לקובץ אחר שנבחר באותו ייבוא</div>
+                        <div style={{ marginTop: "4px", fontSize: "10px", color: "#B45309" }}>
+                          מומלץ להסיר קובץ אחד מהשניים לפני השמירה
                         </div>
                       </div>
                     )}
