@@ -27,14 +27,14 @@ Deno.serve(async (req: Request) => {
     }
     console.log(`[parse-receipt] body length: ${bodyText.length}`);
 
-    let parsed: { file_base64?: string; file_media_type?: string };
+    let parsed: { file_base64?: string; file_media_type?: string; category_names?: string[] };
     try {
       parsed = JSON.parse(bodyText);
     } catch (e) {
       throw new Error(`Invalid JSON body: ${e}`);
     }
 
-    const { file_base64, file_media_type } = parsed;
+    const { file_base64, file_media_type, category_names } = parsed;
 
     if (!file_base64) throw new Error("Missing file_base64");
     // Default to PDF if browser doesn't set MIME type
@@ -79,11 +79,14 @@ Deno.serve(async (req: Request) => {
           input_schema: {
             type: "object" as const,
             properties: {
-              amount:         { type: "number",  description: "סכום כולל לתשלום כמספר (ללא סימן מטבע). null אם לא קיים." },
-              supplier:       { type: "string",  description: "שם הספק / בית העסק / החברה. null אם לא קיים." },
-              date:           { type: "string",  description: "תאריך המסמך בפורמט YYYY-MM-DD. null אם לא קיים." },
-              description:    { type: "string",  description: "תיאור קצר של מה נרכש בעברית. null אם לא קיים." },
-              invoice_number: { type: "string",  description: "מספר חשבונית/קבלה. null אם לא קיים." },
+              amount:               { type: "number", description: "סכום כולל לתשלום כמספר (ללא סימן מטבע). null אם לא קיים." },
+              supplier:             { type: "string", description: "שם הספק / בית העסק / החברה. null אם לא קיים." },
+              date:                 { type: "string", description: "תאריך המסמך בפורמט YYYY-MM-DD. null אם לא קיים." },
+              description:          { type: "string", description: "תיאור קצר של מה נרכש בעברית. null אם לא קיים." },
+              invoice_number:       { type: "string", description: "מספר חשבונית/קבלה. null אם לא קיים." },
+              suggested_category:   { type: "string", description: category_names?.length
+                ? `שם הקטגוריה המתאימה ביותר מהרשימה הבאה בלבד: ${category_names.join(", ")}. החזר את השם המדויק כפי שהוא מופיע ברשימה. null אם אין התאמה טובה.`
+                : "null תמיד — אין קטגוריות זמינות." },
             },
             required: [],
           },

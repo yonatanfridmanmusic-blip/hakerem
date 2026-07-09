@@ -106,9 +106,10 @@ type ParsedReceipt = {
   date?: string | null;
   description?: string | null;
   invoice_number?: string | null;
+  suggested_category?: string | null;
 };
 
-async function parseReceiptFile(file: File): Promise<ParsedReceipt> {
+async function parseReceiptFile(file: File, categoryNames?: string[]): Promise<ParsedReceipt> {
   const file_base64 = await fileToBase64(file);
   const file_media_type = file.type || "application/pdf";
 
@@ -125,7 +126,7 @@ async function parseReceiptFile(file: File): Promise<ParsedReceipt> {
       "Authorization": `Bearer ${token}`,
       "apikey": supabaseKey,
     },
-    body: JSON.stringify({ file_base64, file_media_type }),
+    body: JSON.stringify({ file_base64, file_media_type, category_names: categoryNames ?? [] }),
   });
 
   if (!res.ok) {
@@ -698,6 +699,7 @@ type ImportItem = {
   status: ImportStatus;
   parsed?: ParsedReceipt;
   error?: string;
+  categoryId?: string; // per-item: AI-suggested or manually chosen
 };
 
 function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defaultSource: string }) {
@@ -711,7 +713,6 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
 
   // ── Bulk defaults ──────────────────────────────────────────────────────────
   const [bulkSource, setBulkSource] = useState<string>(defaultSource);
-  const [bulkCategoryId, setBulkCategoryId] = useState<string>("");
   const { data: bulkCategories } = useBudgetCategories(bulkSource);
   const { data: orgSources } = useOrgBudgetSources();
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
@@ -740,6 +741,12 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
     if (!queued.length) return;
     setProcessing(true);
 
+    const cats = bulkCategories ?? [];
+    const categoryNames = cats.map((c) => c.name);
+
+    const resolveCategoryId = (suggested?: string | null) =>
+      cats.find((c) => c.name === suggested)?.id ?? "";
+
     // Pass 1: batches of 3 concurrent requests
     for (let i = 0; i < queued.length; i += 3) {
       const batch = queued.slice(i, i + 3);
@@ -749,8 +756,9 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
           try {
             const compressed = await compressReceiptFile(it.file);
             setItems((prev) => prev.map((x) => x.id === it.id ? { ...x, file: compressed } : x));
-            const parsed = await parseReceiptFile(compressed);
-            setItemStatus(it.id, { status: "ready", parsed, error: undefined });
+            const parsed = await parseReceiptFile(compressed, categoryNames);
+            const categoryId = resolveCategoryId(parsed.suggested_category);
+            setItemStatus(it.id, { status: "ready", parsed, error: undefined, categoryId });
           } catch {
             setItemStatus(it.id, { status: "error", error: "לא ניתן לקרוא את המסמך" });
           }
@@ -759,18 +767,22 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
     }
 
     // Pass 2: auto-retry failures one-by-one (avoids concurrent load timeout)
-    const snapshot = (() => {
-      let failed: ImportItem[] = [];
-      setItems((prev) => { failed = prev.filter((it) => it.status === "error"); return prev; });
-      return failed;
-    })();
-    for (const it of snapshot) {
-      setItemStatus(it.id, { status: "parsing" });
+    const failedIds: string[] = [];
+    setItems((prev) => {
+      prev.filter((it) => it.status === "error").forEach((it) => failedIds.push(it.id));
+      return prev;
+    });
+    for (const failId of failedIds) {
+      setItemStatus(failId, { status: "parsing" });
+      let currentFile: File | undefined;
+      setItems((prev) => { currentFile = prev.find((x) => x.id === failId)?.file; return prev; });
+      if (!currentFile) continue;
       try {
-        const parsed = await parseReceiptFile(it.file);
-        setItemStatus(it.id, { status: "ready", parsed, error: undefined });
+        const parsed = await parseReceiptFile(currentFile, categoryNames);
+        const categoryId = resolveCategoryId(parsed.suggested_category);
+        setItemStatus(failId, { status: "ready", parsed, error: undefined, categoryId });
       } catch {
-        setItemStatus(it.id, { status: "error", error: "לא ניתן לקרוא את המסמך" });
+        setItemStatus(failId, { status: "error", error: "לא ניתן לקרוא את המסמך" });
       }
     }
 
@@ -792,7 +804,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
           amount: p.amount ?? 0,
           source: bulkSource,
           bank_account: "school",
-          budget_category_id: bulkCategoryId || null,
+          budget_category_id: it.categoryId || null,
           supplier: p.supplier ?? null,
           description: p.description ?? null,
           receipt_url,
@@ -897,46 +909,33 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
             />
           </div>
 
-          {/* ── Bulk defaults ───────────────────────────────────────────────── */}
+          {/* ── Bulk defaults: source only ──────────────────────────────────── */}
           <div style={{
             background: "#F7F4EF", borderRadius: "10px",
-            padding: "12px 14px", display: "flex", flexDirection: "column", gap: "10px",
+            padding: "12px 14px", display: "flex", flexDirection: "column", gap: "8px",
           }}>
-            <div style={{ fontSize: "12px", fontWeight: "600", color: "#6B6560" }}>ברירות מחדל לייבוא</div>
-
-            {/* Source pills */}
-            <div>
-              <div style={{ fontSize: "11px", color: "#AAA099", marginBottom: "6px" }}>מקור תקציב</div>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {sources.map((src) => {
-                  const active = bulkSource === src.slug;
-                  return (
-                    <button key={src.slug} type="button"
-                      onClick={() => { setBulkSource(src.slug); setBulkCategoryId(""); }}
-                      style={{
-                        flex: "1 1 auto", minWidth: "72px", padding: "7px 10px", borderRadius: "8px",
-                        border: `1.5px solid ${active ? src.color : "#E8E2D9"}`,
-                        background: active ? src.bg_color : "#fff",
-                        color: active ? src.color : "#888079",
-                        fontSize: "12px", fontWeight: active ? "600" : "400",
-                        cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
-                      }}>
-                      {src.label}
-                    </button>
-                  );
-                })}
-              </div>
+            <div style={{ fontSize: "12px", fontWeight: "600", color: "#6B6560" }}>מקור תקציב לכל הקבצים</div>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {sources.map((src) => {
+                const active = bulkSource === src.slug;
+                return (
+                  <button key={src.slug} type="button"
+                    onClick={() => setBulkSource(src.slug)}
+                    style={{
+                      flex: "1 1 auto", minWidth: "72px", padding: "7px 10px", borderRadius: "8px",
+                      border: `1.5px solid ${active ? src.color : "#E8E2D9"}`,
+                      background: active ? src.bg_color : "#fff",
+                      color: active ? src.color : "#888079",
+                      fontSize: "12px", fontWeight: active ? "600" : "400",
+                      cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
+                    }}>
+                    {src.label}
+                  </button>
+                );
+              })}
             </div>
-
-            {/* Category selector */}
-            <div>
-              <div style={{ fontSize: "11px", color: "#AAA099", marginBottom: "6px" }}>קטגוריה ברירת מחדל (אופציונלי)</div>
-              <CategorySearchSelect
-                value={bulkCategoryId}
-                onChange={setBulkCategoryId}
-                categories={bulkCategories ?? []}
-                sourceColor={activeSourceColor}
-              />
+            <div style={{ fontSize: "11px", color: "#AAA099" }}>
+              הקטגוריה תוצע אוטומטית לכל קובץ ותוכל לשנות לפני הייבוא
             </div>
           </div>
 
@@ -945,39 +944,63 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               {items.map((it) => (
                 <div key={it.id} style={{
-                  display: "flex", alignItems: "center", gap: "10px",
                   padding: "10px 12px", borderRadius: "10px",
                   background: it.status === "saved" ? "#F0FAF5" : it.status === "error" ? "#FEF2F2" : "#F7F4EF",
                   border: `1px solid ${it.status === "saved" ? "#D4EDE0" : it.status === "error" ? "#FECACA" : "#EAE5DE"}`,
                 }}>
-                  <div style={{ flexShrink: 0, width: "20px", display: "flex", justifyContent: "center" }}>
-                    {statusIcon(it.status)}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {it.file.name}
+                  {/* Top row: icon + name + status label */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div style={{ flexShrink: 0, width: "20px", display: "flex", justifyContent: "center" }}>
+                      {statusIcon(it.status)}
                     </div>
-                    {it.parsed && (
-                      <div style={{ fontSize: "11px", color: "#6B6560", marginTop: "2px" }}>
-                        {[
-                          it.parsed.supplier,
-                          it.parsed.amount != null ? fmt(it.parsed.amount) : null,
-                          it.parsed.date,
-                        ].filter(Boolean).join(" · ")}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {it.parsed?.supplier ?? it.file.name}
                       </div>
-                    )}
-                    {it.error && (
-                      <div style={{ fontSize: "11px", color: "#DC2626", marginTop: "2px" }}>{it.error}</div>
-                    )}
+                      {it.parsed && (
+                        <div style={{ fontSize: "11px", color: "#6B6560", marginTop: "1px" }}>
+                          {[
+                            it.parsed.amount != null ? fmt(it.parsed.amount) : null,
+                            it.parsed.date,
+                          ].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
+                      {it.error && (
+                        <div style={{ fontSize: "11px", color: "#DC2626", marginTop: "1px" }}>{it.error}</div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "#AAA099", flexShrink: 0 }}>
+                      {it.status === "queued" && "ממתין"}
+                      {it.status === "parsing" && "קורא..."}
+                      {it.status === "saving" && "שומר..."}
+                      {it.status === "saved" && "✓ נשמר"}
+                      {it.status === "error" && "שגיאה"}
+                    </div>
                   </div>
-                  <div style={{ fontSize: "11px", color: "#AAA099", flexShrink: 0 }}>
-                    {it.status === "queued" && "ממתין"}
-                    {it.status === "parsing" && "קורא..."}
-                    {it.status === "ready" && "מוכן"}
-                    {it.status === "saving" && "שומר..."}
-                    {it.status === "saved" && "✓ נשמר"}
-                    {it.status === "error" && "שגיאה"}
-                  </div>
+
+                  {/* Category selector — visible only for "ready" items */}
+                  {it.status === "ready" && (
+                    <div style={{ marginTop: "8px", paddingRight: "30px" }}>
+                      <select
+                        value={it.categoryId ?? ""}
+                        onChange={(e) => setItemStatus(it.id, { categoryId: e.target.value })}
+                        style={{
+                          width: "100%", padding: "6px 10px",
+                          border: `1.5px solid ${it.categoryId ? activeSourceColor : "#E8E2D9"}`,
+                          borderRadius: "7px", fontSize: "12px",
+                          background: it.categoryId ? "#fff" : "#FAFAF8",
+                          color: it.categoryId ? "#1A1A1A" : "#AAA099",
+                          fontFamily: "var(--font-sans)", direction: "rtl", cursor: "pointer",
+                          outline: "none",
+                        }}
+                      >
+                        <option value="">ללא קטגוריה</option>
+                        {(bulkCategories ?? []).map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
