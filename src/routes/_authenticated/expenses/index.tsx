@@ -699,12 +699,26 @@ type ImportItem = {
   status: ImportStatus;
   parsed?: ParsedReceipt;
   error?: string;
-  categoryId?: string; // per-item: AI-suggested or manually chosen
+  categoryId?: string;    // per-item: AI-suggested or manually chosen
+  duplicate?: Expense;    // existing expense with same amount+date+supplier
 };
+
+function findDuplicate(parsed: ParsedReceipt, expenses: Expense[]): Expense | undefined {
+  if (!parsed.amount || !parsed.date || !parsed.supplier) return undefined;
+  const normSupplier = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+  return expenses.find(
+    (e) =>
+      Math.abs(e.amount - parsed.amount!) < 0.01 &&
+      e.expense_date === parsed.date &&
+      e.supplier != null &&
+      normSupplier(e.supplier) === normSupplier(parsed.supplier!)
+  );
+}
 
 function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defaultSource: string }) {
   const isMobile = useIsMobile();
   const addExpense = useAddExpense();
+  const { data: allExpenses } = useExpenses();
   const [items, setItems] = useState<ImportItem[]>([]);
   const [processing, setProcessing] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -758,7 +772,8 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
             setItems((prev) => prev.map((x) => x.id === it.id ? { ...x, file: compressed } : x));
             const parsed = await parseReceiptFile(compressed, categoryNames);
             const categoryId = resolveCategoryId(parsed.suggested_category);
-            setItemStatus(it.id, { status: "ready", parsed, error: undefined, categoryId });
+            const duplicate = findDuplicate(parsed, allExpenses ?? []);
+            setItemStatus(it.id, { status: "ready", parsed, error: undefined, categoryId, duplicate });
           } catch {
             setItemStatus(it.id, { status: "error", error: "לא ניתן לקרוא את המסמך" });
           }
@@ -780,7 +795,8 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
       try {
         const parsed = await parseReceiptFile(currentFile, categoryNames);
         const categoryId = resolveCategoryId(parsed.suggested_category);
-        setItemStatus(failId, { status: "ready", parsed, error: undefined, categoryId });
+        const duplicate = findDuplicate(parsed, allExpenses ?? []);
+        setItemStatus(failId, { status: "ready", parsed, error: undefined, categoryId, duplicate });
       } catch {
         setItemStatus(failId, { status: "error", error: "לא ניתן לקרוא את המסמך" });
       }
@@ -831,6 +847,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
   const readyCount = items.filter((it) => it.status === "ready").length;
   const savedCount = items.filter((it) => it.status === "saved").length;
   const pendingCount = items.filter((it) => it.status === "queued" || it.status === "error").length;
+  const duplicateCount = items.filter((it) => it.status === "ready" && !!it.duplicate).length;
 
   return (
     <div style={{
@@ -885,7 +902,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
             style={{
               border: `2px dashed ${dragging ? "#2D6644" : "#E8E2D9"}`,
               borderRadius: "12px",
-              padding: "28px 20px",
+              padding: isMobile ? "18px 16px" : "28px 20px",
               textAlign: "center",
               cursor: "pointer",
               background: dragging ? "#F0FAF5" : "#FAFAF8",
@@ -942,67 +959,104 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
           {/* File list */}
           {items.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {items.map((it) => (
-                <div key={it.id} style={{
-                  padding: "10px 12px", borderRadius: "10px",
-                  background: it.status === "saved" ? "#F0FAF5" : it.status === "error" ? "#FEF2F2" : "#F7F4EF",
-                  border: `1px solid ${it.status === "saved" ? "#D4EDE0" : it.status === "error" ? "#FECACA" : "#EAE5DE"}`,
-                }}>
-                  {/* Top row: icon + name + status label */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <div style={{ flexShrink: 0, width: "20px", display: "flex", justifyContent: "center" }}>
-                      {statusIcon(it.status)}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {it.parsed?.supplier ?? it.file.name}
+              {items.map((it) => {
+                const isDuplicate = !!it.duplicate;
+                const borderColor = it.status === "saved" ? "#D4EDE0"
+                  : it.status === "error" ? "#FECACA"
+                  : isDuplicate ? "#F5C842"
+                  : "#EAE5DE";
+                const bgColor = it.status === "saved" ? "#F0FAF5"
+                  : it.status === "error" ? "#FEF2F2"
+                  : isDuplicate ? "#FFFBEB"
+                  : "#F7F4EF";
+                return (
+                  <div key={it.id} style={{ padding: "10px 12px", borderRadius: "10px", background: bgColor, border: `1px solid ${borderColor}` }}>
+                    {/* Top row: icon + name + status label */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div style={{ flexShrink: 0, width: "20px", display: "flex", justifyContent: "center" }}>
+                        {statusIcon(it.status)}
                       </div>
-                      {it.parsed && (
-                        <div style={{ fontSize: "11px", color: "#6B6560", marginTop: "1px" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {it.parsed?.supplier ?? it.file.name}
+                        </div>
+                        {it.parsed && (
+                          <div style={{ fontSize: "11px", color: "#6B6560", marginTop: "1px" }}>
+                            {[
+                              it.parsed.amount != null ? fmt(it.parsed.amount) : null,
+                              it.parsed.date,
+                            ].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                        {it.error && (
+                          <div style={{ fontSize: "11px", color: "#DC2626", marginTop: "1px" }}>{it.error}</div>
+                        )}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#AAA099", flexShrink: 0 }}>
+                        {it.status === "queued" && "ממתין"}
+                        {it.status === "parsing" && "קורא..."}
+                        {it.status === "saving" && "שומר..."}
+                        {it.status === "saved" && "✓ נשמר"}
+                        {it.status === "error" && "שגיאה"}
+                        {it.status === "ready" && isDuplicate && (
+                          <span style={{ color: "#D97706", fontWeight: "600" }}>⚠ כפילות</span>
+                        )}
+                        {it.status === "ready" && !isDuplicate && "מוכן"}
+                      </div>
+                    </div>
+
+                    {/* Duplicate warning */}
+                    {it.status === "ready" && isDuplicate && (
+                      <div style={{
+                        marginTop: "8px",
+                        padding: "8px 10px",
+                        background: "#FEF9C3",
+                        border: "1px solid #F5C842",
+                        borderRadius: "8px",
+                        fontSize: "11px",
+                        color: "#92400E",
+                        lineHeight: 1.5,
+                      }}>
+                        <div style={{ fontWeight: "600", marginBottom: "2px" }}>⚠ הוצאה דומה כבר קיימת במערכת</div>
+                        <div>
                           {[
-                            it.parsed.amount != null ? fmt(it.parsed.amount) : null,
-                            it.parsed.date,
+                            it.duplicate!.supplier,
+                            it.duplicate!.amount != null ? fmt(it.duplicate!.amount) : null,
+                            it.duplicate!.expense_date,
                           ].filter(Boolean).join(" · ")}
                         </div>
-                      )}
-                      {it.error && (
-                        <div style={{ fontSize: "11px", color: "#DC2626", marginTop: "1px" }}>{it.error}</div>
-                      )}
-                    </div>
-                    <div style={{ fontSize: "11px", color: "#AAA099", flexShrink: 0 }}>
-                      {it.status === "queued" && "ממתין"}
-                      {it.status === "parsing" && "קורא..."}
-                      {it.status === "saving" && "שומר..."}
-                      {it.status === "saved" && "✓ נשמר"}
-                      {it.status === "error" && "שגיאה"}
-                    </div>
-                  </div>
+                        <div style={{ marginTop: "4px", fontSize: "10px", color: "#B45309" }}>
+                          ניתן לייבא בכל זאת — לאחר הייבוא בדוק ומחק את הכפיל
+                        </div>
+                      </div>
+                    )}
 
-                  {/* Category selector — visible only for "ready" items */}
-                  {it.status === "ready" && (
-                    <div style={{ marginTop: "8px", paddingRight: "30px" }}>
-                      <select
-                        value={it.categoryId ?? ""}
-                        onChange={(e) => setItemStatus(it.id, { categoryId: e.target.value })}
-                        style={{
-                          width: "100%", padding: "6px 10px",
-                          border: `1.5px solid ${it.categoryId ? activeSourceColor : "#E8E2D9"}`,
-                          borderRadius: "7px", fontSize: "12px",
-                          background: it.categoryId ? "#fff" : "#FAFAF8",
-                          color: it.categoryId ? "#1A1A1A" : "#AAA099",
-                          fontFamily: "var(--font-sans)", direction: "rtl", cursor: "pointer",
-                          outline: "none",
-                        }}
-                      >
-                        <option value="">ללא קטגוריה</option>
-                        {(bulkCategories ?? []).map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    {/* Category selector — visible only for "ready" items */}
+                    {it.status === "ready" && (
+                      <div style={{ marginTop: "8px" }}>
+                        <select
+                          value={it.categoryId ?? ""}
+                          onChange={(e) => setItemStatus(it.id, { categoryId: e.target.value })}
+                          style={{
+                            width: "100%", padding: isMobile ? "8px 10px" : "6px 10px",
+                            border: `1.5px solid ${it.categoryId ? activeSourceColor : "#E8E2D9"}`,
+                            borderRadius: "7px", fontSize: "13px",
+                            background: it.categoryId ? "#fff" : "#FAFAF8",
+                            color: it.categoryId ? "#1A1A1A" : "#AAA099",
+                            fontFamily: "var(--font-sans)", direction: "rtl", cursor: "pointer",
+                            outline: "none",
+                          }}
+                        >
+                          <option value="">ללא קטגוריה</option>
+                          {(bulkCategories ?? []).map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1010,45 +1064,54 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
         {/* Footer */}
         {items.length > 0 && (
           <div style={{
-            padding: `14px 20px calc(14px + env(safe-area-inset-bottom, 0px))`,
+            padding: `12px 16px calc(12px + env(safe-area-inset-bottom, 0px))`,
             borderTop: "1px solid #EAE5DE",
-            display: "flex", gap: "10px", alignItems: "center", flexShrink: 0,
+            display: "flex",
+            flexDirection: isMobile ? "column" : "row",
+            gap: "8px", alignItems: isMobile ? "stretch" : "center", flexShrink: 0,
           }}>
-            <div style={{ flex: 1, fontSize: "12px", color: "#AAA099" }}>
-              {[
-                savedCount > 0 && `${savedCount} נשמרו`,
-                readyCount > 0 && `${readyCount} מוכנים`,
-                pendingCount > 0 && `${pendingCount} ממתינים`,
-              ].filter(Boolean).join(" · ")}
+            {/* Status summary */}
+            <div style={{ flex: 1, fontSize: "11px", color: "#AAA099", display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              {savedCount > 0 && <span style={{ color: "#2D6644", fontWeight: "600" }}>✓ {savedCount} נשמרו</span>}
+              {readyCount > 0 && <span>{readyCount} מוכנים</span>}
+              {duplicateCount > 0 && <span style={{ color: "#D97706", fontWeight: "600" }}>⚠ {duplicateCount} כפילויות</span>}
+              {pendingCount > 0 && <span>{pendingCount} ממתינים</span>}
             </div>
-            {pendingCount > 0 && (
-              <button
-                onClick={() => void processAll()}
-                disabled={processing}
-                style={{
-                  padding: "9px 16px", border: "1px solid #1A3D2B", borderRadius: "8px",
-                  background: "#fff", color: "#1A3D2B", fontSize: "13px", fontWeight: "500",
-                  cursor: processing ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
-                  opacity: processing ? 0.6 : 1,
-                }}
-              >
-                {processing ? "מעבד..." : "עבד קבצים"}
-              </button>
-            )}
-            {readyCount > 0 && (
-              <button
-                onClick={() => void importAll()}
-                disabled={importing}
-                style={{
-                  padding: "9px 18px", border: "none", borderRadius: "8px",
-                  background: importing ? "#888" : "linear-gradient(135deg, #2D6644, #1A3D2B)",
-                  color: "#fff", fontSize: "13px", fontWeight: "500",
-                  cursor: importing ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
-                }}
-              >
-                {importing ? "מייבא..." : `ייבא ${readyCount} הוצאות`}
-              </button>
-            )}
+            {/* Action buttons */}
+            <div style={{ display: "flex", gap: "8px" }}>
+              {pendingCount > 0 && (
+                <button
+                  onClick={() => void processAll()}
+                  disabled={processing}
+                  style={{
+                    flex: isMobile ? 1 : "none",
+                    padding: isMobile ? "12px 0" : "9px 16px",
+                    border: "1px solid #1A3D2B", borderRadius: "8px",
+                    background: "#fff", color: "#1A3D2B", fontSize: "14px", fontWeight: "500",
+                    cursor: processing ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
+                    opacity: processing ? 0.6 : 1,
+                  }}
+                >
+                  {processing ? "מעבד..." : "עבד קבצים"}
+                </button>
+              )}
+              {readyCount > 0 && (
+                <button
+                  onClick={() => void importAll()}
+                  disabled={importing}
+                  style={{
+                    flex: isMobile ? 1 : "none",
+                    padding: isMobile ? "12px 0" : "9px 18px",
+                    border: "none", borderRadius: "8px",
+                    background: importing ? "#888" : "linear-gradient(135deg, #2D6644, #1A3D2B)",
+                    color: "#fff", fontSize: "14px", fontWeight: "500",
+                    cursor: importing ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
+                  }}
+                >
+                  {importing ? "מייבא..." : `ייבא ${readyCount} הוצאות`}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
