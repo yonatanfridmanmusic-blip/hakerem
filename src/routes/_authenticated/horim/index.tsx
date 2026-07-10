@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { Plus, X, Check, ChevronDown, ChevronUp, Users, Settings2, Pencil, Trash2 } from "lucide-react";
+import { useCanWrite } from "@/hooks/use-organization";
 import { DateInput } from "@/components/ui/date-input";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { toast } from "sonner";
@@ -486,6 +487,7 @@ function GradeRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const { data: allCollections } = useParentCollections();
+  const canWrite = useCanWrite();
 
   // Calculate totals across all sections for this grade
   let totalTarget = 0;
@@ -636,19 +638,21 @@ function GradeRow({
               <span style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.04em", textTransform: "uppercase" }}>
                 היסטוריית גבייה
               </span>
-              <button
-                onClick={() => onAddCollection(grade.id)}
-                style={{
-                  display: "flex", alignItems: "center", gap: "5px",
-                  padding: "5px 12px",
-                  border: "1px solid #8B2F6E", borderRadius: "7px",
-                  background: "#F4EBF2", color: "#6B2356",
-                  fontSize: "12px", cursor: "pointer", fontFamily: "var(--font-sans)",
-                }}
-              >
-                <Plus size={12} />
-                הוסף גבייה
-              </button>
+              {canWrite && (
+                <button
+                  onClick={() => onAddCollection(grade.id)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "5px",
+                    padding: "5px 12px",
+                    border: "1px solid #8B2F6E", borderRadius: "7px",
+                    background: "#F4EBF2", color: "#6B2356",
+                    fontSize: "12px", cursor: "pointer", fontFamily: "var(--font-sans)",
+                  }}
+                >
+                  <Plus size={12} />
+                  הוסף גבייה
+                </button>
+              )}
             </div>
 
             {gradeCollections.length === 0 ? (
@@ -669,20 +673,24 @@ function GradeRow({
                     </div>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
                       <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#8B2F6E" }}>{fmt(c.amount)}</span>
-                      <button
-                        onClick={() => onEditCollection(c)}
-                        title="ערוך"
-                        style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
-                        onMouseEnter={(el) => { el.currentTarget.style.background = "#F0E0ED"; el.currentTarget.style.color = "#8B2F6E"; }}
-                        onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
-                      ><Pencil size={12} /></button>
-                      <button
-                        onClick={() => onDeleteCollection(c.id)}
-                        title="מחק"
-                        style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
-                        onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
-                        onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
-                      ><Trash2 size={12} /></button>
+                      {canWrite && (
+                        <button
+                          onClick={() => onEditCollection(c)}
+                          title="ערוך"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                          onMouseEnter={(el) => { el.currentTarget.style.background = "#F0E0ED"; el.currentTarget.style.color = "#8B2F6E"; }}
+                          onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                        ><Pencil size={12} /></button>
+                      )}
+                      {canWrite && (
+                        <button
+                          onClick={() => onDeleteCollection(c.id)}
+                          title="מחק"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                          onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
+                          onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                        ><Trash2 size={12} /></button>
+                      )}
                     </div>
                   </div>
                 );
@@ -700,6 +708,7 @@ function GradeRow({
 
 export default function HorimPage() {
   const isMobile = useIsMobile();
+  const canWrite = useCanWrite();
   const [showModal, setShowModal] = useState(false);
   const [showSectionsModal, setShowSectionsModal] = useState(false);
   const [preGradeId, setPreGradeId] = useState<string | undefined>();
@@ -842,35 +851,39 @@ export default function HorimPage() {
                 </button>
               ))}
             </div>
-            <button
-              onClick={() => setShowSectionsModal(true)}
-              style={{
-                display: "flex", alignItems: "center", gap: "6px",
-                padding: "10px 14px",
-                border: "1px solid #E8E2D9", borderRadius: "10px",
-                background: "#fff", color: "#6B6560",
-                fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)",
-              }}
-              title="ניהול סעיפי גבייה"
-            >
-              <Settings2 size={15} />
-              סעיפים
-            </button>
-            <button
-              onClick={() => openAddCollection()}
-              style={{
-                display: "flex", alignItems: "center", gap: "7px",
-                padding: "10px 18px",
-                background: "linear-gradient(135deg, #B04A90, #8B2F6E)",
-                border: "none", borderRadius: "10px",
-                color: "#fff", fontSize: "14px", fontWeight: "500",
-                cursor: "pointer", fontFamily: "var(--font-sans)",
-                boxShadow: "0 4px 12px rgba(139,47,110,0.3)",
-              }}
-            >
-              <Plus size={16} />
-              רשום גבייה
-            </button>
+            {canWrite && (
+              <button
+                onClick={() => setShowSectionsModal(true)}
+                style={{
+                  display: "flex", alignItems: "center", gap: "6px",
+                  padding: "10px 14px",
+                  border: "1px solid #E8E2D9", borderRadius: "10px",
+                  background: "#fff", color: "#6B6560",
+                  fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)",
+                }}
+                title="ניהול סעיפי גבייה"
+              >
+                <Settings2 size={15} />
+                סעיפים
+              </button>
+            )}
+            {canWrite && (
+              <button
+                onClick={() => openAddCollection()}
+                style={{
+                  display: "flex", alignItems: "center", gap: "7px",
+                  padding: "10px 18px",
+                  background: "linear-gradient(135deg, #B04A90, #8B2F6E)",
+                  border: "none", borderRadius: "10px",
+                  color: "#fff", fontSize: "14px", fontWeight: "500",
+                  cursor: "pointer", fontFamily: "var(--font-sans)",
+                  boxShadow: "0 4px 12px rgba(139,47,110,0.3)",
+                }}
+              >
+                <Plus size={16} />
+                רשום גבייה
+              </button>
+            )}
           </div>
         </div>
 

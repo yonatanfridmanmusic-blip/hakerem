@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { Plus, X, TrendingUp, Pencil, Check, Trash2, Search } from "lucide-react";
+import { useCanWrite } from "@/hooks/use-organization";
 import { DateInput } from "@/components/ui/date-input";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { CategorySearchSelect } from "@/components/ui/category-search-select";
@@ -434,6 +435,7 @@ function InlineCategoryCell({ inc }: { inc: Income }) {
   const updateCat = useUpdateIncomeCategory();
   const addCategory = useAddBudgetCategory();
   const isAddingNew = selectedId === "__new__";
+  const canWrite = useCanWrite();
 
   // Sync selectedId when inc.budget_category_id changes (e.g. after a background refetch)
   useEffect(() => {
@@ -460,6 +462,13 @@ function InlineCategoryCell({ inc }: { inc: Income }) {
   const srcStyle = getSourceStyle(sources, inc.source);
 
   if (!editing) {
+    if (!canWrite) {
+      return (
+        <span style={{ fontSize: "13px", color: inc.budget_categories?.name ? "#1A1A1A" : "#C0BAB4" }}>
+          {inc.budget_categories?.name ?? "—"}
+        </span>
+      );
+    }
     return (
       <div style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer" }}
         onClick={() => { setSelectedId(inc.budget_category_id ?? ""); setEditing(true); }}>
@@ -511,6 +520,7 @@ function IncomeMobileCard({
 }) {
   const srcStyle = getSourceStyle(sources, inc.source);
   const srcLabel = getSourceLabel(sources, inc.source);
+  const canWrite = useCanWrite();
   return (
     <div style={{
       padding: "14px 16px",
@@ -550,20 +560,24 @@ function IncomeMobileCard({
         </div>
       </div>
       <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
-        <button onClick={() => onEdit(inc)} style={{
-          background: "#F7F4EF", border: "none", borderRadius: "9px",
-          width: "36px", height: "36px", display: "flex", alignItems: "center",
-          justifyContent: "center", cursor: "pointer", color: "#6B6560",
-        }}>
-          <Pencil size={14} />
-        </button>
-        <button onClick={() => onDelete(inc)} style={{
-          background: "#FEF2F2", border: "none", borderRadius: "9px",
-          width: "36px", height: "36px", display: "flex", alignItems: "center",
-          justifyContent: "center", cursor: "pointer", color: "#DC2626",
-        }}>
-          <Trash2 size={14} />
-        </button>
+        {canWrite && (
+          <button onClick={() => onEdit(inc)} style={{
+            background: "#F7F4EF", border: "none", borderRadius: "9px",
+            width: "36px", height: "36px", display: "flex", alignItems: "center",
+            justifyContent: "center", cursor: "pointer", color: "#6B6560",
+          }}>
+            <Pencil size={14} />
+          </button>
+        )}
+        {canWrite && (
+          <button onClick={() => onDelete(inc)} style={{
+            background: "#FEF2F2", border: "none", borderRadius: "9px",
+            width: "36px", height: "36px", display: "flex", alignItems: "center",
+            justifyContent: "center", cursor: "pointer", color: "#DC2626",
+          }}>
+            <Trash2 size={14} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -573,6 +587,7 @@ function IncomeMobileCard({
 
 export default function IncomePage() {
   const isMobile = useIsMobile();
+  const canWrite = useCanWrite();
   const [filter, setFilter] = useState<BudgetSource | "all">("all");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -624,19 +639,21 @@ export default function IncomePage() {
                 : `${(income ?? []).length} הכנסות · סה״כ ${fmt(total)}`}
             </p>
           </div>
-          <button onClick={() => setShowModal(true)} style={{
-            display: "flex", alignItems: "center", gap: "7px",
-            padding: isMobile ? "11px 0" : "10px 18px",
-            width: isMobile ? "100%" : "auto",
-            justifyContent: "center",
-            background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
-            border: "none", borderRadius: "10px", color: "#fff",
-            fontSize: "14px", fontWeight: "500", cursor: "pointer",
-            fontFamily: "var(--font-sans)", boxShadow: "0 4px 12px rgba(26,61,43,0.3)",
-            flexShrink: 0,
-          }}>
-            <Plus size={16} />הוסף הכנסה
-          </button>
+          {canWrite && (
+            <button onClick={() => setShowModal(true)} style={{
+              display: "flex", alignItems: "center", gap: "7px",
+              padding: isMobile ? "11px 0" : "10px 18px",
+              width: isMobile ? "100%" : "auto",
+              justifyContent: "center",
+              background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
+              border: "none", borderRadius: "10px", color: "#fff",
+              fontSize: "14px", fontWeight: "500", cursor: "pointer",
+              fontFamily: "var(--font-sans)", boxShadow: "0 4px 12px rgba(26,61,43,0.3)",
+              flexShrink: 0,
+            }}>
+              <Plus size={16} />הוסף הכנסה
+            </button>
+          )}
         </div>
 
         {/* Hero */}
@@ -821,24 +838,28 @@ export default function IncomePage() {
                       {inc.payment_method ?? "—"}
                     </span>
                     <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
-                      <button
-                        onClick={() => setEditingIncome(inc)}
-                        title="ערוך"
-                        style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
-                        onMouseEnter={(el) => { el.currentTarget.style.background = "#F0F0EE"; el.currentTarget.style.color = "#1A1A1A"; }}
-                        onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        onClick={() => setDeletingIncome(inc)}
-                        title="מחק"
-                        style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
-                        onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
-                        onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => setEditingIncome(inc)}
+                          title="ערוך"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                          onMouseEnter={(el) => { el.currentTarget.style.background = "#F0F0EE"; el.currentTarget.style.color = "#1A1A1A"; }}
+                          onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      )}
+                      {canWrite && (
+                        <button
+                          onClick={() => setDeletingIncome(inc)}
+                          title="מחק"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                          onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
+                          onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

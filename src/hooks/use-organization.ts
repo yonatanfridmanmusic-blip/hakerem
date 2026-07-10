@@ -96,6 +96,16 @@ export function useOrgId(): string | null {
   return data?.organization?.id ?? null;
 }
 
+/**
+ * Returns true if the current user can write (insert/update/delete) data.
+ * Viewers are read-only; owners and admins have full write access.
+ */
+export function useCanWrite(): boolean {
+  const { data } = useOrganization();
+  const role = data?.role;
+  return role === "owner" || role === "admin";
+}
+
 // ─── List all organizations (for join flow) ───────────────────────────────────
 
 export function useAllOrganizations() {

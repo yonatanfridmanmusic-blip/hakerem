@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, X, AlertTriangle, Pencil, Trash2, Search, Paperclip, Check, Upload } from "lucide-react";
+import { useCanWrite } from "@/hooks/use-organization";
 import { DateInput } from "@/components/ui/date-input";
 import { CategorySearchSelect } from "@/components/ui/category-search-select";
 import { useCountUp } from "@/hooks/use-count-up";
@@ -621,6 +622,7 @@ function ExpenseMobileCard({
 }) {
   const style = getSourceStyle(sources, e.source);
   const label = getSourceLabel(sources, e.source);
+  const canWrite = useCanWrite();
   return (
     <div style={{
       padding: "14px 16px",
@@ -679,20 +681,24 @@ function ExpenseMobileCard({
             <Paperclip size={14} />
           </button>
         )}
-        <button onClick={() => onEdit(e)} style={{
-          background: "#F7F4EF", border: "none", borderRadius: "9px",
-          width: "36px", height: "36px", display: "flex", alignItems: "center",
-          justifyContent: "center", cursor: "pointer", color: "#6B6560",
-        }}>
-          <Pencil size={14} />
-        </button>
-        <button onClick={() => onDelete(e)} style={{
-          background: "#FEF2F2", border: "none", borderRadius: "9px",
-          width: "36px", height: "36px", display: "flex", alignItems: "center",
-          justifyContent: "center", cursor: "pointer", color: "#DC2626",
-        }}>
-          <Trash2 size={14} />
-        </button>
+        {canWrite && (
+          <button onClick={() => onEdit(e)} style={{
+            background: "#F7F4EF", border: "none", borderRadius: "9px",
+            width: "36px", height: "36px", display: "flex", alignItems: "center",
+            justifyContent: "center", cursor: "pointer", color: "#6B6560",
+          }}>
+            <Pencil size={14} />
+          </button>
+        )}
+        {canWrite && (
+          <button onClick={() => onDelete(e)} style={{
+            background: "#FEF2F2", border: "none", borderRadius: "9px",
+            width: "36px", height: "36px", display: "flex", alignItems: "center",
+            justifyContent: "center", cursor: "pointer", color: "#DC2626",
+          }}>
+            <Trash2 size={14} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1178,6 +1184,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
 
 export default function ExpensesPage() {
   const isMobile = useIsMobile();
+  const canWrite = useCanWrite();
   const [filter, setFilter] = useState<BudgetSource | "all">("all");
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
@@ -1240,32 +1247,34 @@ export default function ExpensesPage() {
                 : `${(expenses ?? []).length} הוצאות · סה״כ ${fmt(total)}`}
             </p>
           </div>
-          <div style={{ display: "flex", gap: "8px", width: isMobile ? "100%" : "auto", flexShrink: 0 }}>
-            <button onClick={() => setShowBulkImport(true)} style={{
-              display: "flex", alignItems: "center", gap: "7px",
-              padding: isMobile ? "11px 0" : "10px 14px",
-              flex: isMobile ? 1 : "none",
-              justifyContent: "center",
-              background: "#fff",
-              border: "1px solid #1A3D2B", borderRadius: "10px", color: "#1A3D2B",
-              fontSize: "14px", fontWeight: "500", cursor: "pointer",
-              fontFamily: "var(--font-sans)",
-            }}>
-              <Upload size={15} />ייבוא מרובה
-            </button>
-            <button onClick={() => setShowAdd(true)} style={{
-              display: "flex", alignItems: "center", gap: "7px",
-              padding: isMobile ? "11px 0" : "10px 18px",
-              flex: isMobile ? 1 : "none",
-              justifyContent: "center",
-              background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
-              border: "none", borderRadius: "10px", color: "#fff",
-              fontSize: "14px", fontWeight: "500", cursor: "pointer",
-              fontFamily: "var(--font-sans)", boxShadow: "0 4px 12px rgba(26,61,43,0.3)",
-            }}>
-              <Plus size={16} />הוסף הוצאה
-            </button>
-          </div>
+          {canWrite && (
+            <div style={{ display: "flex", gap: "8px", width: isMobile ? "100%" : "auto", flexShrink: 0 }}>
+              <button onClick={() => setShowBulkImport(true)} style={{
+                display: "flex", alignItems: "center", gap: "7px",
+                padding: isMobile ? "11px 0" : "10px 14px",
+                flex: isMobile ? 1 : "none",
+                justifyContent: "center",
+                background: "#fff",
+                border: "1px solid #1A3D2B", borderRadius: "10px", color: "#1A3D2B",
+                fontSize: "14px", fontWeight: "500", cursor: "pointer",
+                fontFamily: "var(--font-sans)",
+              }}>
+                <Upload size={15} />ייבוא מרובה
+              </button>
+              <button onClick={() => setShowAdd(true)} style={{
+                display: "flex", alignItems: "center", gap: "7px",
+                padding: isMobile ? "11px 0" : "10px 18px",
+                flex: isMobile ? 1 : "none",
+                justifyContent: "center",
+                background: "linear-gradient(135deg, #2D6644, #1A3D2B)",
+                border: "none", borderRadius: "10px", color: "#fff",
+                fontSize: "14px", fontWeight: "500", cursor: "pointer",
+                fontFamily: "var(--font-sans)", boxShadow: "0 4px 12px rgba(26,61,43,0.3)",
+              }}>
+                <Plus size={16} />הוסף הוצאה
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Hero */}
@@ -1455,24 +1464,28 @@ export default function ExpensesPage() {
                           <Paperclip size={13} />
                         </button>
                       )}
-                      <button
-                        onClick={() => setEditingExpense(e)}
-                        title="ערוך"
-                        style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
-                        onMouseEnter={(el) => { el.currentTarget.style.background = "#F0F0EE"; el.currentTarget.style.color = "#1A1A1A"; }}
-                        onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        onClick={() => setDeletingExpense(e)}
-                        title="מחק"
-                        style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
-                        onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
-                        onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => setEditingExpense(e)}
+                          title="ערוך"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                          onMouseEnter={(el) => { el.currentTarget.style.background = "#F0F0EE"; el.currentTarget.style.color = "#1A1A1A"; }}
+                          onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      )}
+                      {canWrite && (
+                        <button
+                          onClick={() => setDeletingExpense(e)}
+                          title="מחק"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "5px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                          onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
+                          onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

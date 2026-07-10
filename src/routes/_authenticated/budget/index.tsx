@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { Plus, Check, X, Pencil, ChevronDown, Copy, Trash2 } from "lucide-react";
+import { useCanWrite } from "@/hooks/use-organization";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { toast } from "sonner";
 import {
@@ -286,6 +287,7 @@ function AmountCell({
   const [value, setValue] = useState(String(category.planned_amount));
   const inputRef = useRef<HTMLInputElement>(null);
   const updateMutation = useUpdatePlannedAmount();
+  const canWrite = useCanWrite();
 
   useEffect(() => {
     if (editing) inputRef.current?.select();
@@ -374,6 +376,14 @@ function AmountCell({
     );
   }
 
+  if (!canWrite) {
+    return (
+      <span className="num" style={{ fontSize: "14px", fontWeight: "500", color: "#1A1A1A" }}>
+        {fmt(category.planned_amount)}
+      </span>
+    );
+  }
+
   return (
     <div
       style={{
@@ -400,6 +410,8 @@ function AmountCell({
 function DeleteCatButton({ categoryId, color }: { categoryId: string; color: string }) {
   const [confirming, setConfirming] = useState(false);
   const deleteMutation = useDeleteBudgetCategory();
+  const canWrite = useCanWrite();
+  if (!canWrite) return null;
 
   if (confirming) {
     return (
@@ -659,6 +671,7 @@ function SourceTab({
   years: ReturnType<typeof useSchoolYears>["data"] & {};
 }) {
   const isMobile = useIsMobile();
+  const canWrite = useCanWrite();
   const { data, isLoading } = useBudgetPlan(srcCfg.key, targetYearId);
   const categories = data?.categories ?? [];
   const [addingRow, setAddingRow] = useState(false);
@@ -1010,7 +1023,7 @@ function SourceTab({
         )}
 
         {/* Add row */}
-        {addingRow && (
+        {canWrite && addingRow && (
           <AddCategoryRow
             source={srcCfg.key}
             color={srcCfg.color}
@@ -1022,7 +1035,7 @@ function SourceTab({
       </div>
 
       {/* Add button */}
-      {!addingRow && (
+      {canWrite && !addingRow && (
         <button
           onClick={() => setAddingRow(true)}
           style={{
