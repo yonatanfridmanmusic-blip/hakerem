@@ -432,12 +432,14 @@ function YearsTab() {
   const [pct, setPct]           = useState("85");
 
   const handleCreate = async () => {
-    if (!name.trim()) { alert("נא להזין שם לשנת הלימודים"); return; }
-    if (!startDate || !endDate) { alert("נא להזין תאריכי התחלה וסיום"); return; }
-    if (endDate <= startDate) { alert("תאריך הסיום חייב להיות אחרי תאריך ההתחלה"); return; }
-    await createYear.mutateAsync({ name, start_date: startDate, end_date: endDate, collection_percentage: Number(pct) });
-    setName(""); setStart(""); setEnd(""); setPct("85");
-    setShowForm(false);
+    if (!name.trim()) { toast.error("נא להזין שם לשנת הלימודים"); return; }
+    if (!startDate || !endDate) { toast.error("נא להזין תאריכי התחלה וסיום"); return; }
+    if (endDate <= startDate) { toast.error("תאריך הסיום חייב להיות אחרי תאריך ההתחלה"); return; }
+    try {
+      await createYear.mutateAsync({ name, start_date: startDate, end_date: endDate, collection_percentage: Number(pct) });
+      setName(""); setStart(""); setEnd(""); setPct("85");
+      setShowForm(false);
+    } catch { toast.error("שגיאה ביצירת שנת הלימודים"); }
   };
 
   if (isLoading) return <Loader />;
@@ -519,7 +521,7 @@ function YearsTab() {
                 </button>
               )}
               {!y.is_active && (
-                <button type="button" style={btnOutline} onClick={() => setActive.mutate(y.id)} disabled={setActive.isPending}>
+                <button type="button" style={btnOutline} onClick={() => setActive.mutate(y.id, { onError: () => toast.error("שגיאה בהגדרת השנה הפעילה") })} disabled={setActive.isPending}>
                   הגדר כפעיל
                 </button>
               )}
@@ -527,7 +529,7 @@ function YearsTab() {
                 <div style={{ display: "flex", gap: "6px", alignItems: "center", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "5px 10px" }}>
                   <span style={{ fontSize: "12px", color: "#991B1B" }}>למחוק את "{y.name}"?</span>
                   <button type="button"
-                    onClick={async () => { await deleteYear.mutateAsync(y.id); setConfirmDeleteId(null); }}
+                    onClick={async () => { try { await deleteYear.mutateAsync(y.id); setConfirmDeleteId(null); } catch { toast.error("שגיאה במחיקת השנה"); } }}
                     disabled={deleteYear.isPending}
                     style={{ padding: "3px 10px", borderRadius: "6px", border: "none", background: "#B91C1C", color: "#fff", fontSize: "11px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
                     {deleteYear.isPending ? "..." : "מחק"}
@@ -616,8 +618,10 @@ function GradesTab() {
 
   const handleAdd = async () => {
     if (!resolvedName || !activeYear) return;
-    await addGrade.mutateAsync({ name: resolvedName, student_count: Number(count), yearId: activeYear.id });
-    setSelectedLetter(""); setCustomName(""); setCount("0"); setShowForm(false);
+    try {
+      await addGrade.mutateAsync({ name: resolvedName, student_count: Number(count), yearId: activeYear.id });
+      setSelectedLetter(""); setCustomName(""); setCount("0"); setShowForm(false);
+    } catch { toast.error("שגיאה בהוספת השכבה"); }
   };
 
   if (!activeYear) return (
@@ -655,8 +659,10 @@ function GradesTab() {
               </div>
               <Row>
                 <button type="button" style={btnPrimary} onClick={async () => {
-                  await updateGrade.mutateAsync({ id: editId, name: editVals.name, student_count: Number(editVals.count) });
-                  setEditId(null);
+                  try {
+                    await updateGrade.mutateAsync({ id: editId, name: editVals.name, student_count: Number(editVals.count) });
+                    setEditId(null);
+                  } catch { toast.error("שגיאה בעדכון השכבה"); }
                 }} disabled={updateGrade.isPending}>שמור</button>
                 <button type="button" style={btnOutline} onClick={() => setEditId(null)}>ביטול</button>
               </Row>
@@ -675,7 +681,7 @@ function GradesTab() {
                   <div style={{ display: "flex", gap: "6px", alignItems: "center", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "5px 10px" }}>
                     <span style={{ fontSize: "12px", color: "#991B1B" }}>למחוק את "{g.name}"?</span>
                     <button type="button"
-                      onClick={async () => { await deleteGrade.mutateAsync(g.id); setConfirmDeleteGradeId(null); }}
+                      onClick={async () => { try { await deleteGrade.mutateAsync(g.id); setConfirmDeleteGradeId(null); } catch { toast.error("שגיאה במחיקת השכבה"); } }}
                       disabled={deleteGrade.isPending}
                       style={{ padding: "3px 10px", borderRadius: "6px", border: "none", background: "#B91C1C", color: "#fff", fontSize: "11px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
                       {deleteGrade.isPending ? "..." : "מחק"}
@@ -1070,9 +1076,11 @@ function CategoryList({ source, color, bg, textColor }: { source: BudgetSource; 
     const trimmed = catName.trim();
     if (!trimmed) return;
     const duplicate = categories.some((c) => c.name.trim() === trimmed);
-    if (duplicate) { alert(`קטגוריה בשם "${trimmed}" כבר קיימת`); return; }
-    await addCategory.mutateAsync({ name: trimmed, source, plannedAmount: Number(planned) });
-    setCatName(""); setPlanned("0"); setShowForm(false);
+    if (duplicate) { toast.error(`קטגוריה בשם "${trimmed}" כבר קיימת`); return; }
+    try {
+      await addCategory.mutateAsync({ name: trimmed, source, plannedAmount: Number(planned) });
+      setCatName(""); setPlanned("0"); setShowForm(false);
+    } catch { toast.error("שגיאה בהוספת הקטגוריה"); }
   };
 
   const categories = data?.categories ?? [];
@@ -1563,7 +1571,7 @@ function TeamTab() {
               <button
                 type="button"
                 style={btnDanger}
-                onClick={() => removeMember.mutate(m.id)}
+                onClick={() => removeMember.mutate(m.id, { onError: () => toast.error("שגיאה בהסרת החבר") })}
                 disabled={removeMember.isPending}
               >
                 הסר

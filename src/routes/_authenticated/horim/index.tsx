@@ -184,7 +184,10 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
               <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "10px", border: "1px solid #EAE5DE", background: s.is_active ? "#fff" : "#FAFAF8" }}>
                 <span style={{ fontSize: "14px", color: s.is_active ? "#1A1A1A" : "#AAA099" }}>{s.name}</span>
                 <button
-                  onClick={() => toggleSection.mutate({ id: s.id, isActive: !s.is_active })}
+                  onClick={() => toggleSection.mutate(
+                    { id: s.id, isActive: !s.is_active },
+                    { onError: () => toast.error("שגיאה בעדכון הסעיף") }
+                  )}
                   style={{
                     padding: "4px 12px", borderRadius: "6px", fontSize: "12px", cursor: "pointer",
                     border: `1px solid ${s.is_active ? "#E8E2D9" : "#8B2F6E"}`,
