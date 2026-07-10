@@ -476,9 +476,12 @@ async function callClaude(
           const src = normSrc(String(inp.source ?? ""), srcs);
           const lbl = srcs.find(s => s.slug === src)?.label ?? src;
           const rawCatId = inp.budget_category_id ? String(inp.budget_category_id) : null;
-          const catId = isUUID(rawCatId) ? rawCatId : null;
+          let catId: string | null = isUUID(rawCatId) ? rawCatId : null;
           let catName: string | null = null;
-          if (catId) { const { data: catR } = await uc.from("budget_categories").select("name").eq("id", catId).maybeSingle(); catName = catR?.name ?? null; }
+          if (catId) {
+            const { data: catR } = await uc.from("budget_categories").select("name").eq("id", catId).maybeSingle();
+            if (catR) { catName = catR.name; } else { catId = null; } // UUID doesn't exist — ignore it
+          }
           if (blk.name === "add_expense") {
             const d = String(inp.expense_date ?? today);
             const payload = { school_year_id: yid, description: String(inp.description ?? ""), amount: Number(inp.amount ?? 0), source: src, expense_date: d, bank_account: "school", target_grade_ids: [], budget_category_id: catId, supplier: inp.supplier ? String(inp.supplier) : null, created_by: uid };
@@ -501,9 +504,12 @@ async function callClaude(
             const src = normSrc(String(exp.source ?? ""), srcs);
             const lbl = srcs.find(s => s.slug === src)?.label ?? src;
             const rawCatId = exp.budget_category_id ?? null;
-            const catId = isUUID(rawCatId) ? rawCatId : null;
+            let catId: string | null = isUUID(rawCatId) ? rawCatId : null;
             let catName: string | null = null;
-            if (catId) { const { data: catR } = await uc.from("budget_categories").select("name").eq("id", catId).maybeSingle(); catName = catR?.name ?? null; }
+            if (catId) {
+              const { data: catR } = await uc.from("budget_categories").select("name").eq("id", catId).maybeSingle();
+              if (catR) { catName = catR.name; } else { catId = null; }
+            }
             const d = String(exp.expense_date ?? today);
             const payload = { school_year_id: yid, description: String(exp.description ?? ""), amount: Number(exp.amount ?? 0), source: src, expense_date: d, bank_account: "school", target_grade_ids: [], budget_category_id: catId, supplier: exp.supplier ? String(exp.supplier) : null, created_by: uid };
             const preview = { type: "add_expense", description: String(exp.description ?? ""), amount: Number(exp.amount ?? 0), source_slug: src, source_label: lbl, date: d, budget_category_id: catId, category_name: catName, supplier: exp.supplier ? String(exp.supplier) : null };
@@ -698,7 +704,13 @@ async function handleConfirm(
       if (!payload.bank_account) payload.bank_account = "school";
       if (dr.action_type === "add_expense" && !payload.target_grade_ids) payload.target_grade_ids = [];
       const rawCatId = payload.budget_category_id != null ? String(payload.budget_category_id) : null;
-      if (!isUUID(rawCatId)) payload.budget_category_id = null;
+      if (!isUUID(rawCatId)) {
+        payload.budget_category_id = null;
+      } else {
+        // Verify the category actually exists (AI sometimes hallucates example UUIDs)
+        const { data: catExists } = await sc.from("budget_categories").select("id").eq("id", rawCatId).maybeSingle();
+        if (!catExists) payload.budget_category_id = null;
+      }
       const tbl = dr.action_type === "add_expense" ? "expenses" : "income";
       const { data: ins, error: ie } = await sc.from(tbl).insert(payload).select("id").single();
       if (ie) throw ie;
@@ -800,8 +812,9 @@ async function handleConfirm(
     return json({ reply: msg, executed: true });
 
   } catch (err) {
-    console.error("handleConfirm error:", String(err));
-    const errMsg = "שגיאה בביצוע: " + String(err);
+    const errStr = err instanceof Error ? err.message : ((err as { message?: string })?.message ?? JSON.stringify(err));
+    console.error("handleConfirm error:", errStr);
+    const errMsg = "שגיאה בביצוע: " + errStr;
     if (cid) await uc.from("ai_messages").insert({ conversation_id: cid, user_id: uid, role: "assistant", content: errMsg });
     return json({ error: errMsg, executed: false }, 500);
   }
