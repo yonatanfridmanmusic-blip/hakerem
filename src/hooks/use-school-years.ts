@@ -137,6 +137,130 @@ export function useUpdateSchoolYear() {
   });
 }
 
+// ─── Copy year data ────────────────────────────────────────────────────────────
+
+export interface CopyYearOptions {
+  copyGrades: boolean;
+  copySections: boolean;
+  copyAmounts: boolean;          // grade_section_amounts (needs grades+sections)
+  copyBudgetCategories: boolean;
+}
+
+export interface CopyYearResult {
+  grades: number;
+  sections: number;
+  amounts: number;
+  categories: number;
+}
+
+export function useCopyYearData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      fromYearId,
+      toYearId,
+      options,
+    }: {
+      fromYearId: string;
+      toYearId: string;
+      options: CopyYearOptions;
+    }): Promise<CopyYearResult> => {
+      const result: CopyYearResult = { grades: 0, sections: 0, amounts: 0, categories: 0 };
+      const gradeIdMap: Record<string, string> = {};
+      const sectionIdMap: Record<string, string> = {};
+
+      // 1. Copy grades
+      if (options.copyGrades) {
+        const { data: src, error: e1 } = await supabase
+          .from("grades")
+          .select("id, name, student_count, order_index")
+          .eq("school_year_id", fromYearId)
+          .order("order_index");
+        if (e1) throw e1;
+        if (src && src.length > 0) {
+          const { data: inserted, error: e2 } = await supabase
+            .from("grades")
+            .insert(src.map((g) => ({ name: g.name, student_count: g.student_count, order_index: g.order_index, school_year_id: toYearId })))
+            .select("id");
+          if (e2) throw e2;
+          src.forEach((g, i) => { if (inserted?.[i]) gradeIdMap[g.id] = inserted[i].id; });
+          result.grades = src.length;
+        }
+      }
+
+      // 2. Copy parent sections
+      if (options.copySections) {
+        const { data: src, error: e3 } = await supabase
+          .from("parent_sections")
+          .select("id, name, order_index")
+          .eq("school_year_id", fromYearId)
+          .order("order_index");
+        if (e3) throw e3;
+        if (src && src.length > 0) {
+          const { data: inserted, error: e4 } = await supabase
+            .from("parent_sections")
+            .insert(src.map((s) => ({ name: s.name, order_index: s.order_index, school_year_id: toYearId })))
+            .select("id");
+          if (e4) throw e4;
+          src.forEach((s, i) => { if (inserted?.[i]) sectionIdMap[s.id] = inserted[i].id; });
+          result.sections = src.length;
+        }
+      }
+
+      // 3. Copy grade_section_amounts (requires grades + sections maps)
+      if (options.copyAmounts) {
+        const { data: src, error: e5 } = await supabase
+          .from("grade_section_amounts")
+          .select("grade_id, parent_section_id, amount_per_student")
+          .eq("school_year_id", fromYearId);
+        if (e5) throw e5;
+        if (src && src.length > 0) {
+          const rows = src
+            .filter((a) => gradeIdMap[a.grade_id] && sectionIdMap[a.parent_section_id])
+            .map((a) => ({
+              grade_id: gradeIdMap[a.grade_id],
+              parent_section_id: sectionIdMap[a.parent_section_id],
+              amount_per_student: a.amount_per_student,
+              school_year_id: toYearId,
+            }));
+          if (rows.length > 0) {
+            const { error: e6 } = await supabase.from("grade_section_amounts").insert(rows);
+            if (e6) throw e6;
+            result.amounts = rows.length;
+          }
+        }
+      }
+
+      // 4. Copy budget categories
+      if (options.copyBudgetCategories) {
+        const { data: src, error: e7 } = await supabase
+          .from("budget_categories")
+          .select("name, source, planned_amount, order_index")
+          .eq("school_year_id", fromYearId)
+          .order("order_index");
+        if (e7) throw e7;
+        if (src && src.length > 0) {
+          const { error: e8 } = await supabase
+            .from("budget_categories")
+            .insert(src.map((c) => ({ name: c.name, source: c.source, planned_amount: c.planned_amount, order_index: c.order_index, school_year_id: toYearId })));
+          if (e8) throw e8;
+          result.categories = src.length;
+        }
+      }
+
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
+      queryClient.invalidateQueries({ queryKey: ["parent-sections"] });
+      queryClient.invalidateQueries({ queryKey: ["grade-section-amounts"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      queryClient.invalidateQueries({ queryKey: ["horim"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
 export function useSetActiveYear() {
   const queryClient = useQueryClient();
   return useMutation({

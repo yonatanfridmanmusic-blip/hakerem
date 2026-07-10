@@ -7,6 +7,10 @@ import {
   useCreateSchoolYear,
   useSetActiveYear,
   useDeleteSchoolYear,
+  useCopyYearData,
+  type CopyYearOptions,
+  type CopyYearResult,
+  type SchoolYear,
 } from "@/hooks/use-school-years";
 import { useGrades, useAddGrade, useUpdateGrade, useDeleteGrade } from "@/hooks/use-grades";
 import {
@@ -188,6 +192,227 @@ function SettingsPage() {
   );
 }
 
+// ─── Copy Year Modal ────────────────────────────────────────────────────────
+
+function CopyYearModal({
+  targetYear,
+  years,
+  onClose,
+}: {
+  targetYear: SchoolYear;
+  years: SchoolYear[];
+  onClose: () => void;
+}) {
+  const isMobile = useIsMobile();
+  const otherYears = years.filter((y) => y.id !== targetYear.id);
+  const [fromYearId, setFromYearId] = useState(otherYears[0]?.id ?? "");
+  const [opts, setOpts] = useState<CopyYearOptions>({
+    copyGrades: true,
+    copySections: true,
+    copyAmounts: true,
+    copyBudgetCategories: true,
+  });
+  const [done, setDone] = useState<CopyYearResult | null>(null);
+  const copyMutation = useCopyYearData();
+
+  const allSelected = Object.values(opts).every((v) => v);
+  const noneSelected = !Object.values(opts).some((v) => v);
+
+  const toggleAll = () => {
+    const next = !allSelected;
+    setOpts({ copyGrades: next, copySections: next, copyAmounts: next, copyBudgetCategories: next });
+  };
+
+  const toggle = (k: keyof CopyYearOptions) => {
+    setOpts((prev) => {
+      const next = { ...prev, [k]: !prev[k] };
+      // copyAmounts requires grades+sections
+      if (k === "copyAmounts" && next.copyAmounts) {
+        next.copyGrades = true;
+        next.copySections = true;
+      }
+      if ((k === "copyGrades" || k === "copySections") && !next[k]) {
+        next.copyAmounts = false;
+      }
+      return next;
+    });
+  };
+
+  const handleCopy = async () => {
+    if (!fromYearId) { toast.error("בחרי שנת מקור"); return; }
+    if (noneSelected) { toast.error("בחרי לפחות פריט אחד להעתקה"); return; }
+    try {
+      const res = await copyMutation.mutateAsync({ fromYearId, toYearId: targetYear.id, options: opts });
+      setDone(res);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בהעתקה");
+    }
+  };
+
+  const srcYear = otherYears.find((y) => y.id === fromYearId);
+
+  const checkboxRow = (
+    key: keyof CopyYearOptions,
+    label: string,
+    sub: string,
+    disabled?: boolean,
+  ) => (
+    <label key={key} style={{
+      display: "flex", alignItems: "flex-start", gap: "12px",
+      padding: "12px 14px", borderRadius: "10px",
+      border: `1.5px solid ${opts[key] ? "#2D6644" : "#E8E2D9"}`,
+      background: opts[key] ? "#F0FAF4" : "#FAFAF8",
+      cursor: disabled ? "not-allowed" : "pointer",
+      opacity: disabled ? 0.45 : 1,
+      transition: "all 0.12s",
+    }}>
+      <input
+        type="checkbox"
+        checked={opts[key]}
+        disabled={disabled}
+        onChange={() => toggle(key)}
+        style={{ marginTop: "2px", accentColor: "#2D6644", width: "16px", height: "16px", cursor: disabled ? "not-allowed" : "pointer", flexShrink: 0 }}
+      />
+      <div>
+        <div style={{ fontSize: "13.5px", fontWeight: "600", color: "#1A1A1A" }}>{label}</div>
+        <div style={{ fontSize: "12px", color: "#7A7470", marginTop: "2px" }}>{sub}</div>
+      </div>
+    </label>
+  );
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.45)",
+      display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center",
+      padding: isMobile ? 0 : "20px",
+    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        background: "#fff",
+        borderRadius: isMobile ? "20px 20px 0 0" : "18px",
+        width: "100%", maxWidth: isMobile ? "100%" : "480px",
+        padding: isMobile ? "28px 20px 32px" : "32px",
+        boxShadow: "0 24px 80px rgba(0,0,0,0.2)",
+        maxHeight: isMobile ? "90vh" : "85vh",
+        overflowY: "auto",
+      }}>
+
+        {/* Header */}
+        <div style={{ marginBottom: "20px" }}>
+          <div style={{ fontSize: "18px", fontWeight: "700", color: "#1A1A1A", marginBottom: "6px" }}>
+            העתק תכנון לשנה
+          </div>
+          <div style={{ fontSize: "13px", color: "#7A7470", lineHeight: 1.55 }}>
+            מעתיק נתוני תכנון לשנת <strong>{targetYear.name}</strong>.<br />
+            נתוני תשלומים, הוצאות והכנסות לא יועתקו.
+          </div>
+        </div>
+
+        {done ? (
+          /* ── Success state ── */
+          <div>
+            <div style={{ textAlign: "center", padding: "24px 0 16px" }}>
+              <div style={{ fontSize: "40px", marginBottom: "12px" }}>✅</div>
+              <div style={{ fontSize: "16px", fontWeight: "700", color: "#1A1A1A", marginBottom: "6px" }}>
+                ההעתקה הושלמה!
+              </div>
+              <div style={{ fontSize: "13px", color: "#6B6560", lineHeight: 1.7 }}>
+                {done.grades > 0 && <div>📚 {done.grades} שכבות</div>}
+                {done.sections > 0 && <div>💜 {done.sections} סעיפי גבייה</div>}
+                {done.amounts > 0 && <div>🎯 {done.amounts} יעדי גבייה</div>}
+                {done.categories > 0 && <div>📊 {done.categories} קטגוריות תקציב</div>}
+              </div>
+            </div>
+            <button onClick={onClose} style={{
+              width: "100%", padding: "12px 0", border: "none", borderRadius: "10px",
+              background: "linear-gradient(135deg, #2D6644, #1A3D2B)", color: "#fff",
+              fontSize: "14px", fontWeight: "600", cursor: "pointer", fontFamily: "var(--font-sans)",
+            }}>
+              סגור
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Source year selector */}
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ fontSize: "12px", fontWeight: "600", color: "#7A7470", letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: "8px" }}>
+                העתק מ-
+              </div>
+              <select
+                value={fromYearId}
+                onChange={(e) => setFromYearId(e.target.value)}
+                style={{
+                  width: "100%", padding: "10px 14px", border: "1.5px solid #E8E2D9",
+                  borderRadius: "10px", fontSize: "14px", color: "#1A1A1A",
+                  background: "#fff", outline: "none", fontFamily: "var(--font-sans)",
+                  cursor: "pointer",
+                }}>
+                {otherYears.map((y) => (
+                  <option key={y.id} value={y.id}>{y.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* What to copy */}
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                <div style={{ fontSize: "12px", fontWeight: "600", color: "#7A7470", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                  מה להעתיק
+                </div>
+                <button onClick={toggleAll} style={{
+                  fontSize: "12px", color: "#2D6644", background: "none", border: "none",
+                  cursor: "pointer", fontFamily: "var(--font-sans)", fontWeight: "600", padding: "2px 6px",
+                }}>
+                  {allSelected ? "נקה הכל" : "בחר הכל"}
+                </button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {checkboxRow("copyGrades", "שכבות וכיתות", "שמות שכבות ומספר תלמידים")}
+                {checkboxRow("copySections", "סעיפי גביית הורים", "שמות הסעיפים (שכר לימוד, טיולים וכו׳)")}
+                {checkboxRow("copyAmounts", "יעדי גביית הורים", "סכום לתלמיד לפי שכבה וסעיף", !opts.copyGrades || !opts.copySections)}
+                {checkboxRow("copyBudgetCategories", "קטגוריות תקציב", "קטגוריות + סכומים מתוכננים לפי מקור")}
+              </div>
+            </div>
+
+            {/* Source year summary */}
+            {srcYear && (
+              <div style={{
+                background: "#F7F4EF", borderRadius: "10px", padding: "10px 14px",
+                fontSize: "12.5px", color: "#7A7470", marginBottom: "20px",
+                display: "flex", alignItems: "center", gap: "8px",
+              }}>
+                <span style={{ fontSize: "15px" }}>📋</span>
+                <span>מעתיק מ-<strong style={{ color: "#1A1A1A" }}>{srcYear.name}</strong> → <strong style={{ color: "#1A1A1A" }}>{targetYear.name}</strong></span>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={onClose} style={{
+                flex: 1, padding: "12px 0", border: "1px solid #E8E2D9", borderRadius: "10px",
+                background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)",
+              }}>ביטול</button>
+              <button
+                onClick={handleCopy}
+                disabled={copyMutation.isPending || noneSelected}
+                style={{
+                  flex: 2, padding: "12px 0", border: "none", borderRadius: "10px",
+                  background: copyMutation.isPending || noneSelected
+                    ? "#C8C2BB"
+                    : "linear-gradient(135deg, #2D6644, #1A3D2B)",
+                  color: "#fff", fontSize: "14px", fontWeight: "600",
+                  cursor: copyMutation.isPending || noneSelected ? "not-allowed" : "pointer",
+                  fontFamily: "var(--font-sans)", transition: "background 0.15s",
+                }}>
+                {copyMutation.isPending ? "מעתיק..." : "העתק"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Years tab ─────────────────────────────────────────────────────────────
 
 function YearsTab() {
@@ -199,6 +424,8 @@ function YearsTab() {
 
   const [showForm, setShowForm] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [copyTargetId, setCopyTargetId] = useState<string | null>(null);
+  const copyTargetYear = years.find((y) => y.id === copyTargetId);
   const [name, setName]         = useState("");
   const [startDate, setStart]   = useState("");
   const [endDate, setEnd]       = useState("");
@@ -219,6 +446,13 @@ function YearsTab() {
 
   return (
     <div>
+      {copyTargetYear && (
+        <CopyYearModal
+          targetYear={copyTargetYear}
+          years={years}
+          onClose={() => setCopyTargetId(null)}
+        />
+      )}
       {/* Banner: years exist but none active */}
       {hasNoActiveYear && (
         <div style={{
@@ -268,6 +502,22 @@ function YearsTab() {
               </div>
             </div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              {years.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setCopyTargetId(y.id)}
+                  title="העתק תכנון משנה אחרת"
+                  style={{
+                    padding: "6px 10px", borderRadius: "7px",
+                    border: "1px solid #D4E8DA", background: "#F0FAF4",
+                    color: "#2D6644", fontSize: "12px", fontWeight: "600",
+                    cursor: "pointer", fontFamily: "var(--font-sans)",
+                    display: "flex", alignItems: "center", gap: "5px",
+                    whiteSpace: "nowrap",
+                  }}>
+                  ⬇ העתק תכנון
+                </button>
+              )}
               {!y.is_active && (
                 <button type="button" style={btnOutline} onClick={() => setActive.mutate(y.id)} disabled={setActive.isPending}>
                   הגדר כפעיל
