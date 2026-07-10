@@ -58,8 +58,7 @@ export function useExpenses(sourceFilter?: BudgetSource | "all") {
 
       const { data, error } = await query;
       if (error) throw error;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ ...r, amount: Number(r.amount) })) as Expense[];
+      return (data ?? []).map((r) => ({ ...r, amount: Number(r.amount) })) as unknown as Expense[];
     },
     staleTime: 1000 * 60,
   });

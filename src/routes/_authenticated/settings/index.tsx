@@ -1568,7 +1568,7 @@ function NotificationsTab() {
       const token = session?.access_token;
       if (!token) { setStatus("err"); setMsg("לא מחובר"); return; }
       const res = await fetch(
-        `https://jzadxvhtshfgqouxoprq.supabase.co/functions/v1/${fn}`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fn}`,
         {
           method: "POST",
           headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
