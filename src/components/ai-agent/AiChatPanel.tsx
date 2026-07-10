@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { X, Plus, Trash2, Check, XCircle, SendHorizonal } from "lucide-react";
+import { toast } from "sonner";
 import { useAiAgent } from "./AiAgentContext";
 import {
   useAiConversations,
@@ -729,7 +730,7 @@ function ConvList({
             <button
               type="button"
               className="del-btn"
-              onClick={e => { e.stopPropagation(); del.mutate(c.id); }}
+              onClick={e => { e.stopPropagation(); del.mutate(c.id, { onError: () => toast.error("שגיאה במחיקת השיחה") }); }}
               style={{
                 position: "absolute",
                 left: "5px",

@@ -12,6 +12,7 @@ import { useAddBudgetCategory, useDeleteBudgetCategory, useUpdatePlannedAmount, 
 import { useOrgBudgetSources, useAddBudgetSource, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { syncHorimBudgetCategory } from "@/hooks/use-horim";
 import { useIsMobile } from "@/hooks/use-is-mobile";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard/")({
   component: DashboardPage,
@@ -624,20 +625,24 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
 
   const handleAddCatSuggestion = async (name: string) => {
     if ((addedCats[effectiveCatSrc] ?? []).some(c => c.name === name)) return;
-    const result = await addCategory.mutateAsync({ name, source: effectiveCatSrc, plannedAmount: 0 });
-    if (result?.id) {
-      setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: [...(prev[effectiveCatSrc] ?? []), { id: result.id, name, amount: 0 }] }));
-    }
+    try {
+      const result = await addCategory.mutateAsync({ name, source: effectiveCatSrc, plannedAmount: 0 });
+      if (result?.id) {
+        setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: [...(prev[effectiveCatSrc] ?? []), { id: result.id, name, amount: 0 }] }));
+      }
+    } catch { toast.error("שגיאה בהוספת הקטגוריה"); }
   };
 
   const handleAddCustomCat = async () => {
     if (!catCustom.trim() || addCategory.isPending) return;
     const name = catCustom.trim();
-    const result = await addCategory.mutateAsync({ name, source: effectiveCatSrc, plannedAmount: 0 });
-    if (result?.id) {
-      setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: [...(prev[effectiveCatSrc] ?? []), { id: result.id, name, amount: 0 }] }));
-    }
-    setCatCustom("");
+    try {
+      const result = await addCategory.mutateAsync({ name, source: effectiveCatSrc, plannedAmount: 0 });
+      if (result?.id) {
+        setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: [...(prev[effectiveCatSrc] ?? []), { id: result.id, name, amount: 0 }] }));
+      }
+      setCatCustom("");
+    } catch { toast.error("שגיאה בהוספת הקטגוריה"); }
   };
 
   const handleDeleteCat = async (catId: string, src: string) => {
@@ -939,7 +944,7 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                         <span style={{ fontSize: "13.5px", fontWeight: "500", color: "#1A3D2B" }}>{g.name}</span>
                         <span style={{ fontSize: "12px", color: "#6B9E80", marginRight: "8px" }}> — {g.student_count} תלמידים</span>
                       </div>
-                      <button type="button" onClick={() => deleteGrade.mutateAsync(g.id)} title="הסר שכבה"
+                      <button type="button" onClick={async () => { try { await deleteGrade.mutateAsync(g.id); } catch { toast.error("שגיאה במחיקת השכבה"); } }} title="הסר שכבה"
                         style={{ background: "none", border: "none", cursor: "pointer", color: "#C0D8C0", padding: "2px", fontSize: "13px" }}
                         onMouseEnter={e => (e.currentTarget.style.color = "#E57373")}
                         onMouseLeave={e => (e.currentTarget.style.color = "#C0D8C0")}
@@ -993,9 +998,11 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                   <input autoFocus value={newSrcLabel} onChange={e => setNewSrcLabel(e.target.value)}
                     onKeyDown={async e => {
                       if (e.key === "Enter" && newSrcLabel.trim()) {
-                        await addBudgetSource.mutateAsync({ label: newSrcLabel.trim() });
-                        setCatSrc(newSrcLabel.trim().toLowerCase().replace(/\s+/g, "_"));
-                        setNewSrcLabel(""); setShowAddSrc(false);
+                        try {
+                          await addBudgetSource.mutateAsync({ label: newSrcLabel.trim() });
+                          setCatSrc(newSrcLabel.trim().toLowerCase().replace(/\s+/g, "_"));
+                          setNewSrcLabel(""); setShowAddSrc(false);
+                        } catch { toast.error("שגיאה בהוספת מקור התקציב"); }
                       }
                       if (e.key === "Escape") { setNewSrcLabel(""); setShowAddSrc(false); }
                     }}
@@ -1003,9 +1010,11 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                     style={{ width: "100px", padding: "5px 8px", border: "1.5px solid #D0DDD4", borderRadius: "7px", fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none" }} />
                   <button type="button" onClick={async () => {
                     if (!newSrcLabel.trim()) return;
-                    await addBudgetSource.mutateAsync({ label: newSrcLabel.trim() });
-                    setCatSrc(newSrcLabel.trim().toLowerCase().replace(/\s+/g, "_"));
-                    setNewSrcLabel(""); setShowAddSrc(false);
+                    try {
+                      await addBudgetSource.mutateAsync({ label: newSrcLabel.trim() });
+                      setCatSrc(newSrcLabel.trim().toLowerCase().replace(/\s+/g, "_"));
+                      setNewSrcLabel(""); setShowAddSrc(false);
+                    } catch { toast.error("שגיאה בהוספת מקור התקציב"); }
                   }} style={{ padding: "5px 10px", background: "#2D6644", color: "#fff", border: "none", borderRadius: "7px", fontSize: "12px", cursor: "pointer", fontFamily: "Rubik, sans-serif" }}>
                     הוסף
                   </button>

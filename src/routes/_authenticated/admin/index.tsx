@@ -4,6 +4,7 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { setViewAsOrg } from "@/lib/view-as";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
   ssr: false,
@@ -649,7 +650,7 @@ function AdminPage() {
           onGenerateCode={() => setCodeModalOrg(org)}
           onDeepDive={() => setDeepDiveOrg(org)}
           onPause={() => {
-            if (window.confirm(`לעצור את המנוי של "${org.name}"?`)) pauseSub.mutate(org.id);
+            if (window.confirm(`לעצור את המנוי של "${org.name}"?`)) pauseSub.mutate(org.id, { onError: () => toast.error("שגיאה בעצירת המנוי") });
           }}
           onDelete={() => { setDeleteErr(null); setConfirmDelete(org); }}
         />
