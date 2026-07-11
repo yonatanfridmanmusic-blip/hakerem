@@ -2,6 +2,7 @@ import { getActiveYearId } from "@/lib/active-year";
 import { useGrades as _useGradesCanonical } from "@/hooks/use-grades";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { showDeleteUndoToast, useUndoAuditEntry } from "@/hooks/use-audit-log";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -365,14 +366,18 @@ export function useUpdateParentCollection() {
 // Delete a parent collection
 export function useDeleteParentCollection() {
   const queryClient = useQueryClient();
+  const undoEntry = useUndoAuditEntry();
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("parent_collections").delete().eq("id", id);
       if (error) throw error;
+      return id;
     },
-    onSuccess: () => {
+    onSuccess: (id) => {
       queryClient.invalidateQueries({ queryKey: ["parent-collections"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
+      showDeleteUndoToast(id, "הגבייה נמחקה", (entryId) => undoEntry.mutate(entryId));
     },
   });
 }

@@ -2,6 +2,7 @@ import { getActiveYearId } from "@/lib/active-year";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { BudgetSource } from "@/types/budget";
+import { showDeleteUndoToast, useUndoAuditEntry } from "@/hooks/use-audit-log";
 
 export type { BudgetSource };
 
@@ -102,15 +103,19 @@ export function useUpdateExpense() {
 
 export function useDeleteExpense() {
   const queryClient = useQueryClient();
+  const undoEntry = useUndoAuditEntry();
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("expenses").delete().eq("id", id);
       if (error) throw error;
+      return id;
     },
-    onSuccess: () => {
+    onSuccess: (id) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
+      showDeleteUndoToast(id, "ההוצאה נמחקה", (entryId) => undoEntry.mutate(entryId));
     },
   });
 }

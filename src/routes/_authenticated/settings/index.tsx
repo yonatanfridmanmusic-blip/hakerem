@@ -36,12 +36,21 @@ import {
 } from "@/hooks/use-budget-sources";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  useAuditLog,
+  useUndoAuditEntry,
+  describeAuditEntry,
+  tableLabel,
+  actionLabel,
+  actionColor,
+  type AuditLogEntry,
+} from "@/hooks/use-audit-log";
 
 export const Route = createFileRoute("/_authenticated/settings/")({
   component: SettingsPage,
 });
 
-type Tab = "years" | "grades" | "categories" | "sources" | "team" | "license" | "notifications";
+type Tab = "years" | "grades" | "categories" | "sources" | "team" | "license" | "notifications" | "history";
 
 // ─── Source config (matches rest of app) ──────────────────────────────────
 
@@ -125,6 +134,7 @@ function SettingsPage() {
     { key: "team",       label: "צוות" },
     { key: "license",       label: "רישיון" },
     { key: "notifications", label: "התראות" },
+    { key: "history",       label: "היסטוריה" },
   ];
 
   return (
@@ -188,6 +198,7 @@ function SettingsPage() {
       {tab === "team"       && <TeamTab />}
       {tab === "license"        && <LicenseTab />}
       {tab === "notifications"  && <NotificationsTab />}
+      {tab === "history"        && <HistoryTab />}
     </div>
   );
 }
@@ -1962,6 +1973,156 @@ function NotificationsTab() {
         () => callFunction("weekly-summary", setSummaryStatus, setSummaryMsg),
       )}
 
+    </div>
+  );
+}
+
+// ─── History Tab ────────────────────────────────────────────────────────────
+
+function HistoryTab() {
+  const isMobile = useIsMobile();
+  const { data: entries = [], isLoading, refetch } = useAuditLog(50);
+  const undoMutation = useUndoAuditEntry();
+  const [undoingId, setUndoingId] = useState<string | null>(null);
+
+  const handleUndo = async (entry: AuditLogEntry) => {
+    if (undoingId) return;
+    setUndoingId(entry.id);
+    try {
+      await undoMutation.mutateAsync(entry.id);
+      toast.success("הפעולה בוטלה בהצלחה ✓");
+      refetch();
+    } catch {
+      // error handled in hook
+    } finally {
+      setUndoingId(null);
+    }
+  };
+
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleString("he-IL", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ ...card, display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+        <div>
+          <div style={{ fontSize: "16px", fontWeight: 700, color: "#1A3D2B", marginBottom: "4px" }}>היסטוריית שינויים</div>
+          <div style={{ fontSize: "13px", color: "#6B7E74" }}>50 הפעולות האחרונות · לחץ "בטל" לחזרה למצב קודם</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          style={{ ...btnOutline, fontSize: "12px", padding: "7px 14px" }}
+        >
+          רענן
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div style={{ textAlign: "center", color: "#888", padding: "40px" }}>טוען...</div>
+      ) : entries.length === 0 ? (
+        <div style={{ ...card, textAlign: "center", color: "#888", padding: "40px" }}>
+          <div style={{ fontSize: "32px", marginBottom: "12px" }}>📋</div>
+          <div style={{ fontWeight: 600, marginBottom: "6px" }}>אין פעולות עדיין</div>
+          <div style={{ fontSize: "13px" }}>כשתוסיף, תעדכן או תמחק נתונים — הם יופיעו כאן</div>
+        </div>
+      ) : (
+        <div>
+          {entries.map((entry) => {
+            const isUndoing = undoingId === entry.id;
+            const aColor = actionColor(entry.action);
+            const canUndo = entry.action === "delete" || entry.action === "insert" || entry.action === "update";
+
+            return (
+              <div
+                key={entry.id}
+                style={{
+                  ...card,
+                  padding: isMobile ? "12px 14px" : "14px 20px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  marginBottom: "8px",
+                  opacity: isUndoing ? 0.5 : 1,
+                  transition: "opacity 0.2s",
+                }}
+              >
+                {/* Action badge */}
+                <div style={{
+                  minWidth: "52px",
+                  textAlign: "center",
+                  padding: "3px 8px",
+                  borderRadius: "20px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  background: aColor + "18",
+                  color: aColor,
+                  flexShrink: 0,
+                }}>
+                  {actionLabel(entry.action)}
+                </div>
+
+                {/* Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: "13.5px",
+                    fontWeight: 600,
+                    color: "#1A3D2B",
+                    marginBottom: "3px",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}>
+                    {describeAuditEntry(entry)}
+                  </div>
+                  <div style={{ fontSize: "11.5px", color: "#8A9E92", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <span>{tableLabel(entry.table_name)}</span>
+                    <span>·</span>
+                    <span>{formatDate(entry.created_at)}</span>
+                    {entry.user_name && (
+                      <>
+                        <span>·</span>
+                        <span>{entry.user_name}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Undo button */}
+                {canUndo && (
+                  <button
+                    type="button"
+                    onClick={() => handleUndo(entry)}
+                    disabled={isUndoing}
+                    title="בטל פעולה זו"
+                    style={{
+                      background: "#fff",
+                      border: "1.5px solid #E8C5C0",
+                      color: "#C0392B",
+                      borderRadius: "8px",
+                      padding: "6px 12px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: isUndoing ? "not-allowed" : "pointer",
+                      fontFamily: "Rubik, sans-serif",
+                      flexShrink: 0,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {isUndoing ? "מבטל..." : "↩ בטל"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
