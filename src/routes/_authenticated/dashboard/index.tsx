@@ -1122,22 +1122,25 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
                                 <button key={g.id} type="button" onClick={() => {
                                   setWizardSectionGrades(prev => {
                                     const cur = prev[i];
-                                    const curList = (!cur || cur === 'all')
-                                      ? sortedGrades.map(gr => gr.id)
-                                      : [...(cur as string[])];
-                                    const toggled = gradeInList
+                                    // When all grades are selected → isolate to this grade only
+                                    if (!cur || cur === 'all') {
+                                      return { ...prev, [i]: [g.id] };
+                                    }
+                                    const curList = [...(cur as string[])];
+                                    const toggled = curList.includes(g.id)
                                       ? curList.filter(id => id !== g.id)
                                       : [...curList, g.id];
                                     return { ...prev, [i]: toggled.length === 0 ? 'all' : toggled };
                                   });
                                 }}
+                                  title={isAll ? "לחץ לבחירת שכבה זו בלבד" : undefined}
                                   style={{
                                     padding: "4px 10px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
-                                    background: gradeInList ? "#8B2F6E" : (isAll ? "#EDD8E8" : "transparent"),
-                                    color: gradeInList ? "#fff" : (isAll ? "#B060A0" : "#8B2F6E"),
-                                    border: `1.5px solid ${isAll ? "#EDD8E8" : "#8B2F6E"}`,
+                                    background: gradeInList ? "#8B2F6E" : (isAll ? "transparent" : "transparent"),
+                                    color: gradeInList ? "#fff" : "#8B2F6E",
+                                    border: `1.5px solid ${gradeInList ? "#8B2F6E" : (isAll ? "#C080A8" : "#8B2F6E")}`,
                                     fontFamily: "Rubik, sans-serif", fontWeight: gradeInList ? "500" : "400",
-                                    transition: "all 0.12s", opacity: isAll ? 0.6 : 1,
+                                    transition: "all 0.12s", opacity: isAll ? 0.65 : 1,
                                   }}>
                                   {letterOf(g.name)}′
                                 </button>
