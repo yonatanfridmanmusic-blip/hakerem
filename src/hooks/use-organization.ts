@@ -99,10 +99,12 @@ export function useOrgId(): string | null {
 /**
  * Returns true if the current user can write (insert/update/delete) data.
  * Viewers are read-only; owners and admins have full write access.
+ * View As mode is always read-only regardless of role.
  */
 export function useCanWrite(): boolean {
   const { data } = useOrganization();
   const role = data?.role;
+  if (getViewAsOrg()) return false; // View As is always read-only
   return role === "owner" || role === "admin";
 }
 
