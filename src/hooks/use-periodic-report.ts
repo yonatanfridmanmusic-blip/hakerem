@@ -1,6 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { BudgetSource } from "@/types/budget";
+import { getViewAsOrg } from "@/lib/view-as";
+
+// ─── Helper: resolve org_id respecting View As mode ──────────────────────────
+async function resolveOrgId(): Promise<string | null> {
+  const viewAs = getViewAsOrg();
+  if (viewAs) return viewAs.orgId;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+  const { data: mem } = await supabase
+    .from("organization_members")
+    .select("organization_id")
+    .eq("user_id", session.user.id)
+    .eq("status", "active")
+    .maybeSingle();
+  return mem?.organization_id ?? null;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,23 +51,17 @@ export interface PeriodicSummary {
 // ─── Active year meta (for date range UI) ────────────────────────────────────
 
 export function useActiveSchoolYearMeta() {
+  const viewAsOrgId = getViewAsOrg()?.orgId ?? null;
   return useQuery<SchoolYearMeta | null>({
-    queryKey: ["active-school-year-meta"],
+    queryKey: ["active-school-year-meta", viewAsOrgId ?? "self"],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return null;
-      const { data: mem } = await supabase
-        .from("organization_members")
-        .select("organization_id")
-        .eq("user_id", session.user.id)
-        .eq("status", "active")
-        .maybeSingle();
-      if (!mem?.organization_id) return null;
+      const orgId = await resolveOrgId();
+      if (!orgId) return null;
 
       const { data, error } = await supabase
         .from("school_years")
         .select("id, name, start_date, end_date")
-        .eq("organization_id", mem.organization_id)
+        .eq("organization_id", orgId)
         .eq("is_active", true)
         .maybeSingle();
       if (error) throw error;
@@ -64,22 +74,13 @@ export function useActiveSchoolYearMeta() {
 // ─── Main hook ────────────────────────────────────────────────────────────────
 
 export function usePeriodicReport(from: string | null, to: string | null) {
+  const viewAsOrgId = getViewAsOrg()?.orgId ?? null;
   return useQuery<PeriodicSummary | null>({
-    queryKey: ["periodic-report", from, to],
+    queryKey: ["periodic-report", from, to, viewAsOrgId ?? "self"],
     queryFn: async () => {
       if (!from || !to) return null;
-
-      // Single auth round-trip — orgId and yearId both derived here, reused below
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return null;
-      const { data: mem } = await supabase
-        .from("organization_members")
-        .select("organization_id")
-        .eq("user_id", session.user.id)
-        .eq("status", "active")
-        .maybeSingle();
-      if (!mem?.organization_id) return null;
-      const orgId = mem.organization_id;
+      const orgId = await resolveOrgId();
+      if (!orgId) return null;
 
       const { data: yearRow } = await supabase
         .from("school_years")
@@ -182,21 +183,13 @@ export interface PeriodicCategory {
 }
 
 export function usePeriodicCategoryReport(from: string | null, to: string | null) {
+  const viewAsOrgId = getViewAsOrg()?.orgId ?? null;
   return useQuery<PeriodicCategory[]>({
-    queryKey: ["periodic-category-report", from, to],
+    queryKey: ["periodic-category-report", from, to, viewAsOrgId ?? "self"],
     queryFn: async () => {
       if (!from || !to) return [];
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return [];
-      const { data: mem } = await supabase
-        .from("organization_members")
-        .select("organization_id")
-        .eq("user_id", session.user.id)
-        .eq("status", "active")
-        .maybeSingle();
-      if (!mem?.organization_id) return [];
-      const orgId = mem.organization_id;
+      const orgId = await resolveOrgId();
+      if (!orgId) return [];
 
       const [yearRes, orgSrcRes] = await Promise.all([
         supabase.from("school_years").select("id,start_date").eq("organization_id", orgId).eq("is_active", true).maybeSingle(),

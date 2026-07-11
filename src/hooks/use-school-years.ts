@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getViewAsOrg } from "@/lib/view-as";
 
 export interface SchoolYear {
   id: string;
@@ -12,9 +13,28 @@ export interface SchoolYear {
 }
 
 export function useSchoolYears() {
+  // Read View As org synchronously so it can go into the queryKey.
+  // This prevents cache collisions when the super-admin switches between orgs.
+  const viewAs = getViewAsOrg();
+  const viewAsOrgId = viewAs?.orgId ?? null;
+
   return useQuery<SchoolYear[]>({
-    queryKey: ["school-years"],
+    queryKey: ["school-years", viewAsOrgId ?? "self"],
     queryFn: async () => {
+      // Super-admin "View As" — return the target org's school years
+      if (viewAsOrgId) {
+        const { data, error } = await supabase
+          .from("school_years")
+          .select("id, name, start_date, end_date, is_active, collection_percentage, created_at")
+          .eq("organization_id", viewAsOrgId)
+          .order("start_date", { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map((y) => ({
+          ...y,
+          collection_percentage: Number(y.collection_percentage),
+        }));
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return [];
 
