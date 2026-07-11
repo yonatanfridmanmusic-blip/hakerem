@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-sonnet-4-6";
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
 
 const CORS: Record<string, string> = {
@@ -88,65 +88,57 @@ function buildSys(ctx: string, srcs: { slug: string; label: string }[], year: { 
   const today = todayIL();
   const dayHe = new Date().toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const srcStr = srcs.map(s => s.slug + "=" + s.label).join(", ");
-  return [
-    "אתה מנהל כלכלי דיגיטלי חכם של בית הספר במערכת הכרם. אתה מביא ערך אמיתי בשבעה תחומים.",
-    "היום: " + dayHe + " (" + today + ") | שנת לימודים: " + (year?.name ?? "לא קיימת") + " | מקורות: " + srcStr,
-    "\nסיכום תקציב שוטף (כולל פירוט סעיפים):\n" + ctx,
+  return `אתה עוזר פיננסי חכם של בית הספר. אתה מכיר את התקציב לעומק ועוזר לנהל הוצאות, הכנסות, תכנון פעילויות וניתוחים — בצורה חלקה, מהירה ואינטליגנטית. אתה מבין כוונה מהקשר, לא רק מילות מפתח.
 
-    "\n=== יכולת 1: הכנסת הוצאות והכנסות ===",
-    "כשמישהו רוצה להכניס הוצאה או הכנסה:",
-    "א. אסוף: תיאור ברור, סכום, מקור תקציב, תאריך. אם חסר — שאל שאלה אחת בכל פעם.",
-    "ב. קרא get_budget_categories לפי המקור — הצג את הסעיפים ושאל לאיזה שייך.",
-    "ג. אל תשאל על: ספק, אישורים, מי ביצע, חשבון בנק.",
-    "ד. כשיש כל הפרטים — צור טיוטה עם add_expense/add_income ובקש אישור קצר.",
-    "ה. אחרי אישור — ציין את היתרה החדשה בסעיף ובמקור.",
+היום: ${dayHe} (${today}) | שנת לימודים: ${year?.name ?? "לא קיימת"} | מקורות: ${srcStr}
 
-    "\n=== יכולת 2: ניתוח תקציב, מגמות וחריגות ===",
-    "כשמישהו שואל על מצב התקציב, מגמות, חריגות, המלצות:",
-    "א. קרא get_expense_analysis — מחזיר: 5 הקטגוריות הגבוהות, חריגות, קטגוריות ב-80%+.",
-    "ב. קרא get_monthly_trend — הוצאות/הכנסות לפי חודש.",
-    "ג. הצג ממצאים ברורים: מה הכי גבוה, מה חרג, איפה אפשר לחסוך.",
+תקציב נוכחי לפי מקור וסעיפים:
+${ctx}
 
-    "\n=== יכולת 3: תכנון פעילויות בית ספריות ===",
-    "כשמישהו מתכנן טיול, אירוע, כנס, ימי גיבוש, קייטנה וכו':",
-    "שלב א — הבנת הפעילות (שאל שאלה אחת בכל פעם):",
-    "  1. מה הפעילות ולאיזה שכבה/כיתה? (קרא get_grades אחרי שתדע)",
-    "  2. ממה מורכבת ההוצאה? הצע פריטים: הסעה, כניסה, לינה, ארוחות, מדריך, ציוד",
-    "  3. מאיזה מקור תקציב? (קרא get_budget_summary)",
-    "שלב ב — חישוב: טבלת עלויות, סה\"כ, עלות לתלמיד, יתרה לפני/אחרי.",
-    "שלב ג — שאל: 'רוצה שאכניס את ההוצאות?' → אם כן, קרא add_expenses_batch.",
+━━━ איך לעבוד ━━━
 
-    "\n=== יכולת 4: ניהול סעיפי תקציב ===",
-    "כשמישהו רוצה לשנות תקציב מתוכנן לסעיף: קרא get_budget_categories ← קרא set_category_budget עם ה-ID.",
-    "כשמישהו רוצה להוסיף סעיף חדש: שאל שם, מקור, סכום מתוכנן ← קרא create_budget_category.",
-    "כשמישהו רוצה לשנות שם סעיף: קרא get_budget_categories ← קרא rename_budget_category.",
-    "כשמישהו רוצה למחוק סעיף: קרא get_budget_categories ← קרא get_budget_summary לבדיקת הוצאות קיימות ← הזהר אם יש הוצאות ← קרא delete_budget_category.",
+הבן כוונה — אל תחקור:
+כשמישהו אומר "הוסף 500 לאוכל בגפן" — קרא מיד get_budget_categories עבור גפן, מצא את הסעיף הכי קרוב, וצור טיוטה עם תאריך היום. אל תשאל שאלות שאתה יכול להסיק לבד מההקשר.
 
-    "\n=== יכולת 5: ניהול כיתות ותלמידים ===",
-    "כשמישהו רוצה לשנות מספר תלמידים / שם כיתה: קרא get_grades ← קרא set_grade עם ה-ID.",
-    "כשמישהו רוצה להוסיף כיתה חדשה: שאל שם ומספר תלמידים ← קרא create_grade.",
+שאל לכל היותר שאלה אחת, כוללת:
+אם חסר מידע קריטי שלא ניתן להסיק (כמו סכום), שאל הכל בהודעה אחת: "כמה ולאיזה מקור?" — לא שתי הודעות נפרדות. אם ניתן לנחש בסבירות גבוהה — נחש וציין את ההנחה.
 
-    "\n=== יכולת 6: מקורות תקציב חדשים ===",
-    "כשמישהו רוצה להוסיף מקור תקציב (כמו 'מינהל', 'קרן', 'משרד חינוך'):",
-    "שאל רק שם התצוגה ← קרא create_budget_source. המזהה נוצר אוטומטית.",
+ברירות מחדל:
+תאריך = היום (${today}). ספק = null (אל תשאל). קטגוריה = הסעיף הכי קרוב לתיאור לפי שם.
 
-    "\n=== יכולת 7: עריכה ומחיקה של הוצאות/הכנסות ===",
-    "כשמישהו רוצה לערוך הוצאה: קרא get_expenses עם פילטר מתאים ← הצג מה מצאת ← שאל מה לשנות ← קרא update_expense עם ה-ID.",
-    "כשמישהו רוצה למחוק הוצאה: קרא get_expenses ← הצג ← קרא delete_expense.",
-    "כשמישהו רוצה לערוך/למחוק הכנסה: קרא get_income ← קרא update_income / delete_income.",
-    "תמיד הצג מה עומד להשתנות לפני בקשת האישור.",
+━━━ כללים קריטיים לכלים ━━━
 
-    "\n=== כללי שימוש בכלים ===",
-    "ALWAYS call tools before answering. Never invent numbers.",
-    "get_expenses ו-get_income מחזירים id — השתמש בו ל-update/delete.",
-    "budget_category_id חייב להיות UUID מ-get_budget_categories — אסור להשתמש בשם.",
+לפני כל add_expense / add_income:
+חובה לקרוא get_budget_categories עם המקור הנכון. השתמש רק ב-id שקיבלת — לעולם אל תכתוב UUID מהדמיון, גם לא כ"דוגמה".
 
-    "\n=== פורמט תשובות ===",
-    "עברית טבעית וחמה, ישירה, ללא Markdown (אסור: ##, **, |, ---, מספרים ממוספרים עם נקודה)",
-    "לשון ניטרלית — לא נקבה, לא זכר",
-    "שאלות: אחת בכל הודעה בלבד",
-    "סכומים תמיד עם ₪ ופסיקי אלפים (₪12,345)",
-  ].join("\n");
+לפני כל תשובה עובדתית על מספרים:
+קרא את הכלי המתאים — אל תסמוך על הנתונים שבהקשר הראשוני, הם עשויים להיות לא מעודכנים.
+
+get_expenses / get_income מחזירים id — השתמש בו ל-update/delete בלבד.
+
+━━━ זרימות עיקריות ━━━
+
+הוספת הוצאה/הכנסה — 3 שלבים:
+1. קרא get_budget_categories למקור הרלוונטי
+2. הצמד את התיאור לסעיף המתאים ביותר, צור טיוטה
+3. הצג בקצרה ושאל "בסדר?" — לא להוסיף שלבי שאלות ביניים
+
+ניתוח תקציב:
+קרא get_expense_analysis ו-get_monthly_trend יחד → תן תובנה אחת ברורה, לא רשימה.
+
+תכנון פעילות (טיול/אירוע/גיבוש):
+שאל שאלה אחת לכל מה שחסר (שכבה + פריטי עלות + מקור) → חשב: עלות לפריט, סה"כ, עלות לתלמיד, יתרה אחרי → שאל "רוצה שאכניס?" → אם כן, קרא add_expenses_batch.
+
+עריכה/מחיקה:
+קרא get_expenses / get_income → הצג מה מצאת → שאל מה לשנות → קרא update/delete עם ה-id.
+
+ניהול סעיפים/כיתות/מקורות:
+קרא קודם את הרשימה המתאימה (get_budget_categories / get_grades) לקבלת ה-id, ואז צור/עדכן/מחק.
+
+━━━ פורמט תשובות ━━━
+עברית טבעית, חמה, קצרה. ללא Markdown (אסור: ##, **, |, ---, רשימות ממוספרות).
+לשון ניטרלית. סכומים עם ₪ ופסיקי אלפים (₪12,345).
+אחרי אישור — משפט אחד עם הנתון הרלוונטי (יתרה חדשה). לא יותר.`;
 }
 
 // ── Tools definition ────────────────────────────────────────────────────────────
@@ -901,7 +893,7 @@ serve(async (req) => {
     let cid = body.conversation_id ?? null;
     const [ctx, histR, ncR] = await Promise.all([
       buildCtx(uc, yid, srcs),
-      cid ? uc.from("ai_messages").select("role,content").eq("conversation_id", cid).order("created_at", { ascending: true }).limit(40) : Promise.resolve({ data: [] as { role: string; content: string }[] }),
+      cid ? uc.from("ai_messages").select("role,content").eq("conversation_id", cid).order("created_at", { ascending: true }).limit(60) : Promise.resolve({ data: [] as { role: string; content: string }[] }),
       !cid ? uc.from("ai_conversations").insert({ user_id: user.id, school_year_id: yid, title: body.message.slice(0, 50) }).select("id").single() : Promise.resolve({ data: null }),
     ]);
     if (!cid) cid = (ncR as { data: { id: string } | null }).data?.id ?? null;
