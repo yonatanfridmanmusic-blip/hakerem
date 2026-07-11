@@ -1258,7 +1258,7 @@ function CodeModal({ org, onClose }: { org: OrgRow; onClose: () => void }) {
   const handleGenerate = () => {
     generate({ orgId: org.id, expiresAt }, {
       onSuccess: (data) => setGeneratedCode(data.code),
-      onError: (err) => alert("שגיאה: " + (err as Error).message),
+      onError: (err) => toast.error("שגיאה: " + (err as Error).message),
     });
   };
 

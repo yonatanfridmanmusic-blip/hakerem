@@ -311,8 +311,7 @@ export function useUpsertOrgAiSettings() {
     }) => {
       const { error } = await supabase
         .from("org_ai_settings")
-        .upsert({ org_id: orgId, claude_api_key: claudeApiKey, updated_at: new Date().toISOString() })
-        .eq("org_id", orgId);
+        .upsert({ org_id: orgId, claude_api_key: claudeApiKey, updated_at: new Date().toISOString() });
       if (error) throw error;
     },
     onSuccess: () => {

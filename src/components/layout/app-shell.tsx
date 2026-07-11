@@ -16,6 +16,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrganization, useOrgMembers } from "@/hooks/use-organization";
+import { getViewAsOrg } from "@/lib/view-as";
 import { useQueryClient } from "@tanstack/react-query";
 
 const NAV_ITEMS = [
@@ -70,7 +71,9 @@ function MobileHeader() {
   const { fullName, isSuperAdmin } = useAuth();
   const { data: membership } = useOrganization();
   const orgRole = membership?.role;
-  const canManageSettings = orgRole === "owner" || orgRole === "admin";
+  // View As is read-only — hide Settings so a super-admin can't accidentally
+  // edit another org's data while observing it.
+  const canManageSettings = (orgRole === "owner" || orgRole === "admin") && !getViewAsOrg();
   const { data: members } = useOrgMembers();
   const pendingCount = canManageSettings
     ? (members ?? []).filter((m) => m.status === "pending").length
@@ -310,7 +313,9 @@ function AppSidebar({ onClose }: AppSidebarProps) {
   const { fullName, isSuperAdmin } = useAuth();
   const { data: membership } = useOrganization();
   const orgRole = membership?.role;
-  const canManageSettings = orgRole === "owner" || orgRole === "admin";
+  // View As is read-only — hide Settings so a super-admin can't accidentally
+  // edit another org's data while observing it.
+  const canManageSettings = (orgRole === "owner" || orgRole === "admin") && !getViewAsOrg();
   const { data: members } = useOrgMembers();
   const pendingCount = canManageSettings
     ? (members ?? []).filter((m) => m.status === "pending").length

@@ -74,7 +74,7 @@ export function useAddBudgetSource() {
       color?: string;
       bg_color?: string;
     }) => {
-      if (!orgId) throw new Error("No active org");
+      if (!orgId) throw new Error("אין ארגון פעיל");
       // slug = label trimmed, lowercased, spaces → underscore
       const slug = label.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_֐-׿]/g, "");
 
