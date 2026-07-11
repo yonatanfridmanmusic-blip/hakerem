@@ -773,7 +773,7 @@ function OrgCard({ org, expanded, isDuplicate, onToggle, onGenerateCode, onDeepD
           🔍 {isMobile ? "Deep Dive" : "Deep Dive"}
         </button>
 
-        <button type="button" onClick={(e) => { e.stopPropagation(); setViewAsOrg(org.id, org.name, org.city); window.open("/dashboard", "_blank"); }}
+        <button type="button" onClick={(e) => { e.stopPropagation(); setViewAsOrg(org.id, org.name, org.city); window.location.href = "/dashboard"; }}
           style={btnStyle("linear-gradient(135deg, #7C2D12, #B45309)", "#fff")}>
           👁 צפה
         </button>
