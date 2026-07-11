@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { useOrganization } from "@/hooks/use-organization";
+import { useOrganization, useOrgMembers } from "@/hooks/use-organization";
 import { useQueryClient } from "@tanstack/react-query";
 
 const NAV_ITEMS = [
@@ -71,6 +71,10 @@ function MobileHeader() {
   const { data: membership } = useOrganization();
   const orgRole = membership?.role;
   const canManageSettings = orgRole === "owner" || orgRole === "admin";
+  const { data: members } = useOrgMembers();
+  const pendingCount = canManageSettings
+    ? (members ?? []).filter((m) => m.status === "pending").length
+    : 0;
   const initial = (fullName ?? "?").trim().charAt(0).toUpperCase();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -185,6 +189,21 @@ function MobileHeader() {
                 >
                   <Settings size={14} color="#6B6560" />
                   הגדרות
+                  {pendingCount > 0 && (
+                    <span style={{
+                      marginRight: "auto",
+                      minWidth: "18px", height: "18px",
+                      borderRadius: "9px",
+                      background: "#E8622A",
+                      color: "#fff",
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      padding: "0 5px",
+                    }}>
+                      {pendingCount}
+                    </span>
+                  )}
                 </Link>
               )}
               <button
@@ -292,6 +311,10 @@ function AppSidebar({ onClose }: AppSidebarProps) {
   const { data: membership } = useOrganization();
   const orgRole = membership?.role;
   const canManageSettings = orgRole === "owner" || orgRole === "admin";
+  const { data: members } = useOrgMembers();
+  const pendingCount = canManageSettings
+    ? (members ?? []).filter((m) => m.status === "pending").length
+    : 0;
   const initial = (fullName ?? "?").trim().charAt(0).toUpperCase();
 
   const isActive = (href: string) =>
@@ -446,6 +469,21 @@ function AppSidebar({ onClose }: AppSidebarProps) {
           >
             <Settings size={14} style={{ color: isActive("/settings") ? "#7AAA8E" : "rgba(255,255,255,0.3)" }} />
             הגדרות
+            {pendingCount > 0 && (
+              <span style={{
+                marginRight: "auto",
+                minWidth: "18px", height: "18px",
+                borderRadius: "9px",
+                background: "#E8622A",
+                color: "#fff",
+                fontSize: "11px",
+                fontWeight: "700",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                padding: "0 5px",
+              }}>
+                {pendingCount}
+              </span>
+            )}
           </Link>
         )}
 

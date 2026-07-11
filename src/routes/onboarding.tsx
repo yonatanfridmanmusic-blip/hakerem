@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateOrganization, useAllOrganizations, useRequestJoinOrg } from "@/hooks/use-organization";
@@ -741,50 +741,112 @@ function TransferPendingStep() {
 // ─── Step: Pending ────────────────────────────────────────────────────────────
 
 function PendingStep() {
+  const [approved, setApproved] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [notYet, setNotYet] = useState(false);
+  const [tick, setTick] = useState(0);
 
-  const handleTryEnter = async () => {
-    setChecking(true);
-    setNotYet(false);
+  const checkStatus = useCallback(async (manual = false) => {
+    if (manual) setChecking(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setChecking(false); return; }
+    if (!user) { if (manual) setChecking(false); return; }
     const { data: mem } = await supabase
       .from("organization_members")
       .select("id")
       .eq("user_id", user.id)
       .eq("status", "active")
       .maybeSingle();
-    setChecking(false);
+    if (manual) setChecking(false);
     if (mem) {
-      window.location.href = "/dashboard";
+      setApproved(true);
+      setTimeout(() => { window.location.href = "/dashboard"; }, 1200);
     } else {
-      setNotYet(true);
+      if (!manual) setTick(t => t + 1); // bump tick to show "still waiting"
     }
-  };
+  }, []);
+
+  // Auto-poll every 6 seconds
+  useEffect(() => {
+    checkStatus(); // immediate first check
+    const id = setInterval(() => checkStatus(), 6000);
+    return () => clearInterval(id);
+  }, [checkStatus]);
+
+  if (approved) {
+    return (
+      <div style={{ textAlign: "center", padding: "16px 0" }}>
+        <div style={{
+          width: "72px", height: "72px", borderRadius: "50%",
+          background: "#EDFBF3", border: "2px solid #4A8C62",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          margin: "0 auto 20px",
+        }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2D6644" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+        </div>
+        <h2 style={{ fontSize: "20px", fontWeight: "600", color: "#166534", margin: "0 0 8px" }}>
+          אושרת! 🎉
+        </h2>
+        <p style={{ fontSize: "13.5px", color: INK2, margin: 0 }}>נכנס/ת למערכת...</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ textAlign: "center", padding: "8px 0" }}>
+      {/* Animated waiting icon */}
       <div style={{
         width: "64px", height: "64px", borderRadius: "50%",
         background: "#EDFBF3", border: `1.5px solid #B6E8C4`,
         display: "flex", alignItems: "center", justifyContent: "center",
-        margin: "0 auto 20px",
+        margin: "0 auto 20px", position: "relative",
       }}>
         <IconMail color={GREEN} />
+        {/* Pulse ring */}
+        <div style={{
+          position: "absolute", inset: "-6px",
+          borderRadius: "50%",
+          border: "2px solid rgba(45,102,68,0.2)",
+          animation: "pulse-ring 2s ease-in-out infinite",
+        }} />
       </div>
+
+      <style>{`
+        @keyframes pulse-ring {
+          0%   { transform: scale(0.92); opacity: 0.8; }
+          50%  { transform: scale(1.06); opacity: 0.2; }
+          100% { transform: scale(0.92); opacity: 0.8; }
+        }
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+      `}</style>
 
       <h2 style={{ fontSize: "18px", fontWeight: "500", color: INK, margin: "0 0 10px" }}>
         הבקשה נשלחה!
       </h2>
-      <p style={{ fontSize: "13.5px", color: INK2, lineHeight: 1.7, margin: "0 0 22px" }}>
+      <p style={{ fontSize: "13.5px", color: INK2, lineHeight: 1.7, margin: "0 0 20px" }}>
         הבקשה הועברה למנהל/ת בית הספר לאישור.<br/>
-        ברגע שתאושר — לחץ/י על הכפתור למטה להיכנס.
+        תקבל/י עדכון אוטומטי ברגע שיאשרו.
       </p>
+
+      {/* Auto-check status indicator */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+        background: "#F8F5F0", borderRadius: "10px", padding: "10px 16px",
+        marginBottom: "18px", fontSize: "12.5px", color: INK3,
+      }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={INK3} strokeWidth="2" strokeLinecap="round" style={{ animation: "spin-slow 3s linear infinite", flexShrink: 0 }}>
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+        בודק אוטומטית כל 6 שניות
+        {tick > 0 && <span style={{ color: INK3, fontSize: "11px" }}>({tick})</span>}
+      </div>
 
       <button
         type="button"
-        onClick={handleTryEnter}
+        onClick={() => checkStatus(true)}
         disabled={checking}
         style={{
           ...btnPrimary,
@@ -793,10 +855,10 @@ function PendingStep() {
           cursor: checking ? "not-allowed" : "pointer",
         }}
       >
-        {checking ? "בודק..." : "אושרתי — כניסה למערכת"}
+        {checking ? "בודק..." : "בדוק עכשיו"}
       </button>
 
-      {notYet && (
+      {false && (
         <p style={{ fontSize: "13px", color: "#B5472A", margin: "0 0 12px" }}>
           הבקשה עדיין ממתינה לאישור. נסה/י שוב מאוחר יותר.
         </p>
@@ -826,6 +888,22 @@ function OnboardingPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("choose");
   const [newOrgId, setNewOrgId] = useState<string | null>(null);
+
+  // On mount: if user already has a pending membership, jump straight to pending step
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return;
+      supabase
+        .from("organization_members")
+        .select("status")
+        .eq("user_id", data.user.id)
+        .eq("status", "pending")
+        .maybeSingle()
+        .then(({ data: mem }) => {
+          if (mem) setStep("pending");
+        });
+    });
+  }, []);
 
   return (
     <div style={{

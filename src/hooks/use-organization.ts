@@ -146,6 +146,7 @@ export function useOrgMembers() {
       return (data ?? []) as unknown as OrgMember[];
     },
     staleTime: 1000 * 60 * 2,
+    refetchInterval: 60_000,
   });
 }
 
