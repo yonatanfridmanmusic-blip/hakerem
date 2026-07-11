@@ -870,8 +870,6 @@ export function AiChatPanel() {
   const [mounted, setMounted] = useState(false);
   const [optimisticMsg, setOptimisticMsg] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
-  // Track visual viewport height on mobile so the panel shrinks when the keyboard opens
-  const [visualHeight, setVisualHeight] = useState<number | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -924,18 +922,6 @@ export function AiChatPanel() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, close]);
 
-  // On mobile, track visual viewport height so the panel shrinks when the keyboard opens.
-  // iOS doesn't resize position:fixed elements when the virtual keyboard appears — the
-  // visualViewport API gives us the actual visible area height.
-  useEffect(() => {
-    if (!isMobile || !isOpen) return;
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => setVisualHeight(vv.height);
-    update();
-    vv.addEventListener("resize", update);
-    return () => vv.removeEventListener("resize", update);
-  }, [isMobile, isOpen]);
 
   const handleSend = (text?: string, e?: FormEvent) => {
     e?.preventDefault();
@@ -1034,10 +1020,10 @@ export function AiChatPanel() {
         style={{
           position: "fixed",
           top: 0,
-          // On mobile use the visual viewport height so the panel shrinks when the keyboard opens
-          ...(isMobile
-            ? { height: visualHeight ? `${visualHeight}px` : "100dvh" }
-            : { bottom: 0 }),
+          // On mobile, use dvh (dynamic viewport height) — this unit shrinks when the
+          // virtual keyboard opens, unlike vh which stays fixed. Supported iOS 15.4+,
+          // Chrome Android 108+. Older browsers fall back to 100vh (pre-fix behaviour).
+          ...(isMobile ? { height: "100dvh" } : { bottom: 0 }),
           left: 0,
           zIndex: 1100,
           width: isMobile ? "100%" : (sidebarOpen ? "720px" : "500px"),
@@ -1277,10 +1263,8 @@ export function AiChatPanel() {
 
             {/* ── Input ── */}
             <div style={{
-              // When keyboard is open (visualHeight differs from window height), skip safe-area bottom.
-              // When keyboard is closed, add safe-area inset so the input clears the home indicator.
               padding: isMobile
-                ? "10px 16px 16px"
+                ? "10px 16px calc(12px + env(safe-area-inset-bottom, 0px))"
                 : "10px 16px 16px",
               borderTop: "1px solid rgba(255,255,255,0.055)",
               flexShrink: 0,
