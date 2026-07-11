@@ -590,27 +590,25 @@ function AdminPage() {
   return (
     <div>
       {/* Hero */}
-      <div style={{ background: "linear-gradient(160deg, #0F172A 0%, #1E293B 100%)", borderRadius: "20px", padding: "28px 32px", marginBottom: "20px", boxShadow: "0 8px 32px rgba(15,23,42,0.4)" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "16px", marginBottom: "20px" }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", letterSpacing: "0.1em", marginBottom: "4px" }}>SUPER ADMIN</div>
-            <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, color: "#fff" }}>לוח בקרה — כל בתי הספר</h1>
-            <div style={{ marginTop: "6px", fontSize: "13px", color: "rgba(255,255,255,0.45)" }}>{orgs.length} ארגונים רשומים</div>
-          </div>
-          {/* Stat chips */}
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" as const }}>
-            {[
-              { label: "פעיל", val: stats.active,  bg: "#166534", fg: "#BBF7D0" },
-              { label: "עומד לפוג", val: stats.trial,  bg: "#92400E", fg: "#FDE68A" },
-              { label: "פג",   val: stats.expired, bg: "#991B1B", fg: "#FCA5A5" },
-              { label: "חינמי",val: stats.free,    bg: "#1D4ED8", fg: "#BFDBFE" },
-            ].map(s => (
-              <div key={s.label} style={{ background: "rgba(255,255,255,0.1)", borderRadius: "10px", padding: "8px 14px", textAlign: "center" as const }}>
-                <div style={{ fontSize: "18px", fontWeight: 700, color: s.fg }}>{s.val}</div>
-                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.45)", marginTop: "1px" }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
+      <div style={{ background: "linear-gradient(160deg, #0F172A 0%, #1E293B 100%)", borderRadius: "20px", padding: isMobile ? "18px 16px" : "28px 32px", marginBottom: "20px", boxShadow: "0 8px 32px rgba(15,23,42,0.4)" }}>
+        <div style={{ marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", letterSpacing: "0.1em", marginBottom: "4px" }}>SUPER ADMIN</div>
+          <h1 style={{ margin: 0, fontSize: isMobile ? "20px" : "26px", fontWeight: 700, color: "#fff" }}>לוח בקרה — כל בתי הספר</h1>
+          <div style={{ marginTop: "4px", fontSize: "13px", color: "rgba(255,255,255,0.45)" }}>{orgs.length} ארגונים רשומים</div>
+        </div>
+        {/* Stat chips — 2×2 grid on mobile, single row on desktop */}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,auto)", gap: "8px", marginBottom: "16px", justifyContent: isMobile ? "stretch" : "start" as const }}>
+          {[
+            { label: "פעיל",       val: stats.active,  bg: "#166534", fg: "#BBF7D0" },
+            { label: "עומד לפוג", val: stats.trial,   bg: "#92400E", fg: "#FDE68A" },
+            { label: "פג תוקף",   val: stats.expired, bg: "#991B1B", fg: "#FCA5A5" },
+            { label: "חינמי",      val: stats.free,    bg: "#1D4ED8", fg: "#BFDBFE" },
+          ].map(s => (
+            <div key={s.label} style={{ background: "rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px", textAlign: "center" as const }}>
+              <div style={{ fontSize: "22px", fontWeight: 700, color: s.fg }}>{s.val}</div>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", marginTop: "2px" }}>{s.label}</div>
+            </div>
+          ))}
         </div>
         {/* Search */}
         <input
@@ -718,59 +716,84 @@ function OrgCard({ org, expanded, isDuplicate, onToggle, onGenerateCode, onDeepD
   const isExpired = org.plan_expires_at && new Date(org.plan_expires_at) < new Date();
   const pendingMembers = detail?.members.filter((m) => m.status === "pending").length ?? 0;
 
+  const btnStyle = (bg: string, color: string, border?: string): React.CSSProperties => ({
+    background: bg, color, border: border ?? "none", borderRadius: "8px",
+    padding: isMobile ? "8px 10px" : "6px 14px",
+    fontSize: isMobile ? "13px" : "12px",
+    fontWeight: 600, cursor: "pointer", fontFamily: "Rubik, sans-serif",
+    whiteSpace: "nowrap" as const, display: "flex", alignItems: "center", gap: "4px",
+    flex: isMobile ? 1 : "none",
+    justifyContent: "center",
+  });
+
   return (
-    <div style={{ ...card, marginBottom: "12px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: 1, cursor: "pointer" }} onClick={onToggle}>
-          <div style={{ width: "44px", height: "44px", borderRadius: "12px", flexShrink: 0, background: "linear-gradient(135deg, #1E293B, #0F172A)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", fontWeight: 700, color: "#fff" }}>
-            {org.name[0]}
+    <div style={{ ...card, marginBottom: "12px", padding: isMobile ? "14px" : "16px 20px" }}>
+      {/* Top row: avatar + info + expand arrow */}
+      <div style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }} onClick={onToggle}>
+        <div style={{ width: "42px", height: "42px", borderRadius: "11px", flexShrink: 0, background: "linear-gradient(135deg, #1E293B, #0F172A)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "17px", fontWeight: 700, color: "#fff" }}>
+          {org.name[0]}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" as const }}>
+            <span style={{ fontWeight: 700, fontSize: "15px", color: "#111" }}>{org.name}</span>
+            {org.plan === "pro" && <span style={chip("#7C3AED", "#EDE9FE")}>PRO</span>}
+            {isDuplicate && <span style={chip("#92400E", "#FEF3C7")}>⚠️ שם כפול</span>}
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" as const }}>
-              <span style={{ fontWeight: 700, fontSize: "15.5px", color: "#111" }}>{org.name}</span>
-              {org.plan === "pro" && <span style={chip("#7C3AED", "#EDE9FE")}>PRO</span>}
-              {isDuplicate && <span style={chip("#92400E", "#FEF3C7")}>⚠️ שם כפול</span>}
-            </div>
-            <div style={{ fontSize: "12.5px", color: "#6B7280", marginTop: "2px" }}>
-              {org.city ?? "ללא עיר"}<span style={{ margin: "0 6px", opacity: 0.4 }}>·</span>
-              נוצר {org.created_at ? new Date(org.created_at).toLocaleDateString("he-IL") : "—"}
-            </div>
+          <div style={{ fontSize: "12px", color: "#6B7280", marginTop: "2px", display: "flex", gap: "6px", flexWrap: "wrap" as const }}>
+            <span>{org.city ?? "ללא עיר"}</span>
+            <span style={{ opacity: 0.4 }}>·</span>
+            <span>נוצר {org.created_at ? new Date(org.created_at).toLocaleDateString("he-IL") : "—"}</span>
           </div>
         </div>
+        {/* Badges on desktop inline, arrow always */}
+        {!isMobile && (
+          <>
+            {pendingMembers > 0 && <span style={chip("#B45309", "#FEF3C7")}>{pendingMembers} ממתינ{pendingMembers > 1 ? "ים" : ""}</span>}
+            <span style={chip(expiry.color, expiry.bg)}>{expiry.label}</span>
+          </>
+        )}
+        <div style={{ transform: `rotate(${expanded ? "180deg" : "0deg"})`, transition: "transform 0.2s", color: "#9CA3AF", fontSize: "14px", flexShrink: 0 }}>▼</div>
+      </div>
 
-        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0, flexWrap: "wrap" as const }}>
+      {/* Mobile badges row */}
+      {isMobile && (
+        <div style={{ display: "flex", gap: "6px", marginTop: "10px", flexWrap: "wrap" as const }}>
           {pendingMembers > 0 && <span style={chip("#B45309", "#FEF3C7")}>{pendingMembers} ממתינ{pendingMembers > 1 ? "ים" : ""}</span>}
           <span style={chip(expiry.color, expiry.bg)}>{expiry.label}</span>
-
-          <button type="button" onClick={(e) => { e.stopPropagation(); onDeepDive(); }}
-            style={{ background: "linear-gradient(135deg, #1E293B, #334155)", color: "#fff", border: "none", borderRadius: "8px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "Rubik, sans-serif", whiteSpace: "nowrap" as const, display: "flex", alignItems: "center", gap: "5px" }}>
-            🔍 Deep Dive
-          </button>
-
-          <button type="button" onClick={(e) => { e.stopPropagation(); setViewAsOrg(org.id, org.name, org.city); window.open("/dashboard", "_blank"); }}
-            style={{ background: "linear-gradient(135deg, #7C2D12, #B45309)", color: "#fff", border: "none", borderRadius: "8px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "Rubik, sans-serif", whiteSpace: "nowrap" as const, display: "flex", alignItems: "center", gap: "5px" }}>
-            👁 צפה
-          </button>
-
-          <button type="button" onClick={(e) => { e.stopPropagation(); onGenerateCode(); }}
-            style={{ background: "linear-gradient(135deg, #1A3D2B, #2D6644)", color: "#fff", border: "none", borderRadius: "8px", padding: "6px 12px", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "Rubik, sans-serif", whiteSpace: "nowrap" as const }}>
-            🔑 הנפק קוד
-          </button>
-
-          {!isExpired && (
-            <button type="button" onClick={(e) => { e.stopPropagation(); onPause(); }}
-              style={{ background: "#FEF3C7", color: "#92400E", border: "1px solid #FDE68A", borderRadius: "8px", padding: "6px 12px", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "Rubik, sans-serif", whiteSpace: "nowrap" as const }}>
-              ⏸ עצור מנוי
-            </button>
-          )}
-
-          <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            style={{ background: "#FEF2F2", color: "#991B1B", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "6px 12px", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "Rubik, sans-serif", whiteSpace: "nowrap" as const }}>
-            🗑 מחק
-          </button>
-
-          <div onClick={onToggle} style={{ transform: `rotate(${expanded ? "180deg" : "0deg"})`, transition: "transform 0.2s", color: "#9CA3AF", cursor: "pointer" }}>▼</div>
         </div>
+      )}
+
+      {/* Action buttons — scrollable row on desktop, 2-column grid on mobile */}
+      <div style={isMobile
+        ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "12px" }
+        : { display: "flex", gap: "8px", alignItems: "center", marginTop: "12px", flexWrap: "wrap" as const }
+      }>
+        <button type="button" onClick={(e) => { e.stopPropagation(); onDeepDive(); }}
+          style={btnStyle("linear-gradient(135deg, #1E293B, #334155)", "#fff")}>
+          🔍 {isMobile ? "Deep Dive" : "Deep Dive"}
+        </button>
+
+        <button type="button" onClick={(e) => { e.stopPropagation(); setViewAsOrg(org.id, org.name, org.city); window.open("/dashboard", "_blank"); }}
+          style={btnStyle("linear-gradient(135deg, #7C2D12, #B45309)", "#fff")}>
+          👁 צפה
+        </button>
+
+        <button type="button" onClick={(e) => { e.stopPropagation(); onGenerateCode(); }}
+          style={btnStyle("linear-gradient(135deg, #1A3D2B, #2D6644)", "#fff")}>
+          🔑 הנפק קוד
+        </button>
+
+        {!isExpired && (
+          <button type="button" onClick={(e) => { e.stopPropagation(); onPause(); }}
+            style={btnStyle("#FEF3C7", "#92400E", "1px solid #FDE68A")}>
+            ⏸ עצור מנוי
+          </button>
+        )}
+
+        <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          style={btnStyle("#FEF2F2", "#991B1B", "1px solid #FCA5A5")}>
+          🗑 מחק
+        </button>
       </div>
 
       {expanded && (
