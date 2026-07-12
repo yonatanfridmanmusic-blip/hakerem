@@ -1050,36 +1050,65 @@ function PeriodicReport({
           ))}
         </div>
 
-        {/* Month picker */}
+        {/* Month picker — grouped by year, 4-column grid */}
         {periodType === "monthly" && (
           <div>
-            <div style={{ fontSize: "12px", color: "#6B7A72", fontWeight: 500, marginBottom: "10px" }}>בחר חודש</div>
+            <div style={{ fontSize: "12px", color: "#6B7A72", fontWeight: 500, marginBottom: "12px" }}>בחר חודש</div>
             {monthRanges.length === 0
               ? <div style={{ fontSize: "13px", color: "#9BA8A2" }}>הגדר תאריכי התחלה וסיום לשנת הלימודים בהגדרות</div>
-              : (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
-                  {monthRanges.map((r) => {
-                    const active = selectedRange?.from === r.from;
-                    return (
-                      <button
-                        key={r.from}
-                        type="button"
-                        onClick={() => onSelectRange(r)}
-                        style={{
-                          padding: "7px 14px", borderRadius: "8px", border: active ? "none" : "1px solid #D8E2DA",
-                          cursor: "pointer", fontFamily: "Rubik, sans-serif", fontSize: "12.5px", fontWeight: active ? 600 : 400,
-                          background: active ? "linear-gradient(135deg, #2D6644, #1A3D2B)" : "#F7FAF8",
-                          color: active ? "#fff" : "#3A5544",
-                          boxShadow: active ? "0 2px 6px rgba(26,61,43,0.2)" : "none",
-                          transition: "all 0.12s",
-                        }}
-                      >
-                        {r.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )
+              : (() => {
+                  // Group months by calendar year
+                  const byYear: Record<string, typeof monthRanges> = {};
+                  monthRanges.forEach(r => {
+                    const yr = r.year ?? r.from.slice(0, 4);
+                    if (!byYear[yr]) byYear[yr] = [];
+                    byYear[yr].push(r);
+                  });
+                  return Object.entries(byYear).map(([yr, ranges]) => (
+                    <div key={yr} style={{ marginBottom: "18px" }}>
+                      <div style={{
+                        fontSize: "11px", fontWeight: 700, color: "#9BA8A2",
+                        letterSpacing: "0.06em", marginBottom: "8px",
+                        paddingBottom: "5px", borderBottom: "1px solid #EEE9E2",
+                      }}>{yr}</div>
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(4, 1fr)",
+                        gap: "7px",
+                      }}>
+                        {ranges.map((r) => {
+                          const active = selectedRange?.from === r.from;
+                          const monthOnly = r.monthLabel ?? r.label.replace(/\s*\d{4}/, "").trim();
+                          return (
+                            <button
+                              key={r.from}
+                              type="button"
+                              onClick={() => onSelectRange(r)}
+                              style={{
+                                padding: "10px 6px",
+                                borderRadius: "10px",
+                                border: active ? "none" : "1px solid #D8E2DA",
+                                cursor: "pointer",
+                                fontFamily: "Rubik, sans-serif",
+                                fontSize: "13px",
+                                fontWeight: active ? 600 : 400,
+                                background: active
+                                  ? "linear-gradient(135deg, #2D6644, #1A3D2B)"
+                                  : "#F7FAF8",
+                                color: active ? "#fff" : "#3A5544",
+                                boxShadow: active ? "0 2px 8px rgba(26,61,43,0.22)" : "none",
+                                transition: "all 0.12s ease",
+                                textAlign: "center",
+                              }}
+                            >
+                              {monthOnly}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ));
+                })()
             }
           </div>
         )}

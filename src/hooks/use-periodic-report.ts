@@ -239,12 +239,18 @@ export function usePeriodicCategoryReport(from: string | null, to: string | null
 
 // ─── Date range helpers ───────────────────────────────────────────────────────
 
-export interface DateRange { from: string; to: string; label: string }
+export interface DateRange { from: string; to: string; label: string; monthLabel?: string; year?: string }
 
-/** Returns an array of {from, to, label} for every month in the school year. */
+/** Returns an array of {from, to, label} for every month in the school year.
+ *  Always extends to August 31 of the end-year so the full academic year
+ *  (Sep → Aug) is covered even when end_date is set to June/July. */
 export function getMonthRanges(startDate: string, endDate: string): DateRange[] {
   const ranges: DateRange[] = [];
-  const end = new Date(endDate);
+  const rawEnd = new Date(endDate);
+  // Ensure we always show through August of the end year
+  const endYear = rawEnd.getFullYear();
+  const end = new Date(endYear, 7, 31); // Aug 31 of end year
+
   let cur = new Date(startDate);
   cur.setDate(1);
 
@@ -254,8 +260,9 @@ export function getMonthRanges(startDate: string, endDate: string): DateRange[] 
     const from = `${y}-${String(m + 1).padStart(2, "0")}-01`;
     const lastDay = new Date(y, m + 1, 0).getDate();
     const to = `${y}-${String(m + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    const monthLabel = cur.toLocaleDateString("he-IL", { month: "long" });
     const label = cur.toLocaleDateString("he-IL", { month: "long", year: "numeric" });
-    ranges.push({ from, to, label });
+    ranges.push({ from, to, label, monthLabel, year: String(y) });
     cur = new Date(y, m + 1, 1);
   }
 
