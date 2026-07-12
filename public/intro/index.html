@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>הכרם — ניהול פיננסי לבתי ספר</title>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Rubik', sans-serif;
+    direction: rtl;
+    background: #F8F6F1;
+    color: #1A1A1A;
+    line-height: 1.6;
+  }
+
+  /* ─── HERO ─── */
+  .hero {
+    background: linear-gradient(160deg, #142619 0%, #0c1c11 55%, #1a2e10 100%);
+    color: white;
+    padding: 80px 40px 90px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 60% at 50% 120%, rgba(45,102,68,0.25) 0%, transparent 70%);
+  }
+  .hero-content { position: relative; z-index: 1; max-width: 680px; margin: 0 auto; }
+  .logo-mark {
+    width: 72px; height: 72px;
+    background: linear-gradient(145deg, #2D6644, #1A3D2B);
+    border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 28px;
+    box-shadow: 0 8px 32px rgba(45,102,68,0.5);
+  }
+  .logo-mark svg { width: 36px; height: 36px; }
+  .hero h1 {
+    font-size: clamp(36px, 7vw, 56px);
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    margin-bottom: 16px;
+    color: #fff;
+  }
+  .hero h1 span { color: #4ade80; }
+  .hero .tagline {
+    font-size: 18px;
+    color: rgba(255,255,255,0.62);
+    font-weight: 400;
+    margin-bottom: 36px;
+    line-height: 1.7;
+  }
+  .hero-cta {
+    display: inline-block;
+    background: linear-gradient(135deg, #2D6644, #1e5234);
+    color: #fff;
+    text-decoration: none;
+    padding: 16px 40px;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    box-shadow: 0 4px 24px rgba(45,102,68,0.45);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .hero-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(45,102,68,0.6); }
+
+  /* ─── WHAT IS IT ─── */
+  .what {
+    padding: 72px 40px;
+    max-width: 820px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .section-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #2D6644;
+    margin-bottom: 14px;
+  }
+  .what h2 {
+    font-size: clamp(24px, 4vw, 36px);
+    font-weight: 700;
+    color: #1A1A1A;
+    margin-bottom: 18px;
+    letter-spacing: -0.5px;
+  }
+  .what p {
+    font-size: 17px;
+    color: #4A5550;
+    line-height: 1.8;
+    max-width: 620px;
+    margin: 0 auto;
+  }
+
+  /* ─── PROBLEM / SOLUTION ─── */
+  .ps-section {
+    background: #1A3D2B;
+    color: white;
+    padding: 64px 40px;
+  }
+  .ps-inner { max-width: 900px; margin: 0 auto; }
+  .ps-section .section-label { color: #4ade80; }
+  .ps-section h2 { color: #fff; font-size: clamp(22px, 3.5vw, 30px); font-weight: 700; margin-bottom: 36px; text-align: center; }
+  .ps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 640px) { .ps-grid { grid-template-columns: 1fr; } }
+  .ps-card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 28px;
+  }
+  .ps-card.problem { border-color: rgba(248,113,113,0.25); background: rgba(248,113,113,0.06); }
+  .ps-card.solution { border-color: rgba(74,222,128,0.25); background: rgba(74,222,128,0.06); }
+  .ps-icon { font-size: 28px; margin-bottom: 14px; }
+  .ps-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 10px; }
+  .ps-card.problem h3 { color: #fca5a5; }
+  .ps-card.solution h3 { color: #86efac; }
+  .ps-card p { font-size: 14px; color: rgba(255,255,255,0.6); line-height: 1.7; }
+
+  /* ─── FEATURES ─── */
+  .features { padding: 80px 40px; max-width: 1000px; margin: 0 auto; }
+  .features-header { text-align: center; margin-bottom: 56px; }
+  .features-header h2 { font-size: clamp(24px, 4vw, 34px); font-weight: 700; letter-spacing: -0.5px; margin-bottom: 12px; }
+  .features-header p { font-size: 16px; color: #6B7A72; }
+
+  .feature-block {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: center;
+    margin-bottom: 72px;
+  }
+  .feature-block.reverse { direction: ltr; }
+  .feature-block.reverse .feature-text { direction: rtl; }
+  @media (max-width: 700px) {
+    .feature-block, .feature-block.reverse { grid-template-columns: 1fr; direction: rtl; }
+    .feature-block .feature-screen { order: -1; }
+  }
+
+  .feature-text .feat-tag {
+    display: inline-block;
+    background: #EDFBF3;
+    color: #166534;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+    letter-spacing: 0.05em;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+  }
+  .feature-text h3 { font-size: 22px; font-weight: 700; margin-bottom: 12px; letter-spacing: -0.3px; }
+  .feature-text p { font-size: 15px; color: #4A5550; line-height: 1.8; margin-bottom: 20px; }
+  .feature-list { list-style: none; }
+  .feature-list li {
+    font-size: 14px;
+    color: #3A4A44;
+    padding: 6px 0;
+    padding-right: 22px;
+    position: relative;
+  }
+  .feature-list li::before {
+    content: '✓';
+    position: absolute;
+    right: 0;
+    color: #2D6644;
+    font-weight: 700;
+  }
+
+  /* ─── SCREEN MOCKUPS ─── */
+  .feature-screen {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.06);
+    overflow: hidden;
+    border: 1px solid #E8EDE9;
+  }
+  .screen-bar {
+    background: linear-gradient(160deg, #142619 0%, #0c1c11 100%);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .screen-bar-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .screen-bar-title { color: rgba(255,255,255,0.7); font-size: 11px; flex: 1; text-align: center; }
+  .screen-body { padding: 20px; background: #F8F6F1; }
+
+  /* Dashboard mock */
+  .mock-hero-card {
+    background: linear-gradient(135deg, #1A3D2B, #2D6644);
+    border-radius: 12px;
+    padding: 18px;
+    color: white;
+    margin-bottom: 14px;
+  }
+  .mock-hero-card .label { font-size: 10px; color: rgba(255,255,255,0.5); margin-bottom: 4px; }
+  .mock-hero-card .amount { font-size: 26px; font-weight: 700; }
+  .mock-hero-card .sub { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+  .mock-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .mock-card { background: white; border-radius: 10px; padding: 12px; border: 1px solid #EEE9E2; }
+  .mock-card .mc-label { font-size: 9px; color: #9BA8A2; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .mock-card .mc-val { font-size: 16px; font-weight: 700; color: #1A1A1A; }
+  .mock-card .mc-bar { height: 3px; border-radius: 2px; background: #EEE; margin-top: 6px; }
+  .mock-card .mc-fill { height: 100%; border-radius: 2px; }
+  .mock-section-title { font-size: 10px; color: #9BA8A2; font-weight: 600; margin-bottom: 8px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .mock-rows { display: flex; flex-direction: column; gap: 6px; }
+  .mock-row { background: white; border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #F0EDE8; }
+  .mock-row .mr-name { font-size: 11px; color: #3A5544; font-weight: 500; }
+  .mock-row .mr-date { font-size: 10px; color: #9BA8A2; }
+  .mock-row .mr-amount { font-size: 12px; font-weight: 600; }
+
+  /* Reports mock */
+  .mock-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .mock-tab { padding: 7px 14px; border-radius: 8px; font-size: 11px; font-weight: 500; }
+  .mock-tab.active { background: #1A3D2B; color: white; }
+  .mock-tab.inactive { background: white; color: #6B7A72; border: 1px solid #E0E8E4; }
+  .mock-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
+  .mock-chip { padding: 5px 10px; border-radius: 7px; font-size: 10px; }
+  .mock-chip.active { background: #1A3D2B; color: white; font-weight: 600; }
+  .mock-chip.inactive { background: white; color: #3A5544; border: 1px solid #D8E2DA; }
+  .mock-report-table { background: white; border-radius: 10px; overflow: hidden; border: 1px solid #EEE9E2; }
+  .mock-report-row { display: flex; justify-content: space-between; padding: 9px 12px; border-bottom: 1px solid #F4F1EC; font-size: 11px; }
+  .mock-report-row:last-child { border-bottom: none; }
+  .mock-report-row .rr-source { font-weight: 600; color: #2D6644; }
+  .mock-report-row .rr-income { color: #166534; }
+  .mock-report-row .rr-exp { color: #991b1b; }
+
+  /* Horim mock */
+  .mock-progress-bar { background: white; border-radius: 10px; padding: 14px; margin-bottom: 10px; border: 1px solid #EEE9E2; }
+  .mock-progress-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .mock-progress-header .mph-label { font-size: 11px; font-weight: 600; color: #1A1A1A; }
+  .mock-progress-header .mph-pct { font-size: 13px; font-weight: 700; color: #2D6644; }
+  .mock-bar { height: 8px; background: #EEE9E2; border-radius: 4px; margin-bottom: 6px; }
+  .mock-bar-fill { height: 100%; border-radius: 4px; }
+  .mock-grade-row { background: white; border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #F0EDE8; margin-bottom: 5px; }
+  .mock-grade-name { font-size: 11px; font-weight: 600; color: #3A5544; }
+  .mock-grade-collected { font-size: 10px; color: #9BA8A2; }
+  .mock-grade-pct { font-size: 12px; font-weight: 700; color: #2D6644; }
+
+  /* ─── STATS ─── */
+  .stats-section {
+    background: #F2F5F3;
+    padding: 64px 40px;
+    text-align: center;
+  }
+  .stats-inner { max-width: 800px; margin: 0 auto; }
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 40px; }
+  @media (max-width: 560px) { .stats-grid { grid-template-columns: 1fr; } }
+  .stat-card {
+    background: white;
+    border-radius: 16px;
+    padding: 32px 24px;
+    border: 1px solid #E8EDE9;
+  }
+  .stat-number { font-size: 42px; font-weight: 800; color: #1A3D2B; letter-spacing: -2px; margin-bottom: 6px; }
+  .stat-label { font-size: 14px; color: #6B7A72; }
+
+  /* ─── CTA SECTION ─── */
+  .cta-section {
+    background: linear-gradient(160deg, #142619 0%, #0c1c11 100%);
+    color: white;
+    padding: 80px 40px;
+    text-align: center;
+  }
+  .cta-section h2 { font-size: clamp(26px, 4vw, 38px); font-weight: 700; margin-bottom: 14px; }
+  .cta-section p { font-size: 16px; color: rgba(255,255,255,0.55); margin-bottom: 36px; }
+  .cta-btn {
+    display: inline-block;
+    background: #4ade80;
+    color: #0c1c11;
+    text-decoration: none;
+    padding: 18px 52px;
+    border-radius: 50px;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 24px rgba(74,222,128,0.35);
+  }
+  .cta-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 36px rgba(74,222,128,0.5); }
+  .cta-link { color: #4ade80; font-size: 14px; margin-top: 18px; display: block; opacity: 0.7; }
+
+  /* ─── FOOTER ─── */
+  footer {
+    background: #0a1408;
+    color: rgba(255,255,255,0.3);
+    text-align: center;
+    padding: 24px 40px;
+    font-size: 13px;
+  }
+  footer a { color: rgba(255,255,255,0.5); text-decoration: none; }
+
+  /* ─── FLOATING CTA ─── */
+  .floating-cta {
+    position: fixed;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+  }
+  .floating-cta.visible { opacity: 1; pointer-events: all; }
+  .floating-cta a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: linear-gradient(160deg, #1A3D2B, #2D6644);
+    color: white;
+    text-decoration: none;
+    padding: 18px 14px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 700;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    letter-spacing: 0.05em;
+    box-shadow: 0 8px 32px rgba(26,61,43,0.45), 0 2px 8px rgba(0,0,0,0.2);
+    transition: transform 0.2s, box-shadow 0.2s;
+    white-space: nowrap;
+  }
+  .floating-cta a:hover { transform: translateX(-2px); box-shadow: 0 12px 40px rgba(26,61,43,0.6); }
+  .floating-cta .fc-dot {
+    width: 8px; height: 8px;
+    background: #4ade80;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+    writing-mode: horizontal-tb;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.8); }
+  }
+  @media (max-width: 768px) {
+    .floating-cta {
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      top: auto;
+      transform: none;
+      width: auto;
+      flex-direction: row;
+    }
+    .floating-cta a {
+      writing-mode: horizontal-tb;
+      flex-direction: row;
+      border-radius: 50px;
+      padding: 16px 28px;
+      font-size: 15px;
+      width: 100%;
+      justify-content: center;
+      gap: 8px;
+    }
+    .floating-cta .fc-dot { writing-mode: horizontal-tb; }
+  }
+
+  /* ─── MOBILE OVERRIDES ─── */
+  @media (max-width: 600px) {
+    .hero { padding: 56px 20px 64px; }
+    .what { padding: 48px 20px; }
+    .ps-section { padding: 48px 20px; }
+    .features { padding: 48px 20px; }
+    .feature-block { gap: 28px; margin-bottom: 48px; }
+    .stats-section { padding: 48px 20px; }
+    .cta-section { padding: 56px 20px; }
+    footer { padding: 20px; }
+    .mock-cards { grid-template-columns: 1fr 1fr; }
+    .screen-body { padding: 14px; }
+    .features-header { margin-bottom: 36px; }
+  }
+
+  /* ─── ANIMATIONS ─── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .hero-content { animation: fadeUp 0.7s ease both; }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="rgba(255,255,255,0.95)"/>
+        <path d="M19 15L19.8 17.2L22 18L19.8 18.8L19 21L18.2 18.8L16 18L18.2 17.2L19 15Z" fill="rgba(255,255,255,0.5)"/>
+      </svg>
+    </div>
+    <h1>הכרם<span> —</span><br>ניהול פיננסי לבתי ספר</h1>
+    <p class="tagline">
+      במקום גיליונות אקסל ותיקיות בענן —<br>
+      כל התקציב, ההוצאות, ההכנסות והדוחות במקום אחד.
+    </p>
+  </div>
+</section>
+
+<!-- WHAT IS IT -->
+<section class="what">
+  <div class="section-label">מה זה הכרם?</div>
+  <h2>מערכת ניהול פיננסי שבנויה בשביל מנהלות בית ספר יסודי</h2>
+  <p>
+    "הכרם" היא אפליקציית ווב מאובטחת שמאפשרת לכם לנהל את כל הכספים של המוסד החינוכי בצורה פשוטה, מסודרת ושקופה — ממכשיר כל שהוא, בכל מקום.
+  </p>
+</section>
+
+<!-- PROBLEM / SOLUTION -->
+<section class="ps-section">
+  <div class="ps-inner">
+    <div class="section-label">למה הכרם?</div>
+    <h2>הבעיה שמנהלים מכירים היטב</h2>
+    <div class="ps-grid">
+      <div class="ps-card problem">
+        <div class="ps-icon">😤</div>
+        <h3>בלי הכרם</h3>
+        <p>אקסל שמשתנה ידנית, קבלות שהולכות לאיבוד, דוחות שלוקחים שעות לבנות, ואין לך ראייה ברורה של מצב התקציב בזמן אמת.</p>
+      </div>
+      <div class="ps-card solution">
+        <div class="ps-icon">✨</div>
+        <h3>עם הכרם</h3>
+        <p>כל הוצאה ו הכנסה נרשמת בשניות, תקציב כל מקור מעודכן אוטומטית, ודוח PDF מוכן בלחיצה אחת. מהטלפון.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features">
+  <div class="features-header">
+    <div class="section-label">יכולות המערכת</div>
+    <h2>כל מה שצריך לנהל את הכספים</h2>
+    <p>ממשק פשוט ונקי שמנהלות ממש משתמשות בו</p>
+  </div>
+
+  <!-- Feature 1: Dashboard -->
+  <div class="feature-block">
+    <div class="feature-text">
+      <span class="feat-tag">לוח בקרה</span>
+      <h3>תמונה כלכלית מלאה<br>במבט אחד</h3>
+      <p>הדשבורד מציג את מצב התקציב לפי מקור, יתרה נוכחית, ואזהרות חריגה — הכל בזמן אמת.</p>
+      <ul class="feature-list">
+        <li>יתרה לפי גפן, עירייה והורים</li>
+        <li>אינדיקטור חריגה מיידי</li>
+        <li>סיכום גביית הורים בפועל</li>
+        <li>מעבר ישיר לרישום הוצאה</li>
+      </ul>
+    </div>
+    <div class="feature-screen">
+      <div class="screen-bar">
+        <div class="screen-bar-dot" style="background:#ff5f57"></div>
+        <div class="screen-bar-dot" style="background:#ffbd2e"></div>
+        <div class="screen-bar-dot" style="background:#28ca41"></div>
+        <div class="screen-bar-title">hakerem.app/dashboard</div>
+      </div>
+      <div class="screen-body">
+        <div class="mock-hero-card">
+          <div class="label">יתרה כוללת — תשפ"ז</div>
+          <div class="amount">₪287,400</div>
+          <div class="sub">מתוך תקציב שנתי ₪420,000</div>
+        </div>
+        <div class="mock-cards">
+          <div class="mock-card">
+            <div class="mc-label">גפן</div>
+            <div class="mc-val" style="color:#166534">₪156k</div>
+            <div class="mc-bar"><div class="mc-fill" style="width:74%;background:#2D6644"></div></div>
+          </div>
+          <div class="mock-card">
+            <div class="mc-label">עירייה</div>
+            <div class="mc-val" style="color:#7C2D12">₪83k</div>
+            <div class="mc-bar"><div class="mc-fill" style="width:92%;background:#C0392B"></div></div>
+          </div>
+          <div class="mock-card">
+            <div class="mc-label">הורים</div>
+            <div class="mc-val" style="color:#6B2356">₪48k</div>
+            <div class="mc-bar"><div class="mc-fill" style="width:55%;background:#8B2F6E"></div></div>
+          </div>
+        </div>
+        <div class="mock-section-title">הוצאות אחרונות</div>
+        <div class="mock-rows">
+          <div class="mock-row">
+            <div>
+              <div class="mr-name">ספרי לימוד כיתה ד׳</div>
+              <div class="mr-date">08/07/2026</div>
+            </div>
+            <div class="mr-amount" style="color:#991b1b">−₪2,400</div>
+          </div>
+          <div class="mock-row">
+            <div>
+              <div class="mr-name">קייטנת קיץ — הכנסה</div>
+              <div class="mr-date">05/07/2026</div>
+            </div>
+            <div class="mr-amount" style="color:#166534">+₪8,000</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature 2: Reports -->
+  <div class="feature-block reverse">
+    <div class="feature-screen">
+      <div class="screen-bar">
+        <div class="screen-bar-dot" style="background:#ff5f57"></div>
+        <div class="screen-bar-dot" style="background:#ffbd2e"></div>
+        <div class="screen-bar-dot" style="background:#28ca41"></div>
+        <div class="screen-bar-title">hakerem.app/reports</div>
+      </div>
+      <div class="screen-body">
+        <div class="mock-tabs">
+          <div class="mock-tab active">דוח תקופתי</div>
+          <div class="mock-tab inactive">גביית הורים</div>
+          <div class="mock-tab inactive">דוח שנתי</div>
+        </div>
+        <div class="mock-chips">
+          <div class="mock-chip inactive">ינואר</div>
+          <div class="mock-chip inactive">פברואר</div>
+          <div class="mock-chip inactive">מרץ</div>
+          <div class="mock-chip active">אפריל</div>
+          <div class="mock-chip inactive">מאי</div>
+          <div class="mock-chip inactive">יוני</div>
+        </div>
+        <div class="mock-report-table">
+          <div class="mock-report-row" style="background:#F5F2EC;font-size:10px;font-weight:700;color:#6B7A72;border-bottom:1px solid #EEE9E2;">
+            <span>מקור</span><span>הכנסות</span><span>הוצאות</span>
+          </div>
+          <div class="mock-report-row">
+            <span class="rr-source">גפן</span>
+            <span class="rr-income">₪18,400</span>
+            <span class="rr-exp">₪12,750</span>
+          </div>
+          <div class="mock-report-row">
+            <span class="rr-source">עירייה</span>
+            <span class="rr-income">₪9,200</span>
+            <span class="rr-exp">₪11,300</span>
+          </div>
+          <div class="mock-report-row">
+            <span class="rr-source">הורים</span>
+            <span class="rr-income">₪6,800</span>
+            <span class="rr-exp">₪3,200</span>
+          </div>
+        </div>
+        <div style="margin-top:12px;text-align:center">
+          <div style="display:inline-block;background:#1A3D2B;color:white;padding:9px 22px;border-radius:8px;font-size:12px;font-weight:600">⬇ ייצוא PDF</div>
+        </div>
+      </div>
+    </div>
+    <div class="feature-text">
+      <span class="feat-tag">דוחות</span>
+      <h3>דוחות PDF<br>בלחיצה אחת</h3>
+      <p>בחרי חודש, רבעון, או טווח מותאם — הדוח מוכן מיד לשליחה לפיקוח, להנהלה, או לרואה חשבון.</p>
+      <ul class="feature-list">
+        <li>דוח חודשי / רבעוני / שנתי</li>
+        <li>פירוט לפי מקור תקציבי</li>
+        <li>ייצוא PDF מקצועי ומודפס</li>
+        <li>דוח גביית הורים לפי כיתה</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Feature 3: Horim -->
+  <div class="feature-block">
+    <div class="feature-text">
+      <span class="feat-tag">גביית הורים</span>
+      <h3>מעקב גביה<br>לפי כיתה ושכבה</h3>
+      <p>הגדירי את הסכום לפי כיתה, רשמי גביות בקלות, ועקבי אחר האחוז שנגבה מכל שכבה בזמן אמת.</p>
+      <ul class="feature-list">
+        <li>הגדרת סכום גביה לפי כיתה</li>
+        <li>רישום גביה עם תאריך ואמצעי תשלום</li>
+        <li>סיכום אחוז גביה לפי שכבה</li>
+        <li>מעקב ניהולי שנתי</li>
+      </ul>
+    </div>
+    <div class="feature-screen">
+      <div class="screen-bar">
+        <div class="screen-bar-dot" style="background:#ff5f57"></div>
+        <div class="screen-bar-dot" style="background:#ffbd2e"></div>
+        <div class="screen-bar-dot" style="background:#28ca41"></div>
+        <div class="screen-bar-title">hakerem.app/horim</div>
+      </div>
+      <div class="screen-body">
+        <div class="mock-progress-bar">
+          <div class="mock-progress-header">
+            <span class="mph-label">סה"כ גביה השנה</span>
+            <span class="mph-pct">72%</span>
+          </div>
+          <div class="mock-bar"><div class="mock-bar-fill" style="width:72%;background:linear-gradient(90deg,#2D6644,#4ade80)"></div></div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#9BA8A2;margin-top:4px">
+            <span>₪51,840 נגבה</span>
+            <span>יעד: ₪72,000</span>
+          </div>
+        </div>
+        <div class="mock-section-title">פירוט לפי שכבה</div>
+        <div class="mock-grade-row">
+          <div>
+            <div class="mock-grade-name">כיתה א׳</div>
+            <div class="mock-grade-collected">24 תלמידים · ₪400 לתלמיד</div>
+          </div>
+          <div class="mock-grade-pct">85%</div>
+        </div>
+        <div class="mock-grade-row">
+          <div>
+            <div class="mock-grade-name">כיתה ב׳</div>
+            <div class="mock-grade-collected">22 תלמידים · ₪400 לתלמיד</div>
+          </div>
+          <div class="mock-grade-pct">68%</div>
+        </div>
+        <div class="mock-grade-row">
+          <div>
+            <div class="mock-grade-name">כיתה ג׳</div>
+            <div class="mock-grade-collected">26 תלמידים · ₪400 לתלמיד</div>
+          </div>
+          <div class="mock-grade-pct">61%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Feature 4: Receipts -->
+  <div class="feature-block reverse">
+    <div class="feature-screen">
+      <div class="screen-bar">
+        <div class="screen-bar-dot" style="background:#ff5f57"></div>
+        <div class="screen-bar-dot" style="background:#ffbd2e"></div>
+        <div class="screen-bar-dot" style="background:#28ca41"></div>
+        <div class="screen-bar-title">hakerem.app/expenses/upload</div>
+      </div>
+      <div class="screen-body">
+        <div style="background:white;border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid #EEE9E2;">
+          <div class="mock-section-title" style="margin-bottom:10px">העלאת קבלות</div>
+          <div style="border:2px dashed #C8D8CE;border-radius:10px;padding:18px;text-align:center;background:#F7FAF8;margin-bottom:10px;">
+            <div style="font-size:22px;margin-bottom:6px">📷</div>
+            <div style="font-size:12px;font-weight:600;color:#2D6644;margin-bottom:3px">צלמי או גרורי קבלות לכאן</div>
+            <div style="font-size:10px;color:#9BA8A2">JPG, PNG, PDF · עד 50 קבצים בו-זמנית</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <div style="background:#EDFBF3;border:1px solid #BBF7D0;border-radius:8px;padding:10px;text-align:center;">
+              <div style="font-size:16px;margin-bottom:3px">🗂️</div>
+              <div style="font-size:10px;font-weight:600;color:#166534;">ייבוא קבוצתי</div>
+              <div style="font-size:9px;color:#9BA8A2;margin-top:2px">עשרות קבלות בלחיצה אחת</div>
+            </div>
+            <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;padding:10px;text-align:center;">
+              <div style="font-size:16px;margin-bottom:3px">📄</div>
+              <div style="font-size:10px;font-weight:600;color:#3730A3;">סריקה יחידנית</div>
+              <div style="font-size:9px;color:#9BA8A2;margin-top:2px">קבלה אחת + פרטים ידניים</div>
+            </div>
+          </div>
+        </div>
+        <div class="mock-section-title">ממתינות לאישור</div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div style="background:white;border-radius:8px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center;border:1px solid #F0EDE8;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:28px;height:28px;background:#FEF3C7;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;">🧾</div>
+              <div>
+                <div style="font-size:11px;font-weight:600;color:#3A5544;">קבלה_072026_001.jpg</div>
+                <div style="font-size:9px;color:#9BA8A2;">זוהה: ₪1,240 · ספק לא מזוהה</div>
+              </div>
+            </div>
+            <div style="font-size:10px;font-weight:600;color:#D97706;background:#FEF3C7;padding:3px 8px;border-radius:6px;">ממתין</div>
+          </div>
+          <div style="background:white;border-radius:8px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center;border:1px solid #F0EDE8;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:28px;height:28px;background:#DCFCE7;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;">🧾</div>
+              <div>
+                <div style="font-size:11px;font-weight:600;color:#3A5544;">קבלה_072026_002.pdf</div>
+                <div style="font-size:9px;color:#9BA8A2;">זוהה: ₪3,800 · נייר וציוד</div>
+              </div>
+            </div>
+            <div style="font-size:10px;font-weight:600;color:#166534;background:#DCFCE7;padding:3px 8px;border-radius:6px;">✓ אושר</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="feature-text">
+      <span class="feat-tag">קבלות</span>
+      <h3>העלאת קבלות<br>בכמות גדולה או אחת-אחת</h3>
+      <p>בסוף החודש יש ערימה? העלי את כולן ביחד. קנית משהו עכשיו? צלמי ורשמי תוך 30 שניות.</p>
+      <ul class="feature-list">
+        <li>ייבוא קבוצתי — עד 50 קבלות בבת אחת</li>
+        <li>סריקה יחידנית מהטלפון עם המצלמה</li>
+        <li>זיהוי אוטומטי של סכום ותאריך</li>
+        <li>ארכיון מסודר — לא עוד קבלות אבודות</li>
+      </ul>
+    </div>
+  </div>
+
+</section>
+
+<!-- STATS -->
+<section class="stats-section">
+  <div class="stats-inner">
+    <div class="section-label">בקצרה</div>
+    <h2 style="font-size:clamp(22px,3.5vw,30px);font-weight:700;margin-bottom:8px">מה מקבלים עם הכרם</h2>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-number">2 דק׳</div>
+        <div class="stat-label">זמן לרשום הוצאה חדשה ולקבל קבלה</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">100%</div>
+        <div class="stat-label">מאובטח — נתוני בית הספר שלך בלבד</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">PDF</div>
+        <div class="stat-label">דוח מוכן לפיקוח בלחיצה אחת</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <h2>מוכנה לנסות?</h2>
+  <p>פתיחת חשבון לבית הספר לוקחת כ-3 דקות. ללא כרטיס אשראי.</p>
+  <a href="https://hakerem.app" target="_blank" class="cta-btn">כניסה ל-hakerem.app ←</a>
+  <span class="cta-link">hakerem.app</span>
+</section>
+
+<footer>
+  <p>הכרם © 2026 · <a href="https://hakerem.app">hakerem.app</a></p>
+</footer>
+
+<!-- FLOATING CTA -->
+<div class="floating-cta" id="floatingCta">
+  <div class="fc-dot"></div>
+  <a href="https://hakerem.app" target="_blank">כניסה למערכת ← hakerem.app</a>
+</div>
+
+<script>
+  const cta = document.getElementById('floatingCta');
+  const hero = document.querySelector('.hero');
+  const observer = new IntersectionObserver(([entry]) => {
+    if (!entry.isIntersecting) {
+      cta.classList.add('visible');
+    } else {
+      cta.classList.remove('visible');
+    }
+  }, { threshold: 0.1 });
+  observer.observe(hero);
+</script>
+
+</body>
+</html>
