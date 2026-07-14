@@ -351,8 +351,10 @@ async function callClaude(
           if (inp.source) expQ = expQ.eq("source", normSrc(String(inp.source), srcs));
           const { data: exps } = await expQ;
           const expBycat: Record<string, number> = {};
+          const uncatBySrc: Record<string, number> = {};
           for (const e of (exps ?? [])) {
             if (e.budget_category_id) expBycat[e.budget_category_id] = (expBycat[e.budget_category_id] ?? 0) + Number(e.amount);
+            else uncatBySrc[e.source] = (uncatBySrc[e.source] ?? 0) + Number(e.amount);
           }
           const summary = (cats ?? []).map(c => ({
             id: c.id, name: c.name, source: c.source,
@@ -362,6 +364,9 @@ async function callClaude(
             remaining: Number(c.planned_amount) - (expBycat[c.id] ?? 0),
             pct_used: Number(c.planned_amount) > 0 ? Math.round(((expBycat[c.id] ?? 0) / Number(c.planned_amount)) * 100) : 0,
           }));
+          for (const [src, amt] of Object.entries(uncatBySrc)) {
+            summary.push({ id: "uncategorized-" + src, name: "ללא קטגוריה", source: src, source_label: srcs.find(s => s.slug === src)?.label ?? src, planned: 0, spent: amt, remaining: -amt, pct_used: 0 });
+          }
           tr.push({ type: "tool_result", tool_use_id: blk.id, content: JSON.stringify(summary) });
 
         // ── get_expense_analysis ──────────────────────────────────────────────
