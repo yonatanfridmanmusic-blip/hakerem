@@ -1633,7 +1633,7 @@ export default function DashboardPage() {
   const yearName = data?.schoolYear?.name ?? "—";
 
   // Animations
-  const animBalance = useCountUp(totals.balance);
+  const animBalance = useCountUp(incomeTotals.grand - totals.used);
   const animUsed    = useCountUp(totals.used);
   const animPlanned = useCountUp(totals.planned);
   const animPct     = useAnimatedPct(totals.pct, 80);
@@ -1707,9 +1707,10 @@ export default function DashboardPage() {
           </div>
           <div style={{ marginTop: "12px", fontSize: "13px", color: "#7AAA8E" }}>
             <span className="num">{isLoading ? "—" : fmt(animUsed)}</span>
-            <span style={{ color: "rgba(122,170,142,0.6)", margin: "0 5px" }}>מתוך</span>
-            <span className="num">{isLoading ? "—" : fmt(animPlanned)}</span>
-            <span style={{ color: "rgba(122,170,142,0.6)", marginRight: "5px" }}>מתוכנן</span>
+            <span style={{ color: "rgba(122,170,142,0.6)", marginRight: "5px" }}> הוצאות</span>
+          </div>
+          <div style={{ marginTop: "5px", fontSize: "12px", color: "rgba(122,170,142,0.6)" }}>
+            מתוך תכנון שנתי: <span className="num">{isLoading ? "—" : fmt(animPlanned)}</span>
           </div>
         </div>
 
