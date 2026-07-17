@@ -1711,14 +1711,19 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (!isLoading && data !== undefined && wizardTriggered === null && orgId) {
-      // Show wizard if: (1) no school year yet, OR (2) has year but wizard was never
-      // explicitly completed (localStorage flag per org). This lets users resume mid-wizard.
+    if (!isLoading && data !== undefined && orgId) {
+      // If DB says setup is complete — never show the wizard (works across browsers/incognito)
+      if (membership?.organization?.setup_completed_at) {
+        setWizardTriggered(false);
+        return;
+      }
+      // Only evaluate localStorage once
+      if (wizardTriggered !== null) return;
       const localKey = `hakerem_wizard_done_${orgId}`;
       const isLocallyDone = localStorage.getItem(localKey) === "true";
       setWizardTriggered(!data.schoolYear || !isLocallyDone);
     }
-  }, [isLoading, data, wizardTriggered, orgId]);
+  }, [isLoading, data, wizardTriggered, orgId, membership?.organization?.setup_completed_at]);
 
   const totals = data?.totals ?? { planned: 0, used: 0, balance: 0, pct: 0 };
   const incomeTotals = data?.incomeTotals ?? { fromIncome: 0, fromParentCollections: 0, grand: 0 };
@@ -1737,7 +1742,14 @@ export default function DashboardPage() {
     return (
       <SetupWizard
         onComplete={() => {
-          if (orgId) localStorage.setItem(`hakerem_wizard_done_${orgId}`, "true");
+          if (orgId) {
+            localStorage.setItem(`hakerem_wizard_done_${orgId}`, "true");
+            // Persist to DB so wizard doesn't re-appear in other browsers/incognito
+            void supabase
+              .from("organizations")
+              .update({ setup_completed_at: new Date().toISOString() })
+              .eq("id", orgId);
+          }
           setWizardDone(true);
         }}
         mode="first"
