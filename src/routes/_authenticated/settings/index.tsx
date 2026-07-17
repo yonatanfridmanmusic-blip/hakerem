@@ -1243,6 +1243,27 @@ function TeamTab() {
   const setRoleFor = (memberId: string, role: "viewer" | "admin") =>
     setRoleMap((prev) => ({ ...prev, [memberId]: role }));
 
+  // Role change for active members (owner only)
+  const [activeRoleEdit, setActiveRoleEdit] = useState<Record<string, OrgRole>>({});
+  const [roleChangePending, setRoleChangePending] = useState<string | null>(null);
+
+  const handleChangeRole = async (memberId: string, newRole: OrgRole) => {
+    setRoleChangePending(memberId);
+    try {
+      const { error } = await supabase
+        .from("organization_members")
+        .update({ role: newRole })
+        .eq("id", memberId);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["org-members"] });
+      toast.success("ההרשאה עודכנה");
+    } catch {
+      toast.error("שגיאה בעדכון ההרשאה");
+    } finally {
+      setRoleChangePending(null);
+    }
+  };
+
   // Approve a member: update status + toast + email notification
   const handleApproveMember = (memberId: string, role: "viewer" | "admin") => {
     updateStatus.mutate(
@@ -1633,14 +1654,39 @@ function TeamTab() {
               )}
             </div>
             {isOwner && m.role !== "owner" && (
-              <button
-                type="button"
-                style={btnDanger}
-                onClick={() => removeMember.mutate(m.id, { onError: () => toast.error("שגיאה בהסרת החבר") })}
-                disabled={removeMember.isPending}
-              >
-                הסר
-              </button>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <select
+                  value={activeRoleEdit[m.id] ?? m.role}
+                  onChange={(e) => setActiveRoleEdit((prev) => ({ ...prev, [m.id]: e.target.value as OrgRole }))}
+                  style={{
+                    padding: "6px 10px", borderRadius: "8px",
+                    border: "1.5px solid #E8E2D9", fontSize: "13px",
+                    color: "#1A1A1A", background: "#fff",
+                    fontFamily: "inherit", cursor: "pointer",
+                  }}
+                >
+                  <option value="viewer">צופה</option>
+                  <option value="admin">מנהל</option>
+                </select>
+                {(activeRoleEdit[m.id] ?? m.role) !== m.role && (
+                  <button
+                    type="button"
+                    style={{ ...btnPrimary, fontSize: "12px", padding: "6px 12px" }}
+                    onClick={() => void handleChangeRole(m.id, activeRoleEdit[m.id]!)}
+                    disabled={roleChangePending === m.id}
+                  >
+                    {roleChangePending === m.id ? "..." : "שמור"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  style={btnDanger}
+                  onClick={() => removeMember.mutate(m.id, { onError: () => toast.error("שגיאה בהסרת החבר") })}
+                  disabled={removeMember.isPending}
+                >
+                  הסר
+                </button>
+              </div>
             )}
           </div>
         </div>
