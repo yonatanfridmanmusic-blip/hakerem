@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,6 +24,7 @@ import {
   useUpdateMemberStatus,
   useRemoveMember,
   useCurrentProfile,
+  usePendingMembersCount,
   type OrgRole,
   type MemberStatus,
 } from "@/hooks/use-organization";
@@ -124,7 +125,19 @@ const btnDanger: React.CSSProperties = {
 
 function SettingsPage() {
   const isMobile = useIsMobile();
+  const { data: membership } = useOrganization();
+  const isOwner = membership?.role === "owner";
+  const { data: pendingCount = 0 } = usePendingMembersCount();
   const [tab, setTab] = useState<Tab>("years");
+  const autoSwitchedRef = useRef(false);
+
+  // Auto-switch to team tab once when landing with pending requests
+  useEffect(() => {
+    if (isOwner && pendingCount > 0 && !autoSwitchedRef.current) {
+      autoSwitchedRef.current = true;
+      setTab("team");
+    }
+  }, [isOwner, pendingCount]);
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "years",      label: "שנות לימודים" },
@@ -184,9 +197,30 @@ function SettingsPage() {
               fontFamily: "Rubik, sans-serif",
               boxShadow: tab === t.key ? "0 2px 8px rgba(26,61,43,0.25)" : "none",
               transition: "all 0.15s",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
             }}
           >
             {t.label}
+            {t.key === "team" && isOwner && pendingCount > 0 && (
+              <span style={{
+                background: "#C0392B",
+                color: "#fff",
+                borderRadius: "50%",
+                minWidth: "18px",
+                height: "18px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "10px",
+                fontWeight: 700,
+                lineHeight: 1,
+                padding: "0 2px",
+              }}>
+                {pendingCount}
+              </span>
+            )}
           </button>
         ))}
       </div>

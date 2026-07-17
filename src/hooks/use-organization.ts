@@ -271,6 +271,30 @@ export function useRemoveMember() {
   });
 }
 
+// ─── Pending members count (lightweight — owners only) ───────────────────────
+
+export function usePendingMembersCount() {
+  const { data: membership } = useOrganization();
+  const orgId = membership?.organization?.id;
+  const isOwner = membership?.role === "owner";
+
+  return useQuery<number>({
+    queryKey: ["pending-members-count", orgId],
+    enabled: !!orgId && isOwner,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("organization_members")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId!)
+        .eq("status", "pending");
+      if (error) throw error;
+      return count ?? 0;
+    },
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+}
+
 // ─── Current user's profile ────────────────────────────────────────────────────
 
 export interface UserProfile {

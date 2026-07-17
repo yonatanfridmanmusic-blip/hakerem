@@ -3,7 +3,7 @@ import { AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowDownLeft, Users } 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDashboardSummary, type SourceSummary } from "@/hooks/use-dashboard-summary";
-import { useOrganization } from "@/hooks/use-organization";
+import { useOrganization, usePendingMembersCount } from "@/hooks/use-organization";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateSchoolYear } from "@/hooks/use-school-years";
@@ -1692,6 +1692,8 @@ export default function DashboardPage() {
   const { data, isLoading, error } = useDashboardSummary();
   const { data: membership } = useOrganization();
   const orgId = membership?.organization?.id;
+  const isOwner = membership?.role === "owner";
+  const { data: pendingMembersCount = 0 } = usePendingMembersCount();
 
   // Track whether this session started without a school year
   const [wizardTriggered, setWizardTriggered] = useState<boolean | null>(null);
@@ -1797,6 +1799,52 @@ export default function DashboardPage() {
 
       {/* Setup completion banner — shown only to owners who haven't finished onboarding */}
       <SetupCompletionBanner />
+
+      {/* Pending team members banner */}
+      {isOwner && pendingMembersCount > 0 && (
+        <Link
+          to="/settings"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            background: "linear-gradient(135deg, #FFF8E6 0%, #FFFDF5 100%)",
+            border: "1.5px solid #F59E0B",
+            borderRadius: "14px",
+            padding: "14px 18px",
+            textDecoration: "none",
+            boxShadow: "0 2px 10px rgba(245,158,11,0.12)",
+            cursor: "pointer",
+          }}
+        >
+          <div style={{
+            width: "34px", height: "34px", borderRadius: "10px",
+            background: "#FEF3C7",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "14px", fontWeight: 600, color: "#92400E" }}>
+              {pendingMembersCount === 1
+                ? "יש בקשת הצטרפות ממתינה לאישור"
+                : `יש ${pendingMembersCount} בקשות הצטרפות ממתינות לאישור`}
+            </div>
+            <div style={{ fontSize: "12px", color: "#B45309", marginTop: "2px" }}>
+              לחץ/י לאישור אנשי הצוות בהגדרות
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: "rotate(180deg)" }}>
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </Link>
+      )}
 
       {/* Hero */}
       <div style={{
