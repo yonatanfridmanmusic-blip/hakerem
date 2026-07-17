@@ -14,6 +14,7 @@ export interface Organization {
   plan: string;
   created_at: string;
   plan_expires_at?: string | null;
+  setup_completed_at?: string | null;
 }
 
 export interface OrgMembership {
@@ -49,7 +50,7 @@ export function useOrganization() {
       if (viewAs) {
         const { data: org } = await supabase
           .from("organizations")
-          .select("id, name, city, plan, created_at, plan_expires_at")
+          .select("id, name, city, plan, created_at, plan_expires_at, setup_completed_at")
           .eq("id", viewAs.orgId)
           .maybeSingle();
         if (!org) return null;
@@ -70,7 +71,7 @@ export function useOrganization() {
           role,
           status,
           joined_at,
-          organizations (id, name, city, plan, created_at, plan_expires_at)
+          organizations (id, name, city, plan, created_at, plan_expires_at, setup_completed_at)
         `)
         .eq("user_id", session.user.id)
         .eq("status", "active")

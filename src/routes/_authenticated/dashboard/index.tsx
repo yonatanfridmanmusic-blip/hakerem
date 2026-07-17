@@ -1613,6 +1613,70 @@ function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; m
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// ─── Setup Completion Banner ──────────────────────────────────────────────────
+
+function SetupCompletionBanner() {
+  const { data: membership } = useOrganization();
+  const [dismissed, setDismissed] = useState(false);
+
+  const isOwner = membership?.role === "owner";
+  const setupDone = !!membership?.organization?.setup_completed_at;
+
+  if (!isOwner || setupDone || dismissed) return null;
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #FFFBEB, #FEF3C7)",
+      border: "1.5px solid #F59E0B",
+      borderRadius: "14px",
+      padding: "16px 20px",
+      display: "flex",
+      alignItems: "center",
+      gap: "14px",
+      fontFamily: "Rubik, sans-serif",
+    }}>
+      <div style={{
+        width: "40px", height: "40px", borderRadius: "10px", flexShrink: 0,
+        background: "#FEF3C7", border: "1px solid #F59E0B",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 21h18M3 10l9-7 9 7M5 21V10M19 21V10M9 21v-6h6v6"/>
+        </svg>
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: "14px", fontWeight: "500", color: "#78350F", marginBottom: "2px" }}>
+          הגדרת בית הספר לא הושלמה
+        </div>
+        <div style={{ fontSize: "12.5px", color: "#92400E", lineHeight: 1.5 }}>
+          טרם הגדרת את מקורות התקציב. ייקח רק כמה שניות.
+        </div>
+      </div>
+      <a
+        href="/onboarding"
+        style={{
+          padding: "8px 16px", borderRadius: "9px", flexShrink: 0,
+          background: "#B45309", color: "#fff", textDecoration: "none",
+          fontSize: "13px", fontWeight: "500", whiteSpace: "nowrap",
+        }}
+      >
+        השלם הגדרה →
+      </a>
+      <button
+        onClick={() => setDismissed(true)}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          color: "#B45309", fontSize: "18px", padding: "0 4px",
+          lineHeight: 1, flexShrink: 0,
+        }}
+        aria-label="סגור"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const isMobile = useIsMobile();
   const { data, isLoading, error } = useDashboardSummary();
@@ -1684,6 +1748,9 @@ export default function DashboardPage() {
           פתח שנת לימודים חדשה
         </button>
       </div>
+
+      {/* Setup completion banner — shown only to owners who haven't finished onboarding */}
+      <SetupCompletionBanner />
 
       {/* Hero */}
       <div style={{

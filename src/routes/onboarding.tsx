@@ -14,16 +14,21 @@ export const Route = createFileRoute("/onboarding")({
     if (!data.user) throw redirect({ to: "/auth" });
     const { data: mem } = await supabase
       .from("organization_members")
-      .select("id")
+      .select("id, organizations(setup_completed_at)")
       .eq("user_id", data.user.id)
       .eq("status", "active")
       .maybeSingle();
-    if (mem) throw redirect({ to: "/dashboard" });
+    if (mem) {
+      const org = mem.organizations as { setup_completed_at: string | null } | null;
+      // Only redirect to dashboard if setup is fully complete
+      if (org?.setup_completed_at) throw redirect({ to: "/dashboard" });
+      // else: fall through — page will show resume screen
+    }
   },
   component: OnboardingPage,
 });
 
-type Step = "choose" | "create-org" | "sources" | "join-org" | "pending" | "transfer-pending";
+type Step = "choose" | "create-org" | "sources" | "join-org" | "pending" | "transfer-pending" | "resume-setup";
 
 const f = "Rubik, sans-serif";
 
@@ -291,45 +296,74 @@ function SourcesStep({ orgId, onDone }: { orgId: string; onDone: () => void }) {
   const [customLabel, setCustomLabel] = useState("");
   const [adding, setAdding] = useState(false);
   const [colorIdx, setColorIdx] = useState(0);
-  const [customSources, setCustomSources] = useState<{ label: string; color: string; bg_color: string }[]>([]);
+  const [customSources, setCustomSources] = useState<{ id: string; label: string; color: string; bg_color: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const handleAddCustom = () => {
+  // Load existing custom sources on mount (handles resume case)
+  useEffect(() => {
+    supabase
+      .from("org_budget_sources")
+      .select("id, label, color, bg_color")
+      .eq("org_id", orgId)
+      .eq("is_default", false)
+      .order("order_index")
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setCustomSources(
+            data.map(s => ({ id: s.id, label: s.label, color: s.color, bg_color: s.bg_color }))
+          );
+        }
+      });
+  }, [orgId]);
+
+  // Auto-save to DB immediately on add
+  const handleAddCustom = async () => {
     const trimmed = customLabel.trim();
     if (!trimmed) return;
     const preset = PRESET_COLORS[colorIdx % PRESET_COLORS.length];
-    setCustomSources(prev => [...prev, { label: trimmed, color: preset.color, bg_color: preset.bg_color }]);
+    const slug = trimmed.toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_א-ת]/g, "");
+    const { data: existing } = await supabase
+      .from("org_budget_sources")
+      .select("order_index")
+      .eq("org_id", orgId)
+      .order("order_index", { ascending: false })
+      .limit(1);
+    const maxOrder = (existing?.[0] as { order_index: number } | undefined)?.order_index ?? 3;
+    const { data: newSrc } = await supabase
+      .from("org_budget_sources")
+      .insert({
+        org_id: orgId, slug, label: trimmed,
+        color: preset.color, bg_color: preset.bg_color,
+        is_default: false, order_index: maxOrder + 1,
+      })
+      .select("id")
+      .single();
+    if (newSrc) {
+      setCustomSources(prev => [...prev, { id: newSrc.id, label: trimmed, color: preset.color, bg_color: preset.bg_color }]);
+    }
     setCustomLabel("");
     setAdding(false);
     setColorIdx(prev => prev + 1);
   };
 
-  const handleRemoveCustom = (idx: number) => {
+  // Delete from DB on remove
+  const handleRemoveCustom = async (idx: number) => {
+    const src = customSources[idx];
     setCustomSources(prev => prev.filter((_, i) => i !== idx));
+    if (src.id) {
+      await supabase.from("org_budget_sources").delete().eq("id", src.id);
+    }
   };
 
+  // Mark setup complete and navigate
   const handleDone = async () => {
     setSaving(true);
-    // Persist custom sources directly with the orgId prop (context may not be ready yet)
-    for (const src of customSources) {
-      try {
-        const slug = src.label.trim().toLowerCase()
-          .replace(/\s+/g, "_")
-          .replace(/[^a-z0-9_א-ת]/g, "");
-        const { data: existing } = await supabase
-          .from("org_budget_sources")
-          .select("order_index")
-          .eq("org_id", orgId)
-          .order("order_index", { ascending: false })
-          .limit(1);
-        const maxOrder = (existing?.[0] as { order_index: number } | undefined)?.order_index ?? 3;
-        await supabase.from("org_budget_sources").insert({
-          org_id: orgId, slug, label: src.label.trim(),
-          color: src.color, bg_color: src.bg_color,
-          is_default: false, order_index: maxOrder + 1,
-        });
-      } catch { /* ignore — user can add from settings later */ }
-    }
+    await supabase
+      .from("organizations")
+      .update({ setup_completed_at: new Date().toISOString() })
+      .eq("id", orgId);
     setSaving(false);
     onDone();
   };
@@ -450,6 +484,69 @@ function SourcesStep({ orgId, onDone }: { orgId: string; onDone: () => void }) {
       <p style={{ textAlign: "center", fontSize: "12px", color: INK3, margin: "10px 0 0" }}>
         ניתן לערוך ולהוסיף מקורות בכל עת מדף ההגדרות
       </p>
+    </div>
+  );
+}
+
+// ─── Step: Resume Setup ───────────────────────────────────────────────────────
+
+function ResumeSetupStep({ orgName, orgId, onContinue, onSkip }: {
+  orgName: string;
+  orgId: string;
+  onContinue: () => void;
+  onSkip: () => void;
+}) {
+  const [skipping, setSkipping] = useState(false);
+
+  const handleSkip = async () => {
+    setSkipping(true);
+    await supabase
+      .from("organizations")
+      .update({ setup_completed_at: new Date().toISOString() })
+      .eq("id", orgId);
+    setSkipping(false);
+    onSkip();
+  };
+
+  return (
+    <div style={{ textAlign: "center", padding: "8px 0" }}>
+      <div style={{
+        width: "64px", height: "64px", borderRadius: "50%",
+        background: "#EDFBF3", border: "1.5px solid #B6E8C4",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        margin: "0 auto 20px",
+      }}>
+        <IconSchool color={GREEN} />
+      </div>
+
+      <h2 style={{ fontSize: "18px", fontWeight: "500", color: INK, margin: "0 0 6px" }}>
+        בית הספר שלך קיים!
+      </h2>
+      <p style={{ fontSize: "15px", fontWeight: "500", color: GREEN, margin: "0 0 10px" }}>
+        {orgName}
+      </p>
+      <p style={{ fontSize: "13px", color: INK2, margin: "0 0 28px", lineHeight: 1.7 }}>
+        נותר רק להגדיר מקורות תקציב.
+        כל מה שהגדרת כבר נשמר במערכת.
+      </p>
+
+      <button onClick={onContinue} style={{ ...btnPrimary, marginBottom: "10px" }}>
+        המשך להגדרת מקורות →
+      </button>
+
+      <button
+        onClick={handleSkip}
+        disabled={skipping}
+        style={{
+          width: "100%", padding: "10px 0",
+          background: "none", border: `1.5px solid ${BORDER}`,
+          borderRadius: "10px", fontSize: "13px", color: INK2,
+          fontFamily: f, cursor: skipping ? "not-allowed" : "pointer",
+          opacity: skipping ? 0.7 : 1,
+        }}
+      >
+        {skipping ? "כניסה..." : "דלג, כנס למערכת"}
+      </button>
     </div>
   );
 }
@@ -888,19 +985,30 @@ function OnboardingPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("choose");
   const [newOrgId, setNewOrgId] = useState<string | null>(null);
+  const [resumeName, setResumeName] = useState<string>("");
 
-  // On mount: if user already has a pending membership, jump straight to pending step
+  // On mount: detect pending OR active-but-incomplete-setup membership
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) return;
       supabase
         .from("organization_members")
-        .select("status")
+        .select("status, organization_id, role, organizations(id, name, setup_completed_at)")
         .eq("user_id", data.user.id)
-        .eq("status", "pending")
+        .in("status", ["pending", "active"])
         .maybeSingle()
         .then(({ data: mem }) => {
-          if (mem) setStep("pending");
+          if (!mem) return;
+          if (mem.status === "pending") {
+            setStep("pending");
+          } else if (mem.status === "active") {
+            const org = mem.organizations as { id: string; name: string; setup_completed_at: string | null } | null;
+            if (org && !org.setup_completed_at && mem.role === "owner") {
+              setNewOrgId(org.id);
+              setResumeName(org.name);
+              setStep("resume-setup");
+            }
+          }
         });
     });
   }, []);
@@ -936,6 +1044,14 @@ function OnboardingPage() {
         {step === "join-org"   && <JoinOrgStep onBack={() => setStep("choose")} onSuccess={() => setStep("pending")} onTransfer={() => setStep("transfer-pending")} />}
         {step === "pending"    && <PendingStep />}
         {step === "transfer-pending" && <TransferPendingStep />}
+        {step === "resume-setup" && newOrgId && (
+          <ResumeSetupStep
+            orgName={resumeName}
+            orgId={newOrgId}
+            onContinue={() => setStep("sources")}
+            onSkip={() => navigate({ to: "/dashboard", replace: true })}
+          />
+        )}
       </div>
     </div>
   );
