@@ -91,7 +91,7 @@ export function usePeriodicReport(from: string | null, to: string | null) {
       if (!yearRow?.id) return null;
       const yearId = yearRow.id;
 
-      const [expRes, incRes, colRes] = await Promise.all([
+      const [expRes, incRes, colRes, refRes] = await Promise.all([
         supabase
           .from("expenses")
           .select("source, amount")
@@ -110,6 +110,12 @@ export function usePeriodicReport(from: string | null, to: string | null) {
           .eq("school_year_id", yearId)
           .gte("collection_date", from)
           .lte("collection_date", to),
+        supabase
+          .from("parent_refunds")
+          .select("amount")
+          .eq("school_year_id", yearId)
+          .gte("refund_date", from)
+          .lte("refund_date", to),
       ]);
 
       if (expRes.error) throw expRes.error;
@@ -118,8 +124,10 @@ export function usePeriodicReport(from: string | null, to: string | null) {
       const expenses    = expRes.data ?? [];
       const income      = incRes.data ?? [];
       const collections = colRes.data ?? [];
+      const refunds     = refRes.data ?? [];
 
-      const parentCollTotal = collections.reduce((s, c) => s + Number(c.amount), 0);
+      const parentCollTotal    = collections.reduce((s, c) => s + Number(c.amount), 0);
+      const parentRefundsTotal = refunds.reduce((s, r) => s + Number(r.amount), 0);
 
       // Resolve org sources — reuse orgId, no second auth call needed
       const { data: orgSrcRows } = await supabase
@@ -141,15 +149,16 @@ export function usePeriodicReport(from: string | null, to: string | null) {
       });
 
       const sources: PeriodicSource[] = allOrgSources.map(({ slug: source, label }) => {
-        const srcIncome  = income.filter((r) => r.source === source).reduce((s, r) => s + Number(r.amount), 0);
-        const horimExtra = source === "horim" ? parentCollTotal : 0;
-        const totalInc   = srcIncome + horimExtra;
-        const totalExp   = expenses.filter((r) => r.source === source).reduce((s, r) => s + Number(r.amount), 0);
+        const srcIncome    = income.filter((r) => r.source === source).reduce((s, r) => s + Number(r.amount), 0);
+        const horimExtra   = source === "horim" ? parentCollTotal : 0;
+        const totalInc     = srcIncome + horimExtra;
+        const horimRefunds = source === "horim" ? parentRefundsTotal : 0;
+        const totalExp     = expenses.filter((r) => r.source === source).reduce((s, r) => s + Number(r.amount), 0) + horimRefunds;
         return { source, label, income: totalInc, expenses: totalExp, net: totalInc - totalExp };
       });
 
       const totalIncome   = income.reduce((s, r) => s + Number(r.amount), 0);
-      const totalExpenses = expenses.reduce((s, r) => s + Number(r.amount), 0);
+      const totalExpenses = expenses.reduce((s, r) => s + Number(r.amount), 0) + parentRefundsTotal;
 
       return {
         from,
