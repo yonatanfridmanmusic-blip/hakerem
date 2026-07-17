@@ -136,17 +136,34 @@ export function useOrgMembers() {
     queryKey: ["org-members", orgId],
     enabled: !!orgId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Step 1: get members without profiles join
+      // (embedded join uses INNER JOIN which can silently drop rows when
+      //  the nested RLS evaluation excludes a profile — e.g. pending members)
+      const { data: members, error } = await supabase
         .from("organization_members")
-        .select(`
-          id, user_id, role, status, joined_at, created_at, job_title,
-          profiles(full_name, email)
-        `)
+        .select("id, user_id, role, status, joined_at, created_at, job_title")
         .eq("organization_id", orgId!)
         .order("created_at");
 
       if (error) throw error;
-      return (data ?? []) as unknown as OrgMember[];
+      if (!members || members.length === 0) return [];
+
+      // Step 2: fetch profiles separately so missing/unreadable profiles
+      // don't exclude the member row
+      const userIds = members.map((m) => m.user_id);
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds);
+
+      const profileMap = new Map(
+        (profilesData ?? []).map((p) => [p.id, { full_name: p.full_name, email: p.email }])
+      );
+
+      return members.map((m) => ({
+        ...m,
+        profiles: profileMap.get(m.user_id) ?? null,
+      })) as unknown as OrgMember[];
     },
     staleTime: 1000 * 60 * 2,
     refetchInterval: 60_000,
