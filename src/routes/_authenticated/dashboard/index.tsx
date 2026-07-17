@@ -416,7 +416,7 @@ function InlineAmountEdit({ catId, current, color, onSave }: {
   );
 }
 
-type WizardMode = "first" | "new-year";
+type WizardMode = "first" | "new-year" | "edit";
 
 // Helper: ensure named parent section exists + upsert grade_section_amount
 async function setGradeHorimAmount(
@@ -749,6 +749,8 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
 
   const greeting = mode === "new-year"
     ? (firstName ? `${firstName}, מתחילים שנה חדשה!` : "מתחילים שנה חדשה!")
+    : mode === "edit"
+    ? (firstName ? `${firstName}, עריכת הגדרות השנה` : "עריכת הגדרות השנה")
     : (firstName ? `ברוכים הבאים, ${firstName}!` : "ברוכים הבאים!");
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1533,10 +1535,12 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
             </div>
 
             <div style={{ fontSize: "20px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>
-              {createdYearName} מוכנה!
+              {mode === "edit" ? "ההגדרות עודכנו!" : `${createdYearName} מוכנה!`}
             </div>
             <div style={{ fontSize: "14px", color: "#6B6560", marginBottom: "28px", lineHeight: 1.6 }}>
-              לוח הבקרה שלך פעיל ומוכן לעבודה.<br/>עכשיו ניתן להתחיל להזין הכנסות והוצאות.
+              {mode === "edit"
+                ? "השינויים נשמרו בהצלחה."
+                : <>לוח הבקרה שלך פעיל ומוכן לעבודה.<br/>עכשיו ניתן להתחיל להזין הכנסות והוצאות.</>}
             </div>
 
             {/* Summary */}
@@ -1607,7 +1611,7 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
 
             <button type="button" onClick={onComplete}
               style={{ width: "100%", padding: "15px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15.5px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 6px 20px rgba(26,61,43,0.35)" }}>
-              כניסה ללוח הבקרה →
+              {mode === "edit" ? "חזרה ללוח הבקרה →" : "כניסה ללוח הבקרה →"}
             </button>
           </div>
         )}
@@ -1693,6 +1697,16 @@ export default function DashboardPage() {
   const [wizardTriggered, setWizardTriggered] = useState<boolean | null>(null);
   const [wizardDone, setWizardDone] = useState(false);
   const [showNewYearWizard, setShowNewYearWizard] = useState(false);
+  const [showEditWizard, setShowEditWizard] = useState(false);
+
+  // Check if settings page requested to open the edit wizard
+  useEffect(() => {
+    const flag = localStorage.getItem("hakerem_open_edit_wizard");
+    if (flag) {
+      localStorage.removeItem("hakerem_open_edit_wizard");
+      setShowEditWizard(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isLoading && data !== undefined && wizardTriggered === null && orgId) {
@@ -1725,6 +1739,17 @@ export default function DashboardPage() {
           setWizardDone(true);
         }}
         mode="first"
+        existingSchoolYear={data?.schoolYear ?? undefined}
+      />
+    );
+  }
+
+  // Show edit wizard (triggered from settings page)
+  if (showEditWizard) {
+    return (
+      <SetupWizard
+        onComplete={() => setShowEditWizard(false)}
+        mode="edit"
         existingSchoolYear={data?.schoolYear ?? undefined}
       />
     );

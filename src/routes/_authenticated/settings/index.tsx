@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -428,6 +428,7 @@ function CopyYearModal({
 
 function YearsTab() {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const { data: years = [], isLoading } = useSchoolYears();
   const createYear  = useCreateSchoolYear();
   const setActive   = useSetActiveYear();
@@ -514,7 +515,26 @@ function YearsTab() {
                 יעד גבייה: {y.collection_percentage}%
               </div>
             </div>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+              {y.is_active && (
+                <button
+                  type="button"
+                  title="ערוך שכבות, תשלומי הורים וקטגוריות תקציב"
+                  onClick={() => {
+                    localStorage.setItem("hakerem_open_edit_wizard", y.id);
+                    navigate({ to: "/dashboard" });
+                  }}
+                  style={{
+                    padding: "6px 10px", borderRadius: "7px",
+                    border: "1px solid #D4C9B8", background: "#FAF7F3",
+                    color: "#6B6560", fontSize: "12px", fontWeight: "500",
+                    cursor: "pointer", fontFamily: "var(--font-sans)",
+                    display: "flex", alignItems: "center", gap: "5px",
+                    whiteSpace: "nowrap",
+                  }}>
+                  ✏️ ערוך הגדרות ראשוניות
+                </button>
+              )}
               {years.length > 1 && (
                 <button
                   type="button"
