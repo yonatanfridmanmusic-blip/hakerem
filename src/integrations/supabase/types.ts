@@ -837,6 +837,7 @@ export type Database = {
           name: string
           plan: string
           plan_expires_at: string | null
+          setup_completed_at: string | null
           updated_at: string | null
         }
         Insert: {
@@ -847,6 +848,7 @@ export type Database = {
           name: string
           plan?: string
           plan_expires_at?: string | null
+          setup_completed_at?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -857,6 +859,7 @@ export type Database = {
           name?: string
           plan?: string
           plan_expires_at?: string | null
+          setup_completed_at?: string | null
           updated_at?: string | null
         }
         Relationships: []

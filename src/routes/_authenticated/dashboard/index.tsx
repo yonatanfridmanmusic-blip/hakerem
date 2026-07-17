@@ -467,16 +467,22 @@ async function setGradeHorimAmount(
   await syncHorimBudgetCategory(yearId, sectionId, sectionName);
 }
 
-function SetupWizard({ onComplete, mode = "first" }: { onComplete: () => void; mode?: WizardMode }) {
+function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
+  onComplete: () => void;
+  mode?: WizardMode;
+  existingSchoolYear?: { id: string; name: string };
+}) {
   const isMobile = useIsMobile();
   const { data: membership } = useOrganization();
   const orgName = membership?.organization?.name ?? "בית הספר";
   const [firstName, setFirstName] = useState<string>("");
 
   // ── Wizard state ──────────────────────────────────────────────────────────
-  const [step, setStep] = useState<0 | 1 | 2 | 3>(0); // 0=year 1=grades 2=categories 3=done
-  const [yearId, setYearId]     = useState<string>("");
-  const [createdYearName, setCreatedYearName] = useState("");
+  // If we have an existing school year (user closed mid-wizard and returned),
+  // start at step 1 (grades) so they don't have to re-enter the year.
+  const [step, setStep] = useState<0 | 1 | 2 | 3>(existingSchoolYear ? 1 : 0);
+  const [yearId, setYearId]     = useState<string>(existingSchoolYear?.id ?? "");
+  const [createdYearName, setCreatedYearName] = useState(existingSchoolYear?.name ?? "");
   const [wizardError, setWizardError] = useState<string | null>(null);
 
   // Step 0 — school year form
@@ -1680,6 +1686,8 @@ function SetupCompletionBanner() {
 export default function DashboardPage() {
   const isMobile = useIsMobile();
   const { data, isLoading, error } = useDashboardSummary();
+  const { data: membership } = useOrganization();
+  const orgId = membership?.organization?.id;
 
   // Track whether this session started without a school year
   const [wizardTriggered, setWizardTriggered] = useState<boolean | null>(null);
@@ -1687,10 +1695,14 @@ export default function DashboardPage() {
   const [showNewYearWizard, setShowNewYearWizard] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && data !== undefined && wizardTriggered === null) {
-      setWizardTriggered(!data.schoolYear);
+    if (!isLoading && data !== undefined && wizardTriggered === null && orgId) {
+      // Show wizard if: (1) no school year yet, OR (2) has year but wizard was never
+      // explicitly completed (localStorage flag per org). This lets users resume mid-wizard.
+      const localKey = `hakerem_wizard_done_${orgId}`;
+      const isLocallyDone = localStorage.getItem(localKey) === "true";
+      setWizardTriggered(!data.schoolYear || !isLocallyDone);
     }
-  }, [isLoading, data, wizardTriggered]);
+  }, [isLoading, data, wizardTriggered, orgId]);
 
   const totals = data?.totals ?? { planned: 0, used: 0, balance: 0, pct: 0 };
   const incomeTotals = data?.incomeTotals ?? { fromIncome: 0, fromParentCollections: 0, grand: 0 };
@@ -1704,9 +1716,18 @@ export default function DashboardPage() {
   const animFromIncome     = useCountUp(incomeTotals.fromIncome);
   const animFromParentColl = useCountUp(incomeTotals.fromParentCollections);
 
-  // Show initial wizard (no school year yet)
+  // Show initial wizard (no school year yet, or wizard not yet completed)
   if (wizardTriggered === true && !wizardDone) {
-    return <SetupWizard onComplete={() => setWizardDone(true)} mode="first" />;
+    return (
+      <SetupWizard
+        onComplete={() => {
+          if (orgId) localStorage.setItem(`hakerem_wizard_done_${orgId}`, "true");
+          setWizardDone(true);
+        }}
+        mode="first"
+        existingSchoolYear={data?.schoolYear ?? undefined}
+      />
+    );
   }
 
   // Show new-year wizard (triggered from button)

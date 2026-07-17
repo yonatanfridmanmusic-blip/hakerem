@@ -28,7 +28,7 @@ export const Route = createFileRoute("/onboarding")({
   component: OnboardingPage,
 });
 
-type Step = "choose" | "create-org" | "sources" | "join-org" | "pending" | "transfer-pending" | "resume-setup";
+type Step = "loading" | "choose" | "create-org" | "sources" | "join-org" | "pending" | "transfer-pending" | "resume-setup";
 
 const f = "Rubik, sans-serif";
 
@@ -983,22 +983,23 @@ function PendingStep() {
 function OnboardingPage() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>("choose");
+  const [step, setStep] = useState<Step>("loading");
   const [newOrgId, setNewOrgId] = useState<string | null>(null);
   const [resumeName, setResumeName] = useState<string>("");
 
   // On mount: detect pending OR active-but-incomplete-setup membership
+  // Starts at "loading" to avoid flashing the "choose" step before we know the correct step
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) return;
+      if (!data.user) { setStep("choose"); return; }
       supabase
         .from("organization_members")
         .select("status, organization_id, role, organizations(id, name, setup_completed_at)")
         .eq("user_id", data.user.id)
         .in("status", ["pending", "active"])
         .maybeSingle()
-        .then(({ data: mem }) => {
-          if (!mem) return;
+        .then(({ data: mem, error }) => {
+          if (error || !mem) { setStep("choose"); return; }
           if (mem.status === "pending") {
             setStep("pending");
           } else if (mem.status === "active") {
@@ -1007,7 +1008,11 @@ function OnboardingPage() {
               setNewOrgId(org.id);
               setResumeName(org.name);
               setStep("resume-setup");
+            } else {
+              setStep("choose");
             }
+          } else {
+            setStep("choose");
           }
         });
     });
@@ -1028,6 +1033,13 @@ function OnboardingPage() {
       }}>
         <LogoRow />
 
+        {step === "loading" && (
+          <div style={{ textAlign: "center", padding: "32px 0", color: INK3, fontSize: "14px" }}>
+            <div style={{ width: "24px", height: "24px", border: `2.5px solid ${BORDER}`, borderTopColor: GREEN, borderRadius: "50%", animation: "spin 0.7s linear infinite", margin: "0 auto 14px" }} />
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            טוען...
+          </div>
+        )}
         {step === "choose"     && <ChooseStep onChoose={setStep} />}
         {step === "create-org" && (
           <CreateOrgStep
