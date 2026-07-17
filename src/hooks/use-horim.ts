@@ -6,6 +6,17 @@ import { showDeleteUndoToast, useUndoAuditEntry } from "@/hooks/use-audit-log";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export interface ParentRefund {
+  id: string;
+  grade_id: string;
+  parent_section_id: string | null;
+  refund_date: string;
+  amount: number;
+  reason: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
 export interface Grade {
   id: string;
   name: string;
@@ -378,6 +389,80 @@ export function useDeleteParentCollection() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["audit-log"] });
       showDeleteUndoToast(id, "הגבייה נמחקה", (entryId) => undoEntry.mutate(entryId));
+    },
+  });
+}
+
+// ─── Parent refunds ────────────────────────────────────────────────────────────
+
+export function useParentRefunds() {
+  return useQuery<ParentRefund[]>({
+    queryKey: ["parent-refunds"],
+    queryFn: async () => {
+      const yearId = await getActiveYearId();
+      if (!yearId) return [];
+      const { data, error } = await supabase
+        .from("parent_refunds")
+        .select("id, grade_id, parent_section_id, refund_date, amount, reason, notes, created_at")
+        .eq("school_year_id", yearId)
+        .order("refund_date", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((r) => ({ ...r, amount: Number(r.amount) }));
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+export function useAddParentRefund() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      gradeId,
+      sectionId,
+      amount,
+      refundDate,
+      reason,
+      notes,
+    }: {
+      gradeId: string;
+      sectionId?: string;
+      amount: number;
+      refundDate: string;
+      reason?: string;
+      notes?: string;
+    }) => {
+      const yearId = await getActiveYearId();
+      if (!yearId) throw new Error("אין שנת לימודים פעילה");
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase.from("parent_refunds").insert({
+        school_year_id: yearId,
+        grade_id: gradeId,
+        parent_section_id: sectionId ?? null,
+        amount,
+        refund_date: refundDate,
+        reason: reason || null,
+        notes: notes || null,
+        created_by: user?.id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parent-refunds"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useDeleteParentRefund() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("parent_refunds").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parent-refunds"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }

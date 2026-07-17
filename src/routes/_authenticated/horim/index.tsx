@@ -12,6 +12,9 @@ import {
   useAllParentSections,
   useGradeSectionAmounts,
   useParentCollections,
+  useParentRefunds,
+  useAddParentRefund,
+  useDeleteParentRefund,
   useUpsertGradeSectionAmount,
   useAddParentCollection,
   useUpdateParentCollection,
@@ -23,6 +26,7 @@ import {
   type Grade,
   type ParentSection,
   type ParentCollection,
+  type ParentRefund,
 } from "@/hooks/use-horim";
 
 export const Route = createFileRoute("/_authenticated/horim/")({
@@ -473,6 +477,238 @@ function DeleteCollectionConfirm({ id, onClose }: { id: string; onClose: () => v
   );
 }
 
+// ─── Add Refund Modal ─────────────────────────────────────────────────────────
+
+function AddRefundModal({
+  grades, sections, onClose,
+}: {
+  grades: Grade[]; sections: ParentSection[]; onClose: () => void;
+}) {
+  const isMobile = useIsMobile();
+  const [gradeId, setGradeId] = useState(grades[0]?.id ?? "");
+  const [sectionId, setSectionId] = useState(sections[0]?.id ?? "");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(today());
+  const [reason, setReason] = useState("");
+  const [notes, setNotes] = useState("");
+  const addRefund = useAddParentRefund();
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "9px 12px",
+    border: "1px solid #E8E2D9", borderRadius: "8px",
+    fontSize: "14px", background: "#fff", color: "#1A1A1A",
+    outline: "none", fontFamily: "var(--font-sans)", direction: "rtl",
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const n = Number(amount);
+    if (!n || n <= 0) { toast.error("יש להזין סכום חיובי"); return; }
+    if (!gradeId) { toast.error("יש לבחור שכבה"); return; }
+    try {
+      await addRefund.mutateAsync({ gradeId, sectionId: sectionId || undefined, amount: n, refundDate: date, reason, notes });
+      toast.success("ההחזר נרשם");
+      onClose();
+    } catch { toast.error("שגיאה ברישום ההחזר"); }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.4)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
+    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "#fff", borderRadius: "18px", width: "100%", maxWidth: "440px", boxShadow: "0 24px 80px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+        {/* Header */}
+        <div style={{
+          padding: "20px 24px", borderBottom: "1px solid #EAE5DE",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: "linear-gradient(135deg, #FEF2F2, #fff)",
+        }}>
+          <div>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>רישום החזר להורה</div>
+            <div style={{ fontSize: "12px", color: "#B45309", marginTop: "2px" }}>כסף שיוצא → מקטין את הנטו</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#AAA099", display: "flex" }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
+          {/* Grade */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>שכבה</label>
+            <select value={gradeId} onChange={(e) => setGradeId(e.target.value)} style={inputStyle} required>
+              {grades.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          </div>
+
+          {/* Section */}
+          {sections.length > 0 && (
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>
+                סעיף <span style={{ color: "#AAA099", fontWeight: "400" }}>(אופציונלי)</span>
+              </label>
+              <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={inputStyle}>
+                <option value="">— ללא סעיף ספציפי —</option>
+                {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Date + Amount */}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px" }}>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
+              <DateInput value={date} onChange={setDate} required style={inputStyle} />
+            </div>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סכום ההחזר (₪)</label>
+              <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" min="0.01" step="0.01" required autoFocus style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
+            </div>
+          </div>
+
+          {/* Reason */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סיבה</label>
+            <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="לדוגמה: ביטול טיול, תשלום כפול" style={inputStyle} />
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>הערה <span style={{ color: "#AAA099", fontWeight: "400" }}>(אופציונלי)</span></label>
+            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="פרטים נוספים" style={inputStyle} />
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
+            <button type="submit" disabled={addRefund.isPending} style={{ flex: 2, padding: "10px 0", border: "none", borderRadius: "8px", background: addRefund.isPending ? "#888" : "linear-gradient(135deg, #C0392B, #922B21)", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: addRefund.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
+              {addRefund.isPending ? "שומר..." : "רשום החזר"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Refunds Summary Section ──────────────────────────────────────────────────
+
+function RefundsSummary({
+  refunds, grades, sections, canWrite,
+}: {
+  refunds: ParentRefund[];
+  grades: Grade[];
+  sections: ParentSection[];
+  canWrite: boolean;
+}) {
+  const deleteRefund = useDeleteParentRefund();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  if (refunds.length === 0) return null;
+
+  const total = refunds.reduce((s, r) => s + r.amount, 0);
+
+  // Group by grade
+  const byGrade = new Map<string, number>();
+  refunds.forEach((r) => {
+    byGrade.set(r.grade_id, (byGrade.get(r.grade_id) ?? 0) + r.amount);
+  });
+
+  const gradeMap = new Map(grades.map((g) => [g.id, g.name]));
+  const sectionMap = new Map(sections.map((s) => [s.id, s.name]));
+
+  return (
+    <div>
+      <div style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "12px" }}>
+        מעקב החזרי הורים
+      </div>
+
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px", marginBottom: "16px" }}>
+        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "12px", padding: "14px 16px" }}>
+          <div style={{ fontSize: "11px", color: "#B91C1C", fontWeight: "500", marginBottom: "4px" }}>מספר החזרים</div>
+          <div style={{ fontSize: "22px", fontWeight: "600", color: "#991B1B" }}>{refunds.length}</div>
+        </div>
+        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "12px", padding: "14px 16px" }}>
+          <div style={{ fontSize: "11px", color: "#B91C1C", fontWeight: "500", marginBottom: "4px" }}>סכום כולל</div>
+          <div style={{ fontSize: "22px", fontWeight: "600", color: "#991B1B" }}>{fmt(total)}</div>
+        </div>
+        {byGrade.size > 1 && (
+          <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "12px", padding: "14px 16px" }}>
+            <div style={{ fontSize: "11px", color: "#B91C1C", fontWeight: "500", marginBottom: "6px" }}>לפי שכבה</div>
+            {Array.from(byGrade.entries()).map(([gId, sum]) => (
+              <div key={gId} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#7F1D1D", marginBottom: "2px" }}>
+                <span>{gradeMap.get(gId) ?? "—"}</span>
+                <span style={{ fontWeight: "600" }}>{fmt(sum)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Refunds list */}
+      <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden" }}>
+        <div style={{ padding: "10px 16px", background: "#FEF2F2", borderBottom: "1px solid #FECACA", fontSize: "12px", fontWeight: "600", color: "#B91C1C" }}>
+          פירוט החזרים
+        </div>
+        {refunds.map((r) => (
+          <div key={r.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px", borderBottom: "1px solid #F5F0EC" }}>
+            <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+              <span style={{ fontSize: "12px", color: "#AAA099", whiteSpace: "nowrap" }}>
+                {new Date(r.refund_date).toLocaleDateString("he-IL")}
+              </span>
+              <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "99px", background: "#F5F3F0", color: "#6B6560", whiteSpace: "nowrap" }}>
+                {gradeMap.get(r.grade_id) ?? "—"}
+              </span>
+              {r.parent_section_id && (
+                <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "99px", background: "#FEF2F2", color: "#B91C1C", whiteSpace: "nowrap" }}>
+                  {sectionMap.get(r.parent_section_id) ?? "—"}
+                </span>
+              )}
+              {r.reason && <span style={{ fontSize: "12px", color: "#6B6560" }}>{r.reason}</span>}
+              {r.notes && <span style={{ fontSize: "11px", color: "#AAA099", fontStyle: "italic" }}>{r.notes}</span>}
+            </div>
+            <span style={{ fontSize: "13px", fontWeight: "600", color: "#C0392B", flexShrink: 0 }}>−{fmt(r.amount)}</span>
+            {canWrite && (
+              confirmDeleteId === r.id ? (
+                <div style={{ display: "flex", gap: "6px", alignItems: "center", flexShrink: 0 }}>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await deleteRefund.mutateAsync(r.id);
+                        toast.success("ההחזר נמחק");
+                        setConfirmDeleteId(null);
+                      } catch { toast.error("שגיאה במחיקה"); }
+                    }}
+                    disabled={deleteRefund.isPending}
+                    style={{ padding: "3px 10px", borderRadius: "6px", border: "none", background: "#B91C1C", color: "#fff", fontSize: "11px", fontFamily: "var(--font-sans)", cursor: "pointer" }}
+                  >
+                    {deleteRefund.isPending ? "..." : "מחק"}
+                  </button>
+                  <button onClick={() => setConfirmDeleteId(null)} style={{ padding: "3px 8px", borderRadius: "6px", border: "1px solid #E8E2D9", background: "#fff", fontSize: "11px", fontFamily: "var(--font-sans)", cursor: "pointer", color: "#888" }}>
+                    ביטול
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmDeleteId(r.id)}
+                  title="מחק החזר"
+                  style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center", flexShrink: 0 }}
+                  onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
+                  onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                >
+                  <Trash2 size={13} />
+                </button>
+              )
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Grade Row (expandable) ───────────────────────────────────────────────────
 
 function GradeRow({
@@ -713,6 +949,7 @@ export default function HorimPage() {
   const isMobile = useIsMobile();
   const canWrite = useCanWrite();
   const [showModal, setShowModal] = useState(false);
+  const [showRefundModal, setShowRefundModal] = useState(false);
   const [showSectionsModal, setShowSectionsModal] = useState(false);
   const [preGradeId, setPreGradeId] = useState<string | undefined>();
   const [basis, setBasis] = useState<85 | 100>(85);
@@ -725,6 +962,7 @@ export default function HorimPage() {
   const { data: allSections = [] } = useAllParentSections();
   const { data: gsaList = [] } = useGradeSectionAmounts();
   const { data: collections = [] } = useParentCollections();
+  const { data: refunds = [] } = useParentRefunds();
 
   const isLoading = gradesLoading || sectionsLoading;
 
@@ -810,6 +1048,13 @@ export default function HorimPage() {
           onClose={() => setShowModal(false)}
         />
       )}
+      {showRefundModal && grades.length > 0 && (
+        <AddRefundModal
+          grades={grades}
+          sections={sections}
+          onClose={() => setShowRefundModal(false)}
+        />
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
 
@@ -868,6 +1113,25 @@ export default function HorimPage() {
               >
                 <Settings2 size={15} />
                 סעיפים
+              </button>
+            )}
+            {canWrite && (
+              <button
+                onClick={() => {
+                  if (grades.length === 0) { setGuardMsg("יש להגדיר שכבות תחילה"); return; }
+                  setShowRefundModal(true);
+                }}
+                style={{
+                  display: "flex", alignItems: "center", gap: "7px",
+                  padding: "10px 16px",
+                  background: "#fff",
+                  border: "1.5px solid #C0392B", borderRadius: "10px",
+                  color: "#C0392B", fontSize: "14px", fontWeight: "500",
+                  cursor: "pointer", fontFamily: "var(--font-sans)",
+                }}
+              >
+                <span style={{ fontSize: "16px", lineHeight: 1 }}>↩</span>
+                רשום החזר
               </button>
             )}
             {canWrite && (
@@ -1115,6 +1379,16 @@ export default function HorimPage() {
             </div>
           );
         })()}
+
+        {/* Refunds summary */}
+        {!isLoading && (
+          <RefundsSummary
+            refunds={refunds}
+            grades={grades}
+            sections={sections}
+            canWrite={canWrite}
+          />
+        )}
 
         {/* Help text */}
         {!isLoading && grades.length > 0 && (

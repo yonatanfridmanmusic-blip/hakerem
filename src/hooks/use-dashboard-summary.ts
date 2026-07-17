@@ -111,6 +111,14 @@ export function useDashboardSummary() {
 
       const parentCollTotal = (parentCollRows ?? []).reduce((s, r) => s + Number(r.amount), 0);
 
+      // 6b. Parent refunds — counted on the outgoing/expense side for horim
+      const { data: refundRows } = await supabase
+        .from("parent_refunds")
+        .select("amount")
+        .eq("school_year_id", yearId);
+
+      const parentRefundsTotal = (refundRows ?? []).reduce((s, r) => s + Number(r.amount), 0);
+
       // Aggregate income by source
       const incomeBySource: Record<string, number> = {};
       allSources.forEach(s => { incomeBySource[s.slug] = 0; });
@@ -136,7 +144,9 @@ export function useDashboardSummary() {
 
         const used = (expenses ?? [])
           .filter((e) => e.source === source)
-          .reduce((sum, e) => sum + Number(e.amount), 0);
+          .reduce((sum, e) => sum + Number(e.amount), 0)
+          // Parent refunds are "outgoing" money — add them to horim's used side
+          + (source === "horim" ? parentRefundsTotal : 0);
 
         const balance = planned - used;
         const pct = planned > 0 ? Math.round((used / planned) * 100) : 0;
