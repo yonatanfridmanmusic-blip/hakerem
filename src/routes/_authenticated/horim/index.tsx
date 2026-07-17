@@ -14,6 +14,7 @@ import {
   useParentCollections,
   useParentRefunds,
   useAddParentRefund,
+  useUpdateParentRefund,
   useDeleteParentRefund,
   useUpsertGradeSectionAmount,
   useAddParentCollection,
@@ -592,6 +593,89 @@ function AddRefundModal({
   );
 }
 
+// ─── Edit Refund Modal ────────────────────────────────────────────────────────
+
+function EditRefundModal({
+  refund, grades, sections, onClose,
+}: {
+  refund: ParentRefund;
+  grades: Grade[];
+  sections: ParentSection[];
+  onClose: () => void;
+}) {
+  const [amount, setAmount] = useState(String(refund.amount));
+  const [date, setDate] = useState(refund.refund_date);
+  const [reason, setReason] = useState(refund.reason ?? "");
+  const [notes, setNotes] = useState(refund.notes ?? "");
+  const updateRefund = useUpdateParentRefund();
+
+  const gradeName = grades.find((g) => g.id === refund.grade_id)?.name ?? "";
+  const sectionName = refund.parent_section_id ? sections.find((s) => s.id === refund.parent_section_id)?.name : null;
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "9px 12px",
+    border: "1px solid #E8E2D9", borderRadius: "8px",
+    fontSize: "14px", background: "#fff", color: "#1A1A1A",
+    outline: "none", fontFamily: "var(--font-sans)", direction: "rtl",
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const n = Number(amount);
+    if (!n || n <= 0) { toast.error("יש להזין סכום תקין"); return; }
+    try {
+      await updateRefund.mutateAsync({ id: refund.id, amount: n, refundDate: date, reason, notes });
+      toast.success("ההחזר עודכן");
+      onClose();
+    } catch { toast.error("שגיאה בעדכון"); }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.4)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
+    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "#fff", borderRadius: "18px", width: "100%", maxWidth: "400px", boxShadow: "0 24px 80px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid #EAE5DE", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>עריכת החזר</div>
+            <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>
+              {gradeName}{sectionName ? ` · ${sectionName}` : ""}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#AAA099", display: "flex" }}><X size={18} /></button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
+              <DateInput value={date} onChange={setDate} required style={inputStyle} />
+            </div>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סכום (₪)</label>
+              <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" min="0.01" step="0.01" required autoFocus style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סיבה</label>
+            <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="לדוגמה: ביטול טיול" style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>הערה <span style={{ color: "#AAA099", fontWeight: "400" }}>(אופציונלי)</span></label>
+            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="פרטים נוספים" style={inputStyle} />
+          </div>
+          <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
+            <button type="submit" disabled={updateRefund.isPending} style={{ flex: 2, padding: "10px 0", border: "none", borderRadius: "8px", background: updateRefund.isPending ? "#888" : "linear-gradient(135deg, #C0392B, #922B21)", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: updateRefund.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
+              {updateRefund.isPending ? "שומר..." : "שמור שינויים"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Refunds Summary Section ──────────────────────────────────────────────────
 
 function RefundsSummary({
@@ -604,6 +688,7 @@ function RefundsSummary({
 }) {
   const deleteRefund = useDeleteParentRefund();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [editingRefund, setEditingRefund] = useState<ParentRefund | null>(null);
 
   if (refunds.length === 0) return null;
 
@@ -691,20 +776,39 @@ function RefundsSummary({
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={() => setConfirmDeleteId(r.id)}
-                  title="מחק החזר"
-                  style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center", flexShrink: 0 }}
-                  onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
-                  onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
-                >
-                  <Trash2 size={13} />
-                </button>
+                <div style={{ display: "flex", gap: "4px", alignItems: "center", flexShrink: 0 }}>
+                  <button
+                    onClick={() => setEditingRefund(r)}
+                    title="ערוך החזר"
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                    onMouseEnter={(el) => { el.currentTarget.style.background = "#F5F0EC"; el.currentTarget.style.color = "#6B6560"; }}
+                    onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeleteId(r.id)}
+                    title="מחק החזר"
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                    onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
+                    onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               )
             )}
           </div>
         ))}
       </div>
+      {editingRefund && (
+        <EditRefundModal
+          refund={editingRefund}
+          grades={grades}
+          sections={sections}
+          onClose={() => setEditingRefund(null)}
+        />
+      )}
     </div>
   );
 }

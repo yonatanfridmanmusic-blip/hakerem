@@ -453,6 +453,31 @@ export function useAddParentRefund() {
   });
 }
 
+export function useUpdateParentRefund() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id, amount, refundDate, reason, notes,
+    }: {
+      id: string;
+      amount: number;
+      refundDate: string;
+      reason?: string;
+      notes?: string;
+    }) => {
+      const { error } = await supabase
+        .from("parent_refunds")
+        .update({ amount, refund_date: refundDate, reason: reason || null, notes: notes || null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parent-refunds"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
 export function useDeleteParentRefund() {
   const queryClient = useQueryClient();
   return useMutation({
