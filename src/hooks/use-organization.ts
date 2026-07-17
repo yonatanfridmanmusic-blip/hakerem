@@ -140,7 +140,7 @@ export function useOrgMembers() {
         .from("organization_members")
         .select(`
           id, user_id, role, status, joined_at, created_at, job_title,
-          profiles (full_name, email)
+          profiles!left (full_name, email)
         `)
         .eq("organization_id", orgId!)
         .order("created_at");
