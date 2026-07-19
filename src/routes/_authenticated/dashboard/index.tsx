@@ -1461,7 +1461,7 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                       {cats.length > 0 && (
                         <div style={{ marginTop: "14px" }}>
                           <div style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", marginBottom: "8px" }}>
-                            נוספו ({cats.length}) — לחץ/י על הסכום לעדכון
+                            נוספו ({cats.length}) — הזן/י סכום ולחץ/י "שמור"
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                             {cats.map(cat => (
@@ -1475,7 +1475,7 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                                   <span style={{ fontSize: "13px", color: c.color, fontWeight: "500" }}>{cat.name}</span>
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                                     <span style={{ fontSize: "12px", color: c.color, fontWeight: "500" }}>₪</span>
                                     <input
                                       type="number" min="0"
@@ -1488,16 +1488,36 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                                         }
                                         e.target.select();
                                       }}
-                                      onBlur={async (e) => {
-                                        const n = Number(e.target.value);
-                                        if (!isNaN(n) && n >= 0) {
-                                          await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
-                                          setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                      onKeyDown={async e => {
+                                        if (e.key === "Enter") {
+                                          const n = Number((e.target as HTMLInputElement).value);
+                                          if (!isNaN(n) && n >= 0) {
+                                            try {
+                                              await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
+                                              setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                            } catch { /* silent — flush on סיים will retry */ }
+                                          }
+                                          (e.target as HTMLInputElement).blur();
                                         }
                                       }}
-                                      onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                                      style={{ width: "72px", padding: "3px 7px", border: `1.5px solid ${c.color}50`, borderRadius: "6px", fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none", direction: "ltr", textAlign: "right" }}
+                                      style={{ width: "68px", padding: "3px 6px", border: `1.5px solid ${c.color}50`, borderRadius: "6px", fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none", direction: "ltr", textAlign: "right" }}
                                     />
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const rawVal = localAmounts[cat.id];
+                                        const n = Number(rawVal ?? cat.amount);
+                                        if (!isNaN(n) && n >= 0) {
+                                          try {
+                                            await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
+                                            setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                          } catch { /* silent */ }
+                                        }
+                                      }}
+                                      style={{ padding: "3px 8px", borderRadius: "6px", border: "none", background: c.color, color: "#fff", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer", whiteSpace: "nowrap" }}
+                                    >
+                                      שמור
+                                    </button>
                                   </div>
                                   <button type="button" onClick={() => handleDeleteCat(cat.id, effectiveCatSrc)}
                                     title="הסר קטגוריה"
@@ -1540,7 +1560,9 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                       if (rawVal === undefined) return;
                       const n = Number(rawVal);
                       if (!isNaN(n) && n >= 0) {
-                        await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
+                        try {
+                          await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
+                        } catch { /* continue — don't block navigation */ }
                       }
                     }));
                     setStep(3);
