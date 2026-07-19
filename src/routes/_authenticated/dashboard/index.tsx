@@ -544,6 +544,12 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   const [addedCats, setAddedCats] = useState<Record<string, AddedCat[]>>({});
   // localAmounts: tracks what the user is typing per cat id (string to allow empty while editing)
   const [localAmounts, setLocalAmounts] = useState<Record<string, string>>({});
+  // savedFlash: cat ids that just saved successfully — shows "✓ נשמר" briefly
+  const [savedFlash, setSavedFlash] = useState<Record<string, boolean>>({});
+  const flashSaved = (catId: string) => {
+    setSavedFlash(prev => ({ ...prev, [catId]: true }));
+    setTimeout(() => setSavedFlash(prev => ({ ...prev, [catId]: false })), 2000);
+  };
   const addCategory = useAddBudgetCategory();
   const deleteCategory = useDeleteBudgetCategory();
   const updatePlannedAmount = useUpdatePlannedAmount();
@@ -1495,6 +1501,7 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                                             try {
                                               await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
                                               setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                              flashSaved(cat.id);
                                             } catch { /* silent — flush on סיים will retry */ }
                                           }
                                           (e.target as HTMLInputElement).blur();
@@ -1511,12 +1518,13 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                                           try {
                                             await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
                                             setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                            flashSaved(cat.id);
                                           } catch { /* silent */ }
                                         }
                                       }}
-                                      style={{ padding: "3px 8px", borderRadius: "6px", border: "none", background: c.color, color: "#fff", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer", whiteSpace: "nowrap" }}
+                                      style={{ padding: "3px 8px", borderRadius: "6px", border: "none", background: savedFlash[cat.id] ? "#2D6644" : c.color, color: "#fff", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer", whiteSpace: "nowrap", minWidth: "52px", transition: "background 0.2s" }}
                                     >
-                                      שמור
+                                      {savedFlash[cat.id] ? "✓ נשמר" : "שמור"}
                                     </button>
                                   </div>
                                   <button type="button" onClick={() => handleDeleteCat(cat.id, effectiveCatSrc)}
