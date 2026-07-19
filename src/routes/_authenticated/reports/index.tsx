@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { toast } from "sonner";
 import { useDashboardSummary, type DashboardSummary } from "@/hooks/use-dashboard-summary";
@@ -173,6 +173,7 @@ function buildAnnualHTML(
   sections: ParentSection[] = [],
   amounts: GradeSectionAmount[] = [],
   collections: ParentCollection[] = [],
+  refunds: ParentRefund[] = [],
 ): string {
   const { schoolYear, sources, totals, incomeTotals } = data;
   const yearName = schoolYear?.name ?? "";
@@ -249,6 +250,17 @@ function buildAnnualHTML(
     <tbody>${sourceRows}<tr class="total-row"><td>סה"כ</td><td class="l">${fmt(totals.planned)}</td><td class="l green">${fmt(incomeTotals.grand)}</td><td class="l">${fmt(totals.used)}</td><td class="l" style="color:${totals.balance >= 0 ? "#2D6644" : "#B5472A"}">${fmt(totals.balance)}</td><td class="l"><div class="bar-label">${totals.pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totals.pct, 100)}%;background:#2D6644"></div></div></td></tr></tbody></table>
     ${catBySource}
     ${horimDetail}
+    ${refunds.length > 0 ? (() => {
+      const gradeMap = new Map(grades.map(g => [g.id, g.name]));
+      const secMap   = new Map(sections.map(s => [s.id, s.name]));
+      const total    = refunds.reduce((s, r) => s + r.amount, 0);
+      const rows     = refunds.map(r =>
+        `<tr><td>${new Date(r.refund_date).toLocaleDateString("he-IL")}</td><td class="l">${gradeMap.get(r.grade_id) ?? "—"}</td><td class="l">${r.parent_section_id ? (secMap.get(r.parent_section_id) ?? "—") : "—"}</td><td class="l" style="color:#6B6560">${r.reason ?? "—"}</td><td class="l rust" style="font-weight:700">−${fmt(r.amount)}</td></tr>`
+      ).join("");
+      return `<div class="section-break"><h2 style="border-right:4px solid #B91C1C;padding-right:10px;color:#991B1B">החזרי הורים</h2>
+      <table><thead><tr><th>תאריך</th><th class="l">שכבה</th><th class="l">סעיף</th><th class="l">סיבה</th><th class="l">סכום</th></tr></thead>
+      <tbody>${rows}<tr class="total-row"><td colspan="4">סה"כ החזרים</td><td class="l rust">−${fmt(total)}</td></tr></tbody></table></div>`;
+    })() : ""}
     <hr class="divider">
     <h2>פירוט הכנסות</h2>
     <div class="income-grid">
@@ -261,7 +273,7 @@ function buildAnnualHTML(
 </body></html>`;
 }
 
-function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: GradeSectionAmount[], collections: ParentCollection[], yearName: string, cfgMapPdf?: SourceCfgMap): string {
+function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: GradeSectionAmount[], collections: ParentCollection[], yearName: string, refunds: ParentRefund[] = [], cfgMapPdf?: SourceCfgMap): string {
   void cfgMapPdf;
   const rows = grades.map((grade) => {
     const ga = amounts.filter((a) => a.grade_id === grade.id);
@@ -343,6 +355,17 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
     <h2>פירוט לפי שכבה</h2>
     <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד</th><th class="l">נגבה</th><th class="l">טרם נגבה</th><th class="l">התקדמות</th></tr></thead>
     <tbody>${rows}<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${tS}</td><td class="l">${fmt(tT)}</td><td class="l green">${fmt(tC)}</td><td class="l" style="color:${tR <= 0 ? "#2D6644" : "#B5472A"}">${fmt(tR)}</td><td class="l"><div class="bar-label">${tP}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(tP, 100)}%;background:#8B2F6E"></div></div></td></tr></tbody></table>
+    ${refunds.length > 0 ? (() => {
+      const gradeMap = new Map(grades.map(g => [g.id, g.name]));
+      const secMap   = new Map(sections.map(s => [s.id, s.name]));
+      const total    = refunds.reduce((s, r) => s + r.amount, 0);
+      const refundRows = refunds.map(r =>
+        `<tr><td>${new Date(r.refund_date).toLocaleDateString("he-IL")}</td><td class="l">${gradeMap.get(r.grade_id) ?? "—"}</td><td class="l">${r.parent_section_id ? (secMap.get(r.parent_section_id) ?? "—") : "—"}</td><td class="l" style="color:#6B6560">${r.reason ?? "—"}</td><td class="l rust" style="font-weight:700">−${fmt(r.amount)}</td></tr>`
+      ).join("");
+      return `<hr class="divider"><h2 style="color:#991B1B">החזרי הורים</h2>
+      <table><thead><tr><th>תאריך</th><th class="l">שכבה</th><th class="l">סעיף</th><th class="l">סיבה</th><th class="l">סכום</th></tr></thead>
+      <tbody>${refundRows}<tr class="total-row"><td colspan="4">סה"כ החזרים</td><td class="l rust">−${fmt(total)}</td></tr></tbody></table>`;
+    })() : ""}
     <div class="footer">הכרם — מערכת ניהול פיננסי לבתי ספר · נוצר אוטומטית ${toDate()}</div>
   </div>
 </body></html>`;
@@ -533,12 +556,13 @@ function ReportsPage() {
     const sections    = sectionsQuery.data  ?? [];
     const amounts     = amountsQuery.data   ?? [];
     const collections = collectQuery.data   ?? [];
+    const refunds     = refundsQuery.data   ?? [];
     const yearName    = annualQuery.data?.schoolYear?.name ?? "";
     if (tab === "annual") {
       if (!annualQuery.data) return;
-      openPrint(buildAnnualHTML(annualQuery.data, cfgMap, allCategories ?? [], grades, sections, amounts, collections));
+      openPrint(buildAnnualHTML(annualQuery.data, cfgMap, allCategories ?? [], grades, sections, amounts, collections, refunds));
     } else if (tab === "horim") {
-      openPrint(buildHorimHTML(grades, sections, amounts, collections, yearName));
+      openPrint(buildHorimHTML(grades, sections, amounts, collections, yearName, refunds));
     } else if (tab === "periodic" && periodicData) {
       const label = periodType === "custom"
         ? `${customFrom} — ${customTo}`
@@ -582,7 +606,7 @@ function ReportsPage() {
         ))}
       </div>
 
-      {tab === "annual"   && <AnnualReport   data={annualQuery.data} isLoading={annualQuery.isLoading} cfgMap={cfgMap} categories={allCategories ?? []} grades={gradesQuery.data ?? []} sections={sectionsQuery.data ?? []} amounts={amountsQuery.data ?? []} collections={collectQuery.data ?? []} />}
+      {tab === "annual"   && <AnnualReport   data={annualQuery.data} isLoading={annualQuery.isLoading} cfgMap={cfgMap} categories={allCategories ?? []} grades={gradesQuery.data ?? []} sections={sectionsQuery.data ?? []} amounts={amountsQuery.data ?? []} collections={collectQuery.data ?? []} refunds={refundsQuery.data ?? []} />}
       {tab === "horim"    && <HorimReport    grades={gradesQuery.data ?? []} sections={sectionsQuery.data ?? []} amounts={amountsQuery.data ?? []} collections={collectQuery.data ?? []} refunds={refundsQuery.data ?? []} isLoading={gradesQuery.isLoading} />}
       {tab === "periodic" && (
         <PeriodicReport
@@ -613,9 +637,9 @@ function ReportsPage() {
 
 // ─── Annual Report ────────────────────────────────────────────────────────────
 
-function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, amounts, collections }: {
+function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, amounts, collections, refunds }: {
   data: DashboardSummary | undefined; isLoading: boolean; cfgMap: SourceCfgMap; categories: CategoryReport[];
-  grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[];
+  grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[]; refunds: ParentRefund[];
 }) {
   const isMobile = useIsMobile();
   if (isLoading) return <Loader />;
@@ -708,8 +732,8 @@ function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, a
           const ttlColl = horimRows.reduce((s, r) => s + r.coll, 0);
           const ttlRem  = Math.max(0, ttlT85 - ttlColl);
           const ttlPct  = ttlT85 > 0 ? Math.round((ttlColl / ttlT85) * 100) : 0;
-          return (
-            <div key={s.source} style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "16px" }}>
+          return (<React.Fragment key={s.source}>
+            <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "16px" }}>
               <div style={{ padding: "14px 22px", borderBottom: "1px solid #F4F1EC", borderRight: `4px solid ${cfg.color}`, display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={{ background: cfg.bg, color: cfg.textColor, borderRadius: "8px", padding: "3px 10px", fontSize: "12.5px", fontWeight: 700 }}>{cfg.label}</span>
                 <span style={{ fontWeight: 700, fontSize: "14px", color: "#1A1A1A" }}>גבייה לפי סעיף</span>
@@ -749,7 +773,46 @@ function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, a
                 </tbody>
               </table>
             </div>
-          );
+            {refunds.length > 0 && (() => {
+              const gradeMap = new Map(grades.map(g => [g.id, g.name]));
+              const sectionMap = new Map(sections.map(s => [s.id, s.name]));
+              const totalRefunds = refunds.reduce((s, r) => s + r.amount, 0);
+              return (
+                <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #FECACA", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "16px", marginTop: "16px" }}>
+                  <div style={{ padding: "14px 22px", borderBottom: "1px solid #FECACA", borderRight: "4px solid #B91C1C", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontWeight: 700, fontSize: "14.5px", color: "#991B1B" }}>החזרי הורים</div>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: "#B91C1C" }}>סה״כ: {fmt(totalRefunds)}</span>
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead style={{ background: "#FEF2F2" }}>
+                      <tr>
+                        <th style={th}>תאריך</th>
+                        <th style={thL}>שכבה</th>
+                        <th style={thL}>סעיף</th>
+                        <th style={thL}>סיבה</th>
+                        <th style={thL}>סכום</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {refunds.map((r) => (
+                        <tr key={r.id}>
+                          <td style={td}>{new Date(r.refund_date).toLocaleDateString("he-IL")}</td>
+                          <td style={tdL}>{gradeMap.get(r.grade_id) ?? "—"}</td>
+                          <td style={tdL}>{r.parent_section_id ? (sectionMap.get(r.parent_section_id) ?? "—") : "—"}</td>
+                          <td style={{ ...tdL, color: "#6B6560" }}>{r.reason ?? "—"}</td>
+                          <td style={{ ...tdL, fontWeight: 700, color: "#B91C1C" }}>−{fmt(r.amount)}</td>
+                        </tr>
+                      ))}
+                      <tr style={{ background: "#FEF2F2" }}>
+                        <td style={{ ...td, fontWeight: 700 }} colSpan={4}>סה״כ החזרים</td>
+                        <td style={{ ...tdL, fontWeight: 700, color: "#B91C1C" }}>−{fmt(totalRefunds)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </React.Fragment>);
         }
 
         // ── Other sources: per-category expense table ──
