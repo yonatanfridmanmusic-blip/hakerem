@@ -8,6 +8,8 @@ import {
   useGrades, useParentSections, useGradeSectionAmounts,
   useParentCollections, computeTarget,
   type Grade, type ParentSection, type GradeSectionAmount, type ParentCollection,
+  useParentRefunds,
+  type ParentRefund,
 } from "@/hooks/use-horim";
 import {
   usePeriodicReport, usePeriodicCategoryReport, useActiveSchoolYearMeta,
@@ -491,6 +493,7 @@ function ReportsPage() {
   const sectionsQuery = useParentSections();
   const amountsQuery  = useGradeSectionAmounts();
   const collectQuery  = useParentCollections();
+  const refundsQuery  = useParentRefunds();
 
   // Dynamic source config — merges org sources with static baseline
   const { data: orgSources } = useOrgBudgetSources();
@@ -580,7 +583,7 @@ function ReportsPage() {
       </div>
 
       {tab === "annual"   && <AnnualReport   data={annualQuery.data} isLoading={annualQuery.isLoading} cfgMap={cfgMap} categories={allCategories ?? []} grades={gradesQuery.data ?? []} sections={sectionsQuery.data ?? []} amounts={amountsQuery.data ?? []} collections={collectQuery.data ?? []} />}
-      {tab === "horim"    && <HorimReport    grades={gradesQuery.data ?? []} sections={sectionsQuery.data ?? []} amounts={amountsQuery.data ?? []} collections={collectQuery.data ?? []} isLoading={gradesQuery.isLoading} />}
+      {tab === "horim"    && <HorimReport    grades={gradesQuery.data ?? []} sections={sectionsQuery.data ?? []} amounts={amountsQuery.data ?? []} collections={collectQuery.data ?? []} refunds={refundsQuery.data ?? []} isLoading={gradesQuery.isLoading} />}
       {tab === "periodic" && (
         <PeriodicReport
           periodType={periodType}
@@ -799,7 +802,7 @@ function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, a
 
 // ─── Horim Report ─────────────────────────────────────────────────────────────
 
-function HorimReport({ grades, sections, amounts, collections, isLoading }: { grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[]; isLoading: boolean }) {
+function HorimReport({ grades, sections, amounts, collections, refunds, isLoading }: { grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[]; refunds: ParentRefund[]; isLoading: boolean }) {
   const isMobile = useIsMobile();
   if (isLoading) return <Loader />;
   if (grades.length === 0) return <EmptyState text="אין שכבות — הגדר שכבות במסך ההגדרות" />;
@@ -989,6 +992,47 @@ function HorimReport({ grades, sections, amounts, collections, isLoading }: { gr
           </tbody>
         </table>
       </div>
+
+      {/* Refunds table */}
+      {refunds.length > 0 && (() => {
+        const gradeMap = new Map(grades.map((g) => [g.id, g.name]));
+        const sectionMap = new Map(sections.map((s) => [s.id, s.name]));
+        const totalRefunds = refunds.reduce((s, r) => s + r.amount, 0);
+        return (
+          <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #FECACA", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginTop: "18px" }}>
+            <div style={{ padding: "14px 22px", borderBottom: "1px solid #FECACA", borderRight: "4px solid #B91C1C", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 700, fontSize: "14.5px", color: "#991B1B" }}>החזרי הורים</div>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "#B91C1C" }}>סה״כ: {fmt(totalRefunds)}</span>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead style={{ background: "#FEF2F2" }}>
+                <tr>
+                  <th style={th}>תאריך</th>
+                  <th style={thL}>שכבה</th>
+                  <th style={thL}>סעיף</th>
+                  <th style={thL}>סיבה</th>
+                  <th style={thL}>סכום</th>
+                </tr>
+              </thead>
+              <tbody>
+                {refunds.map((r) => (
+                  <tr key={r.id}>
+                    <td style={td}>{new Date(r.refund_date).toLocaleDateString("he-IL")}</td>
+                    <td style={tdL}>{gradeMap.get(r.grade_id) ?? "—"}</td>
+                    <td style={tdL}>{r.parent_section_id ? (sectionMap.get(r.parent_section_id) ?? "—") : "—"}</td>
+                    <td style={{ ...tdL, color: "#6B6560" }}>{r.reason ?? "—"}</td>
+                    <td style={{ ...tdL, fontWeight: 700, color: "#B91C1C" }}>−{fmt(r.amount)}</td>
+                  </tr>
+                ))}
+                <tr style={{ background: "#FEF2F2" }}>
+                  <td style={{ ...td, fontWeight: 700 }} colSpan={4}>סה״כ החזרים</td>
+                  <td style={{ ...tdL, fontWeight: 700, color: "#B91C1C" }}>−{fmt(totalRefunds)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
     </div>
   );
 }
