@@ -357,14 +357,8 @@ function SourcesStep({ orgId, onDone }: { orgId: string; onDone: () => void }) {
     }
   };
 
-  // Mark setup complete and navigate
-  const handleDone = async () => {
-    setSaving(true);
-    await supabase
-      .from("organizations")
-      .update({ setup_completed_at: new Date().toISOString() })
-      .eq("id", orgId);
-    setSaving(false);
+  // Navigate to dashboard — setup_completed_at is set by the dashboard wizard on completion
+  const handleDone = () => {
     onDone();
   };
 
@@ -498,13 +492,8 @@ function ResumeSetupStep({ orgName, orgId, onContinue, onSkip }: {
 }) {
   const [skipping, setSkipping] = useState(false);
 
-  const handleSkip = async () => {
-    setSkipping(true);
-    await supabase
-      .from("organizations")
-      .update({ setup_completed_at: new Date().toISOString() })
-      .eq("id", orgId);
-    setSkipping(false);
+  const handleSkip = () => {
+    // setup_completed_at is set by the dashboard wizard on completion
     onSkip();
   };
 

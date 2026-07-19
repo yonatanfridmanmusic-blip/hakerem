@@ -542,6 +542,8 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   const [catCustom, setCatCustom] = useState("");
   type AddedCat = { id: string; name: string; amount: number };
   const [addedCats, setAddedCats] = useState<Record<string, AddedCat[]>>({});
+  // localAmounts: tracks what the user is typing per cat id (string to allow empty while editing)
+  const [localAmounts, setLocalAmounts] = useState<Record<string, string>>({});
   const addCategory = useAddBudgetCategory();
   const deleteCategory = useDeleteBudgetCategory();
   const updatePlannedAmount = useUpdatePlannedAmount();
@@ -1473,11 +1475,30 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                                   <span style={{ fontSize: "13px", color: c.color, fontWeight: "500" }}>{cat.name}</span>
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                  <InlineAmountEdit catId={cat.id} current={cat.amount} color={c.color}
-                                    onSave={async (n) => {
-                                      await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
-                                      setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
-                                    }} />
+                                  <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                                    <span style={{ fontSize: "12px", color: c.color, fontWeight: "500" }}>₪</span>
+                                    <input
+                                      type="number" min="0"
+                                      value={localAmounts[cat.id] ?? String(cat.amount || "")}
+                                      placeholder="0"
+                                      onChange={e => setLocalAmounts(prev => ({ ...prev, [cat.id]: e.target.value }))}
+                                      onFocus={e => {
+                                        if (localAmounts[cat.id] === undefined) {
+                                          setLocalAmounts(prev => ({ ...prev, [cat.id]: String(cat.amount || "") }));
+                                        }
+                                        e.target.select();
+                                      }}
+                                      onBlur={async (e) => {
+                                        const n = Number(e.target.value);
+                                        if (!isNaN(n) && n >= 0) {
+                                          await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
+                                          setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                        }
+                                      }}
+                                      onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                                      style={{ width: "72px", padding: "3px 7px", border: `1.5px solid ${c.color}50`, borderRadius: "6px", fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none", direction: "ltr", textAlign: "right" }}
+                                    />
+                                  </div>
                                   <button type="button" onClick={() => handleDeleteCat(cat.id, effectiveCatSrc)}
                                     title="הסר קטגוריה"
                                     style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", padding: "2px", fontSize: "14px", lineHeight: 1 }}
@@ -1511,7 +1532,19 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                 })()}
 
                 <div style={{ display: "flex", gap: "10px", marginTop: "28px" }}>
-                  <button type="button" onClick={() => setStep(3)} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
+                  <button type="button" onClick={async () => {
+                    // Flush all pending localAmounts to DB before advancing
+                    const allCats = Object.values(addedCats).flat();
+                    await Promise.all(allCats.map(async (cat) => {
+                      const rawVal = localAmounts[cat.id];
+                      if (rawVal === undefined) return;
+                      const n = Number(rawVal);
+                      if (!isNaN(n) && n >= 0) {
+                        await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
+                      }
+                    }));
+                    setStep(3);
+                  }} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
                     סיים הגדרה ←
                   </button>
                   <button type="button" onClick={() => setStep(3)} style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
