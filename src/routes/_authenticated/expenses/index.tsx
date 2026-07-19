@@ -1202,7 +1202,7 @@ export default function ExpensesPage() {
   const defaultSource = sources[0]?.slug ?? "gefen";
 
   // Single fetch — filter + totals computed client-side to avoid double network request
-  const { data: allExpenses, isLoading } = useExpenses("all");
+  const { data: allExpenses, isLoading, isError } = useExpenses("all");
 
   const filteredBySource = filter === "all"
     ? (allExpenses ?? [])
@@ -1242,7 +1242,7 @@ export default function ExpensesPage() {
           <div style={{ minWidth: 0 }}>
             <h1 style={{ margin: 0, fontSize: isMobile ? "22px" : "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>הוצאות</h1>
             <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099" }}>
-              {isLoading ? "טוען..." : q
+              {isLoading ? "טוען..." : isError ? "שגיאה בטעינת נתונים" : q
                 ? `${visibleExpenses.length} מתוך ${(expenses ?? []).length} הוצאות · ${fmt(total)}`
                 : `${(expenses ?? []).length} הוצאות · סה״כ ${fmt(total)}`}
             </p>
@@ -1380,6 +1380,12 @@ export default function ExpensesPage() {
 
           {isLoading ? (
             <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>טוען...</div>
+          ) : isError ? (
+            <div style={{ padding: "48px", textAlign: "center" }}>
+              <AlertTriangle size={24} style={{ color: "#E8C4C4", marginBottom: "12px" }} />
+              <div style={{ color: "#8B1A1A", fontSize: "14px" }}>שגיאה בטעינת ההוצאות</div>
+              <div style={{ color: "#7A7470", fontSize: "12px", marginTop: "4px" }}>נסו/י לרענן את הדף</div>
+            </div>
           ) : visibleExpenses.length === 0 ? (
             <div style={{ padding: "48px", textAlign: "center" }}>
               <AlertTriangle size={24} style={{ color: "#E8E2D9", marginBottom: "12px" }} />
