@@ -474,6 +474,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "expenses_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "expenses_grade_id_fkey"
             columns: ["grade_id"]
             isOneToOne: false
@@ -959,6 +966,70 @@ export type Database = {
           },
           {
             foreignKeyName: "parent_collections_school_year_id_fkey"
+            columns: ["school_year_id"]
+            isOneToOne: false
+            referencedRelation: "school_years"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parent_refunds: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          grade_id: string
+          id: string
+          notes: string | null
+          parent_section_id: string | null
+          reason: string | null
+          refund_date: string
+          school_year_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          grade_id: string
+          id?: string
+          notes?: string | null
+          parent_section_id?: string | null
+          reason?: string | null
+          refund_date?: string
+          school_year_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          grade_id?: string
+          id?: string
+          notes?: string | null
+          parent_section_id?: string | null
+          reason?: string | null
+          refund_date?: string
+          school_year_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parent_refunds_grade_id_fkey"
+            columns: ["grade_id"]
+            isOneToOne: false
+            referencedRelation: "grades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parent_refunds_parent_section_id_fkey"
+            columns: ["parent_section_id"]
+            isOneToOne: false
+            referencedRelation: "parent_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parent_refunds_school_year_id_fkey"
             columns: ["school_year_id"]
             isOneToOne: false
             referencedRelation: "school_years"
