@@ -637,33 +637,76 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
     savingCellRef.current = false;
   };
 
-  const handleAddCatSuggestion = async (name: string) => {
+  // ── Draft mode: categories live in localStorage until "סיים הגדרה" commits them to DB ──
+  const draftKey = yearId ? `hakerem_wizard_draft_cats_${yearId}` : null;
+
+  // Load draft on mount / when yearId becomes available
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, AddedCat[]>;
+        if (parsed && typeof parsed === "object") setAddedCats(parsed);
+      }
+    } catch { /* corrupt draft — start fresh */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  // Persist draft on every change
+  useEffect(() => {
+    if (!draftKey) return;
+    try { localStorage.setItem(draftKey, JSON.stringify(addedCats)); } catch { /* quota */ }
+  }, [addedCats, draftKey]);
+
+  const handleAddCatSuggestion = (name: string) => {
     if ((addedCats[effectiveCatSrc] ?? []).some(c => c.name === name)) return;
-    try {
-      const result = await addCategory.mutateAsync({ name, source: effectiveCatSrc, plannedAmount: 0 });
-      if (result?.id) {
-        setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: [...(prev[effectiveCatSrc] ?? []), { id: result.id, name, amount: 0 }] }));
-      }
-    } catch { toast.error("שגיאה בהוספת הקטגוריה"); }
+    setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: [...(prev[effectiveCatSrc] ?? []), { id: crypto.randomUUID(), name, amount: 0 }] }));
   };
 
-  const handleAddCustomCat = async () => {
-    if (!catCustom.trim() || addCategory.isPending) return;
+  const handleAddCustomCat = () => {
+    if (!catCustom.trim()) return;
     const name = catCustom.trim();
-    try {
-      const result = await addCategory.mutateAsync({ name, source: effectiveCatSrc, plannedAmount: 0 });
-      if (result?.id) {
-        setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: [...(prev[effectiveCatSrc] ?? []), { id: result.id, name, amount: 0 }] }));
-      }
-      setCatCustom("");
-    } catch { toast.error("שגיאה בהוספת הקטגוריה"); }
+    if ((addedCats[effectiveCatSrc] ?? []).some(c => c.name === name)) { setCatCustom(""); return; }
+    setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: [...(prev[effectiveCatSrc] ?? []), { id: crypto.randomUUID(), name, amount: 0 }] }));
+    setCatCustom("");
   };
 
-  const handleDeleteCat = async (catId: string, src: string) => {
+  const handleDeleteCat = (catId: string, src: string) => {
+    setAddedCats(prev => ({ ...prev, [src]: (prev[src] ?? []).filter(c => c.id !== catId) }));
+    setLocalAmounts(prev => { const next = { ...prev }; delete next[catId]; return next; });
+  };
+
+  // Commit all draft categories to DB — called by "סיים הגדרה" (and "דלג" if drafts exist)
+  const [committingCats, setCommittingCats] = useState(false);
+  const commitDraftCats = async (): Promise<boolean> => {
+    setCommittingCats(true);
     try {
-      await deleteCategory.mutateAsync(catId);
-      setAddedCats(prev => ({ ...prev, [src]: (prev[src] ?? []).filter(c => c.id !== catId) }));
-    } catch { /* non-blocking */ }
+      // Fetch existing category names for this year to avoid duplicates on re-run
+      const { data: existingCats } = await supabase
+        .from("budget_categories")
+        .select("name, source")
+        .eq("school_year_id", yearId);
+      const existingKeys = new Set((existingCats ?? []).map(c => `${c.source}::${c.name}`));
+
+      for (const [src, cats] of Object.entries(addedCats)) {
+        for (const cat of cats) {
+          if (existingKeys.has(`${src}::${cat.name}`)) continue;
+          // Latest typed value wins over last-saved value
+          const rawVal = localAmounts[cat.id];
+          const n = rawVal !== undefined ? Number(rawVal) : cat.amount;
+          const amount = !isNaN(n) && n >= 0 ? n : cat.amount;
+          await addCategory.mutateAsync({ name: cat.name, source: src, plannedAmount: amount, targetYearId: yearId });
+        }
+      }
+      if (draftKey) localStorage.removeItem(draftKey);
+      return true;
+    } catch {
+      toast.error("שגיאה בשמירת הקטגוריות — נסו/י שוב");
+      return false;
+    } finally {
+      setCommittingCats(false);
+    }
   };
 
   const handleFillAll = async (secIdx: number, value: string) => {
@@ -1494,15 +1537,12 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                                         }
                                         e.target.select();
                                       }}
-                                      onKeyDown={async e => {
+                                      onKeyDown={e => {
                                         if (e.key === "Enter") {
                                           const n = Number((e.target as HTMLInputElement).value);
                                           if (!isNaN(n) && n >= 0) {
-                                            try {
-                                              await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
-                                              setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
-                                              flashSaved(cat.id);
-                                            } catch { /* silent — flush on סיים will retry */ }
+                                            setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                            flashSaved(cat.id);
                                           }
                                           (e.target as HTMLInputElement).blur();
                                         }
@@ -1511,15 +1551,12 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                                     />
                                     <button
                                       type="button"
-                                      onClick={async () => {
+                                      onClick={() => {
                                         const rawVal = localAmounts[cat.id];
                                         const n = Number(rawVal ?? cat.amount);
                                         if (!isNaN(n) && n >= 0) {
-                                          try {
-                                            await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
-                                            setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
-                                            flashSaved(cat.id);
-                                          } catch { /* silent */ }
+                                          setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                          flashSaved(cat.id);
                                         }
                                       }}
                                       style={{ padding: "3px 8px", borderRadius: "6px", border: "none", background: savedFlash[cat.id] ? "#2D6644" : c.color, color: "#fff", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer", whiteSpace: "nowrap", minWidth: "52px", transition: "background 0.2s" }}
@@ -1560,24 +1597,21 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                 })()}
 
                 <div style={{ display: "flex", gap: "10px", marginTop: "28px" }}>
-                  <button type="button" onClick={async () => {
-                    // Flush all pending localAmounts to DB before advancing
-                    const allCats = Object.values(addedCats).flat();
-                    await Promise.all(allCats.map(async (cat) => {
-                      const rawVal = localAmounts[cat.id];
-                      if (rawVal === undefined) return;
-                      const n = Number(rawVal);
-                      if (!isNaN(n) && n >= 0) {
-                        try {
-                          await updatePlannedAmount.mutateAsync({ categoryId: cat.id, plannedAmount: n });
-                        } catch { /* continue — don't block navigation */ }
-                      }
-                    }));
-                    setStep(3);
-                  }} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
-                    סיים הגדרה ←
+                  <button type="button" disabled={committingCats} onClick={async () => {
+                    // Commit all draft categories (with latest typed amounts) to DB, then advance
+                    const ok = await commitDraftCats();
+                    if (ok) setStep(3);
+                  }} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: committingCats ? "wait" : "pointer", opacity: committingCats ? 0.7 : 1, boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
+                    {committingCats ? "שומר..." : "סיים הגדרה ←"}
                   </button>
-                  <button type="button" onClick={() => setStep(3)} style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                  <button type="button" disabled={committingCats} onClick={async () => {
+                    // דלג also commits drafts — user-entered data must not be lost
+                    if (Object.values(addedCats).flat().length > 0) {
+                      const ok = await commitDraftCats();
+                      if (!ok) return;
+                    }
+                    setStep(3);
+                  }} style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
                     דלג
                   </button>
                 </div>
