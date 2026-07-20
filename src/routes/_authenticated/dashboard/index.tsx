@@ -1818,6 +1818,7 @@ function SetupCompletionBanner() {
 
 export default function DashboardPage() {
   const isMobile = useIsMobile();
+  const queryClient = useQueryClient();
   const { data, isLoading, error } = useDashboardSummary();
   const { data: membership } = useOrganization();
   const orgId = membership?.organization?.id;
@@ -1870,14 +1871,18 @@ export default function DashboardPage() {
   if (wizardTriggered === true && !wizardDone) {
     return (
       <SetupWizard
-        onComplete={() => {
+        onComplete={async () => {
           if (orgId) {
             localStorage.setItem(`hakerem_wizard_done_${orgId}`, "true");
-            // Persist to DB so wizard doesn't re-appear in other browsers/incognito
-            void supabase
-              .from("organizations")
-              .update({ setup_completed_at: new Date().toISOString() })
-              .eq("id", orgId);
+            // Persist to DB so wizard doesn't re-appear in other browsers/incognito.
+            // NOTE: must await — supabase builders are lazy and `void` never executes them.
+            try {
+              await supabase
+                .from("organizations")
+                .update({ setup_completed_at: new Date().toISOString() })
+                .eq("id", orgId);
+              queryClient.invalidateQueries({ queryKey: ["organization"] });
+            } catch { /* non-blocking — wizard still closes */ }
           }
           setWizardDone(true);
         }}
