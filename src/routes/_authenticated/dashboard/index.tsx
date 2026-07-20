@@ -544,12 +544,6 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   const [addedCats, setAddedCats] = useState<Record<string, AddedCat[]>>({});
   // localAmounts: tracks what the user is typing per cat id (string to allow empty while editing)
   const [localAmounts, setLocalAmounts] = useState<Record<string, string>>({});
-  // savedFlash: cat ids that just saved successfully — shows "✓ נשמר" briefly
-  const [savedFlash, setSavedFlash] = useState<Record<string, boolean>>({});
-  const flashSaved = (catId: string) => {
-    setSavedFlash(prev => ({ ...prev, [catId]: true }));
-    setTimeout(() => setSavedFlash(prev => ({ ...prev, [catId]: false })), 2000);
-  };
   const addCategory = useAddBudgetCategory();
   const deleteCategory = useDeleteBudgetCategory();
   const updatePlannedAmount = useUpdatePlannedAmount();
@@ -616,24 +610,14 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
     setGradeCount("0");
   };
 
-  const saveCellToDb = async (gradeId: string, sectionName: string, amountStr: string | undefined, secIdx?: number) => {
+  // Draft mode: cell edits stay in local state (wizardGSA) — DB write happens
+  // only on "סיים הגדרה" via commitHorimData. This just closes the editing cell.
+  const saveCellToDb = async (gradeId: string, _sectionName: string, _amountStr: string | undefined, secIdx?: number) => {
     if (savingCellRef.current) return;
     savingCellRef.current = true;
-    // "na" = not applicable for this grade — save 0 to DB (section exists but amount is 0)
-    const effectiveStr = amountStr === "na" ? "0" : amountStr;
-    const n = Number(effectiveStr ?? "");
-    // Only clear editingCell if we're still on the same cell that triggered the save
-    const clearCell = () => setEditingCell(prev =>
+    setEditingCell(prev =>
       (prev?.gradeId === gradeId && (secIdx === undefined || prev?.secIdx === secIdx)) ? null : prev
     );
-    if (!effectiveStr || isNaN(n) || n < 0 || !yearId) {
-      clearCell();
-      savingCellRef.current = false;
-      return;
-    }
-    try { await horimAmountMutation.mutateAsync({ yearId, gradeId, amount: n, sectionName }); }
-    catch { /* non-blocking */ }
-    clearCell();
     savingCellRef.current = false;
   };
 
@@ -709,6 +693,66 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
     }
   };
 
+  // ── Horim draft: sections/defaults/matrix live in localStorage until commit ──
+  const horimDraftKey = yearId ? `hakerem_wizard_draft_horim_${yearId}` : null;
+
+  useEffect(() => {
+    if (!horimDraftKey) return;
+    try {
+      const raw = localStorage.getItem(horimDraftKey);
+      if (raw) {
+        const p = JSON.parse(raw) as {
+          sections?: Array<{ name: string }>;
+          sectionGrades?: Record<number, 'all' | string[]>;
+          sectionDefaults?: Record<number, string>;
+          gsa?: Record<string, Record<number, string>>;
+        };
+        if (Array.isArray(p.sections) && p.sections.length > 0) setWizardSections(p.sections);
+        if (p.sectionGrades) setWizardSectionGrades(p.sectionGrades);
+        if (p.sectionDefaults) setWizardSectionDefaults(p.sectionDefaults);
+        if (p.gsa) setWizardGSA(p.gsa);
+      }
+    } catch { /* corrupt draft — start fresh */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [horimDraftKey]);
+
+  useEffect(() => {
+    if (!horimDraftKey) return;
+    try {
+      localStorage.setItem(horimDraftKey, JSON.stringify({
+        sections: wizardSections, sectionGrades: wizardSectionGrades,
+        sectionDefaults: wizardSectionDefaults, gsa: wizardGSA,
+      }));
+    } catch { /* quota */ }
+  }, [horimDraftKey, wizardSections, wizardSectionGrades, wizardSectionDefaults, wizardGSA]);
+
+  // Commit horim sections + per-grade amounts to DB.
+  // Falls back to section defaults for applicable grades the user never edited,
+  // so data is saved even if the user never opened the amounts matrix.
+  const commitHorimData = async () => {
+    if (!yearId || wizardSections.length === 0 || sortedGrades.length === 0) return;
+    for (const g of sortedGrades) {
+      for (let secIdx = 0; secIdx < wizardSections.length; secIdx++) {
+        const sg = wizardSectionGrades[secIdx];
+        const applicable = !sg || sg === 'all' || (sg as string[]).includes(g.id);
+        if (!applicable) continue;
+        let val = wizardGSA[g.id]?.[secIdx];
+        if (val === "na") continue;
+        if (!val) val = wizardSectionDefaults[secIdx]; // default per section
+        const n = Number(val);
+        if (val && !isNaN(n) && n > 0) {
+          try { await setGradeHorimAmount(yearId, g.id, n, wizardSections[secIdx].name); }
+          catch { /* non-blocking */ }
+        }
+      }
+    }
+    if (horimDraftKey) localStorage.removeItem(horimDraftKey);
+    queryClient.invalidateQueries({ queryKey: ["grade-section-amounts"] });
+    queryClient.invalidateQueries({ queryKey: ["horim"] });
+    queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+    queryClient.invalidateQueries({ queryKey: ["budget-categories"] });
+  };
+
   const handleFillAll = async (secIdx: number, value: string) => {
     const n = Number(value);
     if (!value || isNaN(n) || n < 0 || !yearId) return;
@@ -731,32 +775,18 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   };
 
   // Save all filled horim cells to DB, then advance to step 3
-  const handleFinishHorimWizard = async () => {
-    if (!yearId) { setStep(3); return; }
+  // Unified finish — ALWAYS commits both draft categories AND horim data,
+  // no matter which tab's finish button was clicked. Fixes the bug where
+  // horim data was silently dropped when finishing from a non-horim tab.
+  const handleFinishWizardStep2 = async () => {
     setEditingCell(null);
-    // Read current GSA synchronously (state is already up to date).
-    // IMPORTANT: we use setGradeHorimAmount directly (not saveCellToDb) because
-    // saveCellToDb has a savingCellRef mutex that would block all but the first
-    // call when initiated synchronously in a loop. Sequential awaits are safe.
-    const currentGSA = wizardGSA;
-    for (const g of sortedGrades) {
-      for (let secIdx = 0; secIdx < wizardSections.length; secIdx++) {
-        const sec = wizardSections[secIdx];
-        const val = currentGSA[g.id]?.[secIdx];
-        if (val && val !== "na") {
-          const n = Number(val);
-          if (!isNaN(n) && n > 0) {
-            try { await setGradeHorimAmount(yearId, g.id, n, sec.name); }
-            catch { /* non-blocking */ }
-          }
-        }
-      }
-    }
-    queryClient.invalidateQueries({ queryKey: ["grade-section-amounts"] });
-    queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
-    queryClient.invalidateQueries({ queryKey: ["budget-categories"] });
+    const ok = await commitDraftCats();
+    if (!ok) return;
+    await commitHorimData();
     setStep(3);
   };
+
+  const handleFinishHorimWizard = handleFinishWizardStep2;
 
   // Apply grade applicability: mark non-applicable grade×section combos as "na"
   const handleSectionsToAmounts = () => {
@@ -1524,46 +1554,59 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                                   <span style={{ fontSize: "13px", color: c.color, fontWeight: "500" }}>{cat.name}</span>
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                    <span style={{ fontSize: "12px", color: c.color, fontWeight: "500" }}>₪</span>
-                                    <input
-                                      type="number" min="0"
-                                      value={localAmounts[cat.id] ?? String(cat.amount || "")}
-                                      placeholder="0"
-                                      onChange={e => setLocalAmounts(prev => ({ ...prev, [cat.id]: e.target.value }))}
-                                      onFocus={e => {
-                                        if (localAmounts[cat.id] === undefined) {
-                                          setLocalAmounts(prev => ({ ...prev, [cat.id]: String(cat.amount || "") }));
-                                        }
-                                        e.target.select();
-                                      }}
-                                      onKeyDown={e => {
-                                        if (e.key === "Enter") {
-                                          const n = Number((e.target as HTMLInputElement).value);
-                                          if (!isNaN(n) && n >= 0) {
-                                            setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
-                                            flashSaved(cat.id);
-                                          }
-                                          (e.target as HTMLInputElement).blur();
-                                        }
-                                      }}
-                                      style={{ width: "68px", padding: "3px 6px", border: `1.5px solid ${c.color}50`, borderRadius: "6px", fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none", direction: "ltr", textAlign: "right" }}
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const rawVal = localAmounts[cat.id];
-                                        const n = Number(rawVal ?? cat.amount);
-                                        if (!isNaN(n) && n >= 0) {
-                                          setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
-                                          flashSaved(cat.id);
-                                        }
-                                      }}
-                                      style={{ padding: "3px 8px", borderRadius: "6px", border: "none", background: savedFlash[cat.id] ? "#2D6644" : c.color, color: "#fff", fontSize: "12px", fontFamily: "Rubik, sans-serif", cursor: "pointer", whiteSpace: "nowrap", minWidth: "52px", transition: "background 0.2s" }}
-                                    >
-                                      {savedFlash[cat.id] ? "✓ נשמר" : "שמור"}
-                                    </button>
-                                  </div>
+                                  {(() => {
+                                    // Derived save state — no timers, no flicker:
+                                    // dirty  = typed value differs from last-saved amount → show "שמור"
+                                    // saved  = value saved and unchanged → show quiet "נשמר" (stays)
+                                    const typed = localAmounts[cat.id];
+                                    const typedNum = typed !== undefined ? Number(typed) : cat.amount;
+                                    const isDirty = typed !== undefined && !isNaN(typedNum) && typedNum !== cat.amount;
+                                    const isSaved = !isDirty && cat.amount > 0;
+                                    const doSave = () => {
+                                      const n = Number(localAmounts[cat.id] ?? cat.amount);
+                                      if (!isNaN(n) && n >= 0) {
+                                        setAddedCats(prev => ({ ...prev, [effectiveCatSrc]: (prev[effectiveCatSrc] ?? []).map(x => x.id === cat.id ? { ...x, amount: n } : x) }));
+                                      }
+                                    };
+                                    return (
+                                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                        <span style={{ fontSize: "12px", color: c.color, fontWeight: "500" }}>₪</span>
+                                        <input
+                                          type="number" min="0"
+                                          value={localAmounts[cat.id] ?? String(cat.amount || "")}
+                                          placeholder="0"
+                                          onChange={e => setLocalAmounts(prev => ({ ...prev, [cat.id]: e.target.value }))}
+                                          onFocus={e => {
+                                            if (localAmounts[cat.id] === undefined) {
+                                              setLocalAmounts(prev => ({ ...prev, [cat.id]: String(cat.amount || "") }));
+                                            }
+                                            e.target.select();
+                                          }}
+                                          onKeyDown={e => {
+                                            if (e.key === "Enter") { doSave(); (e.target as HTMLInputElement).blur(); }
+                                          }}
+                                          style={{ width: "72px", padding: "4px 8px", border: `1.5px solid ${isDirty ? c.color : "#E8E2D9"}`, borderRadius: "7px", fontSize: "13px", fontFamily: "Rubik, sans-serif", outline: "none", direction: "ltr", textAlign: "right", background: "#fff", transition: "border-color 0.15s" }}
+                                        />
+                                        {isDirty ? (
+                                          <button
+                                            type="button"
+                                            onClick={doSave}
+                                            style={{ padding: "4px 14px", borderRadius: "7px", border: "none", background: c.color, color: "#fff", fontSize: "12.5px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: "pointer", whiteSpace: "nowrap" }}
+                                          >
+                                            שמור
+                                          </button>
+                                        ) : isSaved ? (
+                                          <span style={{ padding: "4px 14px", borderRadius: "7px", background: "#EDFBF3", border: "1px solid #B6E8C4", color: "#2D6644", fontSize: "12.5px", fontWeight: "500", fontFamily: "Rubik, sans-serif", whiteSpace: "nowrap" }}>
+                                            נשמר
+                                          </span>
+                                        ) : (
+                                          <span style={{ padding: "4px 14px", borderRadius: "7px", background: "#F5F2EE", border: "1px solid #E8E2D9", color: "#C0BAB4", fontSize: "12.5px", fontWeight: "500", fontFamily: "Rubik, sans-serif", whiteSpace: "nowrap" }}>
+                                            שמור
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                   <button type="button" onClick={() => handleDeleteCat(cat.id, effectiveCatSrc)}
                                     title="הסר קטגוריה"
                                     style={{ background: "none", border: "none", cursor: "pointer", color: "#C0BAB4", padding: "2px", fontSize: "14px", lineHeight: 1 }}
@@ -1597,21 +1640,10 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                 })()}
 
                 <div style={{ display: "flex", gap: "10px", marginTop: "28px" }}>
-                  <button type="button" disabled={committingCats} onClick={async () => {
-                    // Commit all draft categories (with latest typed amounts) to DB, then advance
-                    const ok = await commitDraftCats();
-                    if (ok) setStep(3);
-                  }} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: committingCats ? "wait" : "pointer", opacity: committingCats ? 0.7 : 1, boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
+                  <button type="button" disabled={committingCats} onClick={handleFinishWizardStep2} style={{ flex: 1, padding: "14px 0", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: committingCats ? "wait" : "pointer", opacity: committingCats ? 0.7 : 1, boxShadow: "0 4px 16px rgba(26,61,43,0.3)" }}>
                     {committingCats ? "שומר..." : "סיים הגדרה ←"}
                   </button>
-                  <button type="button" disabled={committingCats} onClick={async () => {
-                    // דלג also commits drafts — user-entered data must not be lost
-                    if (Object.values(addedCats).flat().length > 0) {
-                      const ok = await commitDraftCats();
-                      if (!ok) return;
-                    }
-                    setStep(3);
-                  }} style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                  <button type="button" disabled={committingCats} onClick={handleFinishWizardStep2} style={{ padding: "14px 18px", background: "none", color: "#AAA099", border: "1.5px solid #E8E2D9", borderRadius: "12px", fontSize: "14px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
                     דלג
                   </button>
                 </div>
