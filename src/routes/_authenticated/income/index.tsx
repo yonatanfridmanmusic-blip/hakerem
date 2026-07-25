@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
-import { Plus, X, TrendingUp, Pencil, Check, Trash2, Search } from "lucide-react";
+import { Plus, X, TrendingUp, Pencil, Check, Trash2, Search, ExternalLink } from "lucide-react";
 import { useCanWrite } from "@/hooks/use-organization";
 import { DateInput } from "@/components/ui/date-input";
 import { useIsMobile } from "@/hooks/use-is-mobile";
@@ -21,7 +21,7 @@ import { useBudgetCategories } from "@/hooks/use-expenses";
 import { useAddBudgetCategory } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { useSourceBudgetPlans } from "@/hooks/use-source-budget-plans";
-import { useGrades, useGradeSectionAmounts, computeTarget, useParentCollections } from "@/hooks/use-horim";
+import { useGrades, useGradeSectionAmounts, computeTarget, useParentCollections, useAllParentSections } from "@/hooks/use-horim";
 
 export const Route = createFileRoute("/_authenticated/income/")({
   component: IncomePage,
@@ -615,20 +615,54 @@ export default function IncomePage() {
       )
     : filteredBySource;
 
-  // For display: "N הכנסות" counts against source-filtered list (before text search)
+  // Parent collections flow into horim's actuals — single source of truth
+  // (entered and managed in the horim screen, displayed here as list rows + totals)
+  const { data: parentColls } = useParentCollections();
+  const { data: collGrades } = useGrades();
+  const { data: collSections } = useAllParentSections();
+  const collectionRows = (parentColls ?? []).map((c) => ({
+    id: c.id,
+    date: c.collection_date,
+    amount: c.amount,
+    gradeName: (collGrades ?? []).find((g) => g.id === c.grade_id)?.name ?? "—",
+    sectionName: c.parent_section_id === null
+      ? "לא משויך"
+      : ((collSections ?? []).find((s) => s.id === c.parent_section_id)?.name ?? "—"),
+    notes: c.notes,
+  }));
+  const filteredColls = (filter === "all" || filter === "horim") ? collectionRows : [];
+  const visibleColls = q
+    ? filteredColls.filter((c) =>
+        [c.gradeName, c.sectionName, c.notes, "גביית הורים"].some((f) => f?.toLowerCase().includes(q))
+      )
+    : filteredColls;
+  const parentCollTotal = collectionRows.reduce((sum, c) => sum + c.amount, 0);
+
+  // Merged, date-sorted display rows (income + collections)
+  type DisplayRow =
+    | { kind: "income"; inc: Income }
+    | { kind: "coll"; c: (typeof collectionRows)[number] };
+  const mergedRows: DisplayRow[] = [
+    ...visibleIncome.map((inc): DisplayRow => ({ kind: "income", inc })),
+    ...visibleColls.map((c): DisplayRow => ({ kind: "coll", c })),
+  ].sort((a, b) => {
+    const da = a.kind === "income" ? a.inc.income_date : a.c.date;
+    const db = b.kind === "income" ? b.inc.income_date : b.c.date;
+    return db.localeCompare(da);
+  });
+
+  // Counts + totals include collections (numeric consistency with the hero)
   const income = filteredBySource;
-  const total = visibleIncome.reduce((sum, e) => sum + e.amount, 0);
+  const listCount = income.length + filteredColls.length;
+  const total = visibleIncome.reduce((sum, e) => sum + e.amount, 0)
+    + visibleColls.reduce((sum, c) => sum + c.amount, 0);
   const sourceTotals: Record<string, number> = {};
   (allIncome ?? []).forEach((i) => { sourceTotals[i.source] = (sourceTotals[i.source] ?? 0) + i.amount; });
-
-  // Parent collections flow into horim's actuals — single source of truth
-  // (entered and managed in the horim screen, displayed here)
-  const { data: parentColls } = useParentCollections();
-  const parentCollTotal = (parentColls ?? []).reduce((sum, c) => sum + c.amount, 0);
   if (parentCollTotal > 0) sourceTotals["horim"] = (sourceTotals["horim"] ?? 0) + parentCollTotal;
 
   const grandTotal = Object.values(sourceTotals).reduce((a, b) => a + b, 0);
   const animGrand = useCountUp(grandTotal);
+  const navigate = useNavigate();
 
   // Planned vs. actual — global plans from source_budget_plans;
   // horim's plan is the derived collection target (same computation as the horim screen)
@@ -657,8 +691,8 @@ export default function IncomePage() {
             <h1 style={{ margin: 0, fontSize: isMobile ? "22px" : "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>הכנסות</h1>
             <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099" }}>
               {isLoading ? "טוען..." : q
-                ? `${visibleIncome.length} מתוך ${(income ?? []).length} הכנסות · ${fmt(total)}`
-                : `${(income ?? []).length} הכנסות · סה״כ ${fmt(total)}`}
+                ? `${mergedRows.length} מתוך ${listCount} הכנסות · ${fmt(total)}`
+                : `${listCount} הכנסות · סה״כ ${fmt(total)}`}
             </p>
           </div>
           {canWrite && (
@@ -807,7 +841,7 @@ export default function IncomePage() {
 
           {isLoading ? (
             <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>טוען...</div>
-          ) : visibleIncome.length === 0 ? (
+          ) : mergedRows.length === 0 ? (
             <div style={{ padding: "48px", textAlign: "center" }}>
               <TrendingUp size={24} style={{ color: "#E8E2D9", marginBottom: "12px" }} />
               <div style={{ color: "#AAA099", fontSize: "14px" }}>
@@ -819,14 +853,41 @@ export default function IncomePage() {
             </div>
           ) : isMobile ? (
             /* ── Mobile: card list ── */
-            visibleIncome.map((inc) => (
+            mergedRows.map((row) => row.kind === "income" ? (
               <IncomeMobileCard
-                key={inc.id}
-                inc={inc}
+                key={row.inc.id}
+                inc={row.inc}
                 sources={sources}
                 onEdit={setEditingIncome}
                 onDelete={setDeletingIncome}
               />
+            ) : (
+              /* Collection card — same look, managed in the horim screen */
+              <div key={`coll-${row.c.id}`}
+                onClick={() => navigate({ to: "/horim" })}
+                style={{ padding: "14px 16px", borderBottom: "1px solid #F3EEE8", cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", gap: "5px",
+                    padding: "3px 10px", borderRadius: "99px", fontSize: "11px", fontWeight: "600",
+                    background: getSourceStyle(sources, "horim").bg_color, color: getSourceStyle(sources, "horim").color,
+                  }}>
+                    גביית הורים
+                  </span>
+                  <span className="num" style={{ fontSize: "15px", fontWeight: "500", color: "#2D6644" }}>+{fmt(row.c.amount)}</span>
+                </div>
+                <div style={{ fontSize: "13px", color: "#1A1A1A", marginBottom: "3px" }}>
+                  {row.c.gradeName} · {row.c.sectionName}{row.c.notes ? ` · ${row.c.notes}` : ""}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span className="num" style={{ fontSize: "12px", color: "#AAA099" }}>
+                    {new Date(row.c.date).toLocaleDateString("he-IL")}
+                  </span>
+                  <span style={{ fontSize: "11.5px", color: "#8B2F6E", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                    ניהול במסך הורים <ExternalLink size={11} />
+                  </span>
+                </div>
+              </div>
             ))
           ) : (
             /* ── Desktop: scrollable table ── */
@@ -847,7 +908,56 @@ export default function IncomePage() {
                 <span>אמצעי תשלום</span>
                 <span></span>
               </div>
-              {visibleIncome.map((inc, i) => {
+              {mergedRows.map((row, i) => {
+                if (row.kind === "coll") {
+                  const horimStyle = getSourceStyle(sources, "horim");
+                  return (
+                    <div key={`coll-${row.c.id}`}
+                      onClick={() => navigate({ to: "/horim" })}
+                      title="עריכה ומחיקה במסך גביית הורים"
+                      style={{
+                        display: "grid", gridTemplateColumns: "110px 110px 70px 100px 1fr 1fr 90px 72px",
+                        minWidth: "740px",
+                        padding: "14px 20px", gap: "12px",
+                        borderBottom: i < mergedRows.length - 1 ? "1px solid #F3EEE8" : "none",
+                        alignItems: "center", transition: "background 0.1s", cursor: "pointer",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFAF8")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <span className="num" style={{ fontSize: "13px", color: "#6B6560" }}>
+                        {new Date(row.c.date).toLocaleDateString("he-IL")}
+                      </span>
+                      <span className="num" style={{ fontSize: "14px", fontWeight: "500", color: "#2D6644", textAlign: "right" }}>
+                        +{fmt(row.c.amount)}
+                      </span>
+                      <span style={{
+                        display: "inline-flex", alignItems: "center",
+                        padding: "3px 10px", borderRadius: "99px",
+                        fontSize: "11px", fontWeight: "600",
+                        background: horimStyle.bg_color, color: horimStyle.color, whiteSpace: "nowrap",
+                      }}>
+                        גביית הורים
+                      </span>
+                      <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {row.c.sectionName}
+                      </span>
+                      <span style={{ fontSize: "13px", color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {row.c.gradeName}
+                      </span>
+                      <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {row.c.notes ?? "—"}
+                      </span>
+                      <span style={{ fontSize: "12px", color: "#AAA099" }}>—</span>
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                        <span style={{ fontSize: "11.5px", color: horimStyle.color, display: "inline-flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}>
+                          ניהול <ExternalLink size={11} />
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+                const inc = row.inc;
                 const srcStyle = getSourceStyle(sources, inc.source);
                 const srcLabel = getSourceLabel(sources, inc.source);
                 return (
@@ -855,7 +965,7 @@ export default function IncomePage() {
                     display: "grid", gridTemplateColumns: "110px 110px 70px 100px 1fr 1fr 90px 72px",
                     minWidth: "740px",
                     padding: "14px 20px", gap: "12px",
-                    borderBottom: i < visibleIncome.length - 1 ? "1px solid #F3EEE8" : "none",
+                    borderBottom: i < mergedRows.length - 1 ? "1px solid #F3EEE8" : "none",
                     alignItems: "center", transition: "background 0.1s",
                   }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFAF8")}
