@@ -20,6 +20,8 @@ import {
 import { useBudgetCategories } from "@/hooks/use-expenses";
 import { useAddBudgetCategory } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
+import { useSourceBudgetPlans } from "@/hooks/use-source-budget-plans";
+import { useGrades, useGradeSectionAmounts, computeTarget } from "@/hooks/use-horim";
 
 export const Route = createFileRoute("/_authenticated/income/")({
   component: IncomePage,
@@ -621,6 +623,19 @@ export default function IncomePage() {
   const grandTotal = Object.values(sourceTotals).reduce((a, b) => a + b, 0);
   const animGrand = useCountUp(grandTotal);
 
+  // Planned vs. actual — global plans from source_budget_plans;
+  // horim's plan is the derived collection target (same computation as the horim screen)
+  const { data: sourcePlans } = useSourceBudgetPlans();
+  const { data: horimGrades } = useGrades();
+  const { data: horimGSA } = useGradeSectionAmounts();
+  const horimTarget = (horimGSA ?? []).reduce((sum, gsa) => {
+    const grade = (horimGrades ?? []).find((g) => g.id === gsa.grade_id);
+    return grade ? sum + computeTarget(grade, gsa) : sum;
+  }, 0);
+  const plannedFor = (slug: string): number =>
+    slug === "horim" ? horimTarget : (sourcePlans?.[slug] ?? 0);
+  const anyPlanned = sources.some((s) => plannedFor(s.slug) > 0);
+
   return (
     <>
       {showModal && <AddIncomeModal defaultSource={defaultSource} onClose={() => setShowModal(false)} />}
@@ -672,11 +687,39 @@ export default function IncomePage() {
                 <div className="num" style={{ fontSize: "38px", fontWeight: "200", letterSpacing: "-1.5px", color: "#fff", lineHeight: 1 }}>{fmt(animGrand)}</div>
               </div>
             </div>
-            {grandTotal > 0 && (
-              <div style={{ marginTop: "18px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                {sources.filter(s => (sourceTotals[s.slug] ?? 0) > 0).map(s => {
+            {(grandTotal > 0 || anyPlanned) && (
+              <div style={{ marginTop: "18px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                {sources.filter(s => (sourceTotals[s.slug] ?? 0) > 0 || plannedFor(s.slug) > 0).map(s => {
                   const amt = sourceTotals[s.slug] ?? 0;
-                  const pct = Math.round((amt / grandTotal) * 100);
+                  const planned = plannedFor(s.slug);
+                  if (planned > 0) {
+                    // Planned vs. actual — progress toward the plan
+                    const pct = Math.round((amt / planned) * 100);
+                    return (
+                      <div key={s.slug}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.7)" }} />
+                            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.65)" }}>
+                              {s.label}
+                              {s.slug === "horim" && <span style={{ color: "rgba(255,255,255,0.4)" }}> · יעד גבייה</span>}
+                            </span>
+                          </div>
+                          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                            <span className="num" style={{ fontSize: "12px", color: pct >= 100 ? "#8FDCA8" : "rgba(255,255,255,0.55)" }}>{pct}%</span>
+                            <span className="num" style={{ fontSize: "13px", color: "#fff", fontWeight: "300" }}>
+                              {fmt(amt)} <span style={{ color: "rgba(255,255,255,0.45)", fontSize: "11.5px" }}>מתוך {fmt(planned)} מתוכנן</span>
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ height: "4px", background: "rgba(255,255,255,0.15)", borderRadius: "99px" }}>
+                          <div style={{ width: `${Math.min(pct, 100)}%`, height: "100%", background: pct >= 100 ? "#8FDCA8" : "rgba(255,255,255,0.6)", borderRadius: "99px", transition: "width 0.6s ease" }} />
+                        </div>
+                      </div>
+                    );
+                  }
+                  // No plan for this source — original share-of-total display
+                  const sharePct = grandTotal > 0 ? Math.round((amt / grandTotal) * 100) : 0;
                   return (
                     <div key={s.slug}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
@@ -685,12 +728,12 @@ export default function IncomePage() {
                           <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.65)" }}>{s.label}</span>
                         </div>
                         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                          <span className="num" style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>{pct}%</span>
+                          <span className="num" style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>{sharePct}%</span>
                           <span className="num" style={{ fontSize: "13px", color: "#fff", fontWeight: "300" }}>{fmt(amt)}</span>
                         </div>
                       </div>
                       <div style={{ height: "3px", background: "rgba(255,255,255,0.15)", borderRadius: "99px" }}>
-                        <div style={{ width: `${pct}%`, height: "100%", background: "rgba(255,255,255,0.6)", borderRadius: "99px", transition: "width 0.6s ease" }} />
+                        <div style={{ width: `${sharePct}%`, height: "100%", background: "rgba(255,255,255,0.6)", borderRadius: "99px", transition: "width 0.6s ease" }} />
                       </div>
                     </div>
                   );
