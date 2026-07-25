@@ -44,7 +44,7 @@ export interface GradeSectionAmount {
 export interface ParentCollection {
   id: string;
   grade_id: string;
-  parent_section_id: string;
+  parent_section_id: string | null; // null = "לא משויך" (unassigned to a section)
   collection_date: string;
   amount: number;
   notes: string | null;
@@ -320,7 +320,7 @@ export function useAddParentCollection() {
       notes,
     }: {
       gradeId: string;
-      sectionId: string;
+      sectionId: string | null; // null = לא משויך לסעיף
       amount: number;
       collectionDate: string;
       notes?: string;
@@ -355,15 +355,25 @@ export function useUpdateParentCollection() {
       amount,
       collectionDate,
       notes,
+      sectionId,
     }: {
       id: string;
       amount: number;
       collectionDate: string;
       notes?: string;
+      /** undefined = leave unchanged; null = לא משויך; string = assign to section */
+      sectionId?: string | null;
     }) => {
+      const update: {
+        amount: number;
+        collection_date: string;
+        notes: string | null;
+        parent_section_id?: string | null;
+      } = { amount, collection_date: collectionDate, notes: notes || null };
+      if (sectionId !== undefined) update.parent_section_id = sectionId;
       const { error } = await supabase
         .from("parent_collections")
-        .update({ amount, collection_date: collectionDate, notes: notes || null })
+        .update(update)
         .eq("id", id);
       if (error) throw error;
     },

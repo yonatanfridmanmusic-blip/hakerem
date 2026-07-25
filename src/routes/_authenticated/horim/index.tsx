@@ -244,33 +244,101 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
 // ─── Add Collection Modal ─────────────────────────────────────────────────────
 
 function AddCollectionModal({
-  grades, sections, preGradeId,
+  grades, sections, gsaMap, preGradeId,
   onClose,
 }: {
-  grades: Grade[]; sections: ParentSection[]; preGradeId?: string;
+  grades: Grade[]; sections: ParentSection[];
+  gsaMap: Map<string, { id?: string; amount_per_student: number; existing_id?: string }>;
+  preGradeId?: string;
   onClose: () => void;
 }) {
   const isMobile = useIsMobile();
+  const [mode, setMode] = useState<"payers" | "manual">("payers");
   const [gradeIds, setGradeIds] = useState<string[]>(
     preGradeId ? [preGradeId] : grades[0]?.id ? [grades[0].id] : []
   );
+  // Payers mode — per-grade payer counts and (optional) amount overrides
+  const [payers, setPayers] = useState<Record<string, string>>({});
+  const [amountOverride, setAmountOverride] = useState<Record<string, string>>({});
+  // Manual mode (the original flow)
   const [sectionId, setSectionId] = useState(sections[0]?.id ?? "");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(today());
   const [notes, setNotes] = useState("");
   const addCollection = useAddParentCollection();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Full price per student for a grade = sum of all its section amounts (100%)
+  const perStudentFull = (gradeId: string): number =>
+    sections.reduce((sum, s) => sum + (gsaMap.get(`${gradeId}:${s.id}`)?.amount_per_student ?? 0), 0);
+
+  const computedFor = (gradeId: string): number =>
+    (Number(payers[gradeId]) || 0) * perStudentFull(gradeId);
+
+  const effectiveFor = (gradeId: string): number => {
+    const o = amountOverride[gradeId];
+    if (o !== undefined && o !== "" && !isNaN(Number(o))) return Number(o);
+    return computedFor(gradeId);
+  };
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  const submitPayers = async () => {
+    const active = gradeIds.filter((gId) => effectiveFor(gId) > 0);
+    if (active.length === 0) { toast.error("יש להזין מספר משלמים או סכום לשכבה אחת לפחות"); return; }
+    for (const gId of active) {
+      const T = effectiveFor(gId);
+      const nPayers = Number(payers[gId]) || 0;
+      const parts = sections
+        .map((s) => ({ sectionId: s.id, auto: nPayers * (gsaMap.get(`${gId}:${s.id}`)?.amount_per_student ?? 0) }))
+        .filter((p) => p.auto > 0);
+      const A = parts.reduce((sum, p) => sum + p.auto, 0);
+      const noteText = nPayers > 0 ? [`לפי ${nPayers} משלמים`, notes].filter(Boolean).join(" · ") : notes;
+
+      if (A === 0) {
+        // No per-student amounts defined — the whole amount is unassigned
+        await addCollection.mutateAsync({ gradeId: gId, sectionId: null, amount: round2(T), collectionDate: date, notes: noteText });
+      } else if (T >= A) {
+        // Full section amounts; any surplus goes to "לא משויך"
+        for (const p of parts) {
+          await addCollection.mutateAsync({ gradeId: gId, sectionId: p.sectionId, amount: round2(p.auto), collectionDate: date, notes: noteText });
+        }
+        const surplus = round2(T - A);
+        if (surplus > 0) {
+          await addCollection.mutateAsync({ gradeId: gId, sectionId: null, amount: surplus, collectionDate: date, notes: noteText });
+        }
+      } else {
+        // Edited down — scale sections proportionally so the total matches exactly
+        let written = 0;
+        for (let i = 0; i < parts.length; i++) {
+          const isLast = i === parts.length - 1;
+          const share = isLast ? round2(T - written) : round2(parts[i].auto * (T / A));
+          written = round2(written + share);
+          if (share > 0) {
+            await addCollection.mutateAsync({ gradeId: gId, sectionId: parts[i].sectionId, amount: share, collectionDate: date, notes: noteText });
+          }
+        }
+      }
+    }
+    toast.success(active.length > 1 ? `הגבייה נרשמה עבור ${active.length} שכבות` : "הגבייה נרשמה");
+    onClose();
+  };
+
+  const submitManual = async () => {
     const n = Number(amount);
     if (!n || n <= 0) { toast.error("יש להזין סכום תקין"); return; }
     if (gradeIds.length === 0 || !sectionId) { toast.error("יש לבחור שכבה אחת לפחות וסעיף"); return; }
+    for (const gId of gradeIds) {
+      await addCollection.mutateAsync({ gradeId: gId, sectionId, amount: n, collectionDate: date, notes });
+    }
+    toast.success(gradeIds.length > 1 ? `הגבייה נרשמה עבור ${gradeIds.length} שכבות` : "הגבייה נרשמה");
+    onClose();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      for (const gId of gradeIds) {
-        await addCollection.mutateAsync({ gradeId: gId, sectionId, amount: n, collectionDate: date, notes });
-      }
-      toast.success(gradeIds.length > 1 ? `הגבייה נרשמה עבור ${gradeIds.length} שכבות` : "הגבייה נרשמה");
-      onClose();
+      if (mode === "payers") await submitPayers();
+      else await submitManual();
     } catch { toast.error("שגיאה ברישום הגבייה"); }
   };
 
@@ -299,6 +367,24 @@ function AddCollectionModal({
         </div>
 
         <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
+          {/* Mode toggle */}
+          <div style={{ display: "flex", gap: "4px", background: "#F3EEE8", borderRadius: "9px", padding: "3px" }}>
+            {([["payers", "לפי מספר משלמים"], ["manual", "סכום ידני"]] as const).map(([m, label]) => (
+              <button key={m} type="button" onClick={() => setMode(m)}
+                style={{
+                  flex: 1, padding: "7px 0", borderRadius: "7px", border: "none",
+                  background: mode === m ? "#fff" : "transparent",
+                  color: mode === m ? "#6B2356" : "#888079",
+                  fontSize: "13px", fontWeight: mode === m ? "600" : "400",
+                  cursor: "pointer", fontFamily: "var(--font-sans)",
+                  boxShadow: mode === m ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
+                  transition: "all 0.12s",
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+
           {/* Multi-grade selection */}
           <div>
             <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>
@@ -330,24 +416,89 @@ function AddCollectionModal({
             </div>
           </div>
 
-          {/* Section select */}
-          <div>
-            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סעיף</label>
-            <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={inputStyle}>
-              {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
+          {mode === "payers" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {gradeIds.length === 0 && (
+                <div style={{ fontSize: "13px", color: "#7A7470", padding: "4px 0" }}>בחרו שכבה אחת לפחות</div>
+              )}
+              {gradeIds.map((gId) => {
+                const g = grades.find((x) => x.id === gId);
+                if (!g) return null;
+                const full = perStudentFull(gId);
+                const computed = computedFor(gId);
+                const overridden = amountOverride[gId] !== undefined && amountOverride[gId] !== "";
+                return (
+                  <div key={gId} style={{ background: "#FAF7F9", border: "1px solid #EAD9E4", borderRadius: "10px", padding: "10px 12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: isMobile ? "wrap" : "nowrap" }}>
+                      <div style={{ minWidth: "72px" }}>
+                        <div style={{ fontSize: "13px", fontWeight: "600", color: "#1A1A1A" }}>{g.name}</div>
+                        <div style={{ fontSize: "10.5px", color: "#AAA099" }}>₪{full.toLocaleString("he-IL")}/תלמיד</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <label style={{ fontSize: "11.5px", color: "#6B6560", whiteSpace: "nowrap" }}>כמה שילמו?</label>
+                        <input
+                          type="number" min="0"
+                          value={payers[gId] ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setPayers((prev) => ({ ...prev, [gId]: v }));
+                            setAmountOverride((prev) => { const n = { ...prev }; delete n[gId]; return n; });
+                          }}
+                          onFocus={(e) => e.target.select()}
+                          placeholder="0"
+                          style={{ width: "58px", padding: "6px 8px", border: "1px solid #D4B8CC", borderRadius: "7px", fontSize: "13px", fontFamily: "var(--font-sans)", direction: "ltr", textAlign: "right", outline: "none", background: "#fff" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                        <span style={{ fontSize: "12px", color: "#8B2F6E" }}>₪</span>
+                        <input
+                          type="number" min="0" step="0.01"
+                          value={amountOverride[gId] ?? (computed > 0 ? String(round2(computed)) : "")}
+                          onChange={(e) => setAmountOverride((prev) => ({ ...prev, [gId]: e.target.value }))}
+                          onFocus={(e) => e.target.select()}
+                          placeholder="0"
+                          style={{ width: "96px", padding: "6px 9px", border: `1.5px solid ${overridden ? "#B8860B" : "#D4B8CC"}`, borderRadius: "7px", fontSize: "13.5px", fontWeight: "600", fontFamily: "var(--font-sans)", direction: "ltr", textAlign: "right", outline: "none", background: "#fff", color: "#6B2356" }}
+                        />
+                      </div>
+                    </div>
+                    {(Number(payers[gId]) || 0) > 0 && !overridden && (
+                      <div style={{ fontSize: "11px", color: "#8B857F", marginTop: "6px" }}>
+                        {payers[gId]} × ₪{full.toLocaleString("he-IL")} — מתחלק אוטומטית בין הסעיפים · ניתן לערוך את הסכום
+                      </div>
+                    )}
+                    {overridden && (
+                      <div style={{ fontSize: "11px", color: "#92400E", marginTop: "6px" }}>
+                        {effectiveFor(gId) > computed
+                          ? `העודף מעל המחושב (₪${round2(effectiveFor(gId) - computed).toLocaleString("he-IL")}) יירשם כ"לא משויך" — ניתן לשייך לסעיף אחר כך`
+                          : `הסכום יתחלק בין הסעיפים באופן יחסי`}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-          {/* Date + Amount */}
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px" }}>
-            <div>
-              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
-              <DateInput value={date} onChange={setDate} required style={inputStyle} />
-            </div>
-            <div>
-              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סכום (₪)</label>
-              <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" min="0" step="0.01" required style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
-            </div>
+          {mode === "manual" && (
+            <>
+              {/* Section select */}
+              <div>
+                <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סעיף</label>
+                <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={inputStyle}>
+                  {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סכום (₪)</label>
+                <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" min="0" step="0.01" style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
+              </div>
+            </>
+          )}
+
+          {/* Date */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
+            <DateInput value={date} onChange={setDate} required style={inputStyle} />
           </div>
 
           {/* Notes */}
@@ -381,6 +532,7 @@ function EditCollectionModal({
   const [amount, setAmount] = useState(String(collection.amount));
   const [date, setDate] = useState(collection.collection_date);
   const [notes, setNotes] = useState(collection.notes ?? "");
+  const [editSectionId, setEditSectionId] = useState<string>(collection.parent_section_id ?? "");
   const updateCollection = useUpdateParentCollection();
 
   const sec = sections.find((s) => s.id === collection.parent_section_id);
@@ -397,7 +549,10 @@ function EditCollectionModal({
     const n = Number(amount);
     if (!n || n <= 0) { toast.error("יש להזין סכום תקין"); return; }
     try {
-      await updateCollection.mutateAsync({ id: collection.id, amount: n, collectionDate: date, notes });
+      await updateCollection.mutateAsync({
+        id: collection.id, amount: n, collectionDate: date, notes,
+        sectionId: editSectionId === "" ? null : editSectionId,
+      });
       toast.success("הגבייה עודכנה");
       onClose();
     } catch { toast.error("שגיאה בעדכון"); }
@@ -417,6 +572,14 @@ function EditCollectionModal({
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#AAA099", display: "flex" }}><X size={18} /></button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
+          {/* Section — incl. "לא משויך", enables assigning unassigned money */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סעיף</label>
+            <select value={editSectionId} onChange={(e) => setEditSectionId(e.target.value)} style={inputStyle}>
+              <option value="">לא משויך</option>
+              {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
             <div>
               <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
@@ -842,6 +1005,9 @@ function GradeRow({
     totalTarget += target;
     totalCollected += collectionsMap.get(key) ?? 0;
   });
+  // Unassigned collections ("לא משויך") still count toward the grade's total
+  const unassignedCollected = collectionsMap.get(`${grade.id}:null`) ?? 0;
+  totalCollected += unassignedCollected;
 
   const pct = totalTarget > 0 ? Math.round((totalCollected / totalTarget) * 100) : 0;
   const balance = totalTarget - totalCollected;
@@ -970,6 +1136,15 @@ function GradeRow({
                           </tr>
                         );
                       })}
+                      {unassignedCollected > 0 && (
+                        <tr style={{ borderTop: "1px solid #EAE5DE", background: "#FDFAF3" }}>
+                          <td style={{ padding: "8px 12px", fontWeight: "500", color: "#92400E" }}>לא משויך לסעיף</td>
+                          <td style={{ padding: "8px 12px", textAlign: "left", color: "#C0BAB4" }}>—</td>
+                          <td style={{ padding: "8px 12px", textAlign: "left", color: "#92400E", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{fmt(unassignedCollected)}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "left", color: "#C0BAB4" }}>—</td>
+                          <td style={{ padding: "8px 12px", textAlign: "left", color: "#C0BAB4" }}>—</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1009,8 +1184,8 @@ function GradeRow({
                       <span style={{ fontSize: "12px", color: "#AAA099", whiteSpace: "nowrap" }}>
                         {new Date(c.collection_date).toLocaleDateString("he-IL")}
                       </span>
-                      <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "99px", background: "#F4EBF2", color: "#6B2356", whiteSpace: "nowrap" }}>
-                        {sec?.name ?? "—"}
+                      <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "99px", background: c.parent_section_id === null ? "#FDF3DC" : "#F4EBF2", color: c.parent_section_id === null ? "#92400E" : "#6B2356", whiteSpace: "nowrap" }}>
+                        {c.parent_section_id === null ? "לא משויך" : (sec?.name ?? "—")}
                       </span>
                       {c.notes && <span style={{ fontSize: "12px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.notes}</span>}
                     </div>
@@ -1099,6 +1274,8 @@ export default function HorimPage() {
       grandTarget += target;
       grandCollected += collectionsMap.get(key) ?? 0;
     });
+    // Unassigned collections ("לא משויך") count toward the grand total
+    grandCollected += collectionsMap.get(`${g.id}:null`) ?? 0;
   });
   const grandPct = grandTarget > 0 ? Math.round((grandCollected / grandTarget) * 100) : 0;
 
@@ -1148,6 +1325,7 @@ export default function HorimPage() {
         <AddCollectionModal
           grades={grades}
           sections={sections}
+          gsaMap={gsaMap}
           preGradeId={preGradeId}
           onClose={() => setShowModal(false)}
         />
@@ -1480,6 +1658,22 @@ export default function HorimPage() {
                   );
                 })}
               </div>
+            </div>
+          );
+        })()}
+
+        {/* Unassigned collections summary — money collected but not tied to a section */}
+        {!isLoading && (() => {
+          const totalUnassigned = collections
+            .filter((c) => c.parent_section_id === null)
+            .reduce((sum, c) => sum + c.amount, 0);
+          if (totalUnassigned <= 0) return null;
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#FDF8EC", border: "1px solid #F0D9A8", borderRadius: "10px", padding: "10px 16px" }}>
+              <span style={{ fontSize: "13px" }}>💡</span>
+              <span style={{ fontSize: "12.5px", color: "#92400E" }}>
+                נגבו ₪{totalUnassigned.toLocaleString("he-IL")} שאינם משויכים לסעיף — הסכום נספר בסך הגבייה. ניתן לשייך דרך עריכת הגבייה בהיסטוריית השכבה.
+              </span>
             </div>
           );
         })()}

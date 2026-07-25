@@ -21,7 +21,7 @@ import { useBudgetCategories } from "@/hooks/use-expenses";
 import { useAddBudgetCategory } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { useSourceBudgetPlans } from "@/hooks/use-source-budget-plans";
-import { useGrades, useGradeSectionAmounts, computeTarget } from "@/hooks/use-horim";
+import { useGrades, useGradeSectionAmounts, computeTarget, useParentCollections } from "@/hooks/use-horim";
 
 export const Route = createFileRoute("/_authenticated/income/")({
   component: IncomePage,
@@ -620,6 +620,13 @@ export default function IncomePage() {
   const total = visibleIncome.reduce((sum, e) => sum + e.amount, 0);
   const sourceTotals: Record<string, number> = {};
   (allIncome ?? []).forEach((i) => { sourceTotals[i.source] = (sourceTotals[i.source] ?? 0) + i.amount; });
+
+  // Parent collections flow into horim's actuals — single source of truth
+  // (entered and managed in the horim screen, displayed here)
+  const { data: parentColls } = useParentCollections();
+  const parentCollTotal = (parentColls ?? []).reduce((sum, c) => sum + c.amount, 0);
+  if (parentCollTotal > 0) sourceTotals["horim"] = (sourceTotals["horim"] ?? 0) + parentCollTotal;
+
   const grandTotal = Object.values(sourceTotals).reduce((a, b) => a + b, 0);
   const animGrand = useCountUp(grandTotal);
 

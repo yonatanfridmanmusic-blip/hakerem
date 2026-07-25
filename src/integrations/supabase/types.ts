@@ -921,7 +921,7 @@ export type Database = {
           grade_id: string
           id: string
           notes: string | null
-          parent_section_id: string
+          parent_section_id: string | null
           school_year_id: string
           updated_at: string
         }
@@ -933,7 +933,7 @@ export type Database = {
           grade_id: string
           id?: string
           notes?: string | null
-          parent_section_id: string
+          parent_section_id?: string | null
           school_year_id: string
           updated_at?: string
         }
@@ -945,7 +945,7 @@ export type Database = {
           grade_id?: string
           id?: string
           notes?: string | null
-          parent_section_id?: string
+          parent_section_id?: string | null
           school_year_id?: string
           updated_at?: string
         }
