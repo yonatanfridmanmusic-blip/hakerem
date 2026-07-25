@@ -1159,6 +1159,44 @@ export type Database = {
           },
         ]
       }
+      source_budget_plans: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          planned_income: number
+          school_year_id: string
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          planned_income?: number
+          school_year_id: string
+          source: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          planned_income?: number
+          school_year_id?: string
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_budget_plans_school_year_id_fkey"
+            columns: ["school_year_id"]
+            isOneToOne: false
+            referencedRelation: "school_years"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
