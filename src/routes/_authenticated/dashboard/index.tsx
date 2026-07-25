@@ -1570,6 +1570,16 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                 {(() => {
                   const activeSrc = orgSources.find(s => s.slug === effectiveCatSrc) ?? orgSources[0];
                   const c = activeSrc ? wizardStyle(activeSrc) : { label: effectiveCatSrc, color: "#6B6560", light: "#F5F5F2", grad: "#aaa" };
+                  // Live allocation vs. plan — uses the latest typed amounts (same logic as the commit)
+                  const planned = Number(plannedIncome[effectiveCatSrc] ?? "");
+                  const hasPlan = plannedIncome[effectiveCatSrc] !== undefined && plannedIncome[effectiveCatSrc] !== "" && !isNaN(planned) && planned > 0;
+                  const allocated = (addedCats[effectiveCatSrc] ?? []).reduce((sum, cat) => {
+                    const raw = localAmounts[cat.id];
+                    const n = raw !== undefined && !isNaN(Number(raw)) ? Number(raw) : cat.amount;
+                    return sum + (n > 0 ? n : 0);
+                  }, 0);
+                  const over = hasPlan && allocated > planned;
+                  const pct = hasPlan ? Math.min(Math.round((allocated / planned) * 100), 100) : 0;
                   return (
                     <div style={{ background: c.light, border: `1px solid ${c.color}30`, borderRadius: "12px", padding: "14px 16px", marginBottom: "18px" }}>
                       <div style={{ fontSize: "13.5px", fontWeight: "500", color: c.color, marginBottom: "9px" }}>
@@ -1586,9 +1596,35 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                           style={{ width: "150px", padding: "8px 12px", border: `1.5px solid ${c.color}50`, borderRadius: "9px", fontSize: "15px", fontFamily: "Rubik, sans-serif", outline: "none", direction: "ltr", textAlign: "right", background: "#fff" }}
                         />
                       </div>
-                      <div style={{ fontSize: "11.5px", color: "#8B857F", marginTop: "8px" }}>
-                        הסכום הכולל שצפוי להתקבל מהמקור השנה · נשמר בסיום ההגדרה
-                      </div>
+                      {!hasPlan && (
+                        <div style={{ fontSize: "11.5px", color: "#8B857F", marginTop: "8px" }}>
+                          הסכום הכולל שצפוי להתקבל מהמקור השנה · נשמר בסיום ההגדרה
+                        </div>
+                      )}
+                      {hasPlan && (
+                        <div style={{ marginTop: "12px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
+                            <span style={{ fontSize: "12px", color: over ? "#92400E" : "#6B6560" }}>
+                              חולקו לקטגוריות: ₪{allocated.toLocaleString("he-IL")} מתוך ₪{planned.toLocaleString("he-IL")}
+                            </span>
+                            {!over && (
+                              <span className="num" style={{ fontSize: "11.5px", color: "#8B857F" }}>{pct}%</span>
+                            )}
+                          </div>
+                          <div style={{ height: "5px", background: "#FFFFFF", borderRadius: "99px", border: `1px solid ${over ? "#F0D9A8" : c.color + "25"}` }}>
+                            <div style={{ width: `${pct}%`, height: "100%", background: over ? "#D9A44A" : c.color, borderRadius: "99px", transition: "width 0.4s ease, background 0.3s ease" }} />
+                          </div>
+                          {over && (
+                            <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginTop: "10px", background: "#FEF7E6", border: "1px solid #F0D9A8", borderRadius: "9px", padding: "9px 12px" }}>
+                              <span style={{ fontSize: "13px", lineHeight: 1.4 }}>💡</span>
+                              <div style={{ fontSize: "12.5px", color: "#92400E", lineHeight: 1.55 }}>
+                                שימו לב: חילקת ₪{allocated.toLocaleString("he-IL")} מתוך ₪{planned.toLocaleString("he-IL")} שצפויים להיכנס — חריגה של ₪{(allocated - planned).toLocaleString("he-IL")}.
+                                {" "}אפשר להמשיך כרגיל, או להתאים את הסכומים.
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -1779,6 +1815,34 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                 </div>
               ))}
             </div>
+
+            {/* ── Overage recap — informative, never blocking ── */}
+            {(() => {
+              const overages = orgSources
+                .filter(src => src.slug !== "horim")
+                .map(src => {
+                  const planned = Number(plannedIncome[src.slug] ?? "");
+                  const hasPlan = plannedIncome[src.slug] !== undefined && plannedIncome[src.slug] !== "" && !isNaN(planned) && planned > 0;
+                  const allocated = (addedCats[src.slug] ?? []).reduce((sum, cat) => {
+                    const raw = localAmounts[cat.id];
+                    const n = raw !== undefined && !isNaN(Number(raw)) ? Number(raw) : cat.amount;
+                    return sum + (n > 0 ? n : 0);
+                  }, 0);
+                  return { label: wizardStyle(src).label, planned, allocated, over: hasPlan && allocated > planned };
+                })
+                .filter(x => x.over);
+              if (overages.length === 0) return null;
+              return (
+                <div style={{ background: "#FEF7E6", border: "1px solid #F0D9A8", borderRadius: "12px", padding: "14px 18px", marginBottom: "28px", textAlign: "right" }}>
+                  <div style={{ fontSize: "12px", fontWeight: "500", color: "#B8860B", marginBottom: "8px", letterSpacing: "0.05em" }}>שווה לשים לב</div>
+                  {overages.map((o, i) => (
+                    <div key={i} style={{ fontSize: "12.5px", color: "#92400E", lineHeight: 1.6, padding: "2px 0" }}>
+                      ב{o.label} חילקת ₪{o.allocated.toLocaleString("he-IL")} מתוך ₪{o.planned.toLocaleString("he-IL")} שצפויים להיכנס — חריגה של ₪{(o.allocated - o.planned).toLocaleString("he-IL")}. ניתן לעדכן בכל עת בהגדרות.
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* ── Optional bulk import CTA ── */}
             {mode === "first" && (
