@@ -544,6 +544,9 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   const [addedCats, setAddedCats] = useState<Record<string, AddedCat[]>>({});
   // localAmounts: tracks what the user is typing per cat id (string to allow empty while editing)
   const [localAmounts, setLocalAmounts] = useState<Record<string, string>>({});
+  // plannedIncome: global planned income per source slug ("כמה צפוי להיכנס מהמקור השנה")
+  // Draft-only until "סיים הגדרה" commits to source_budget_plans. horim is excluded (derived target).
+  const [plannedIncome, setPlannedIncome] = useState<Record<string, string>>({});
   const addCategory = useAddBudgetCategory();
   const deleteCategory = useDeleteBudgetCategory();
   const updatePlannedAmount = useUpdatePlannedAmount();
@@ -775,13 +778,74 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   };
 
   // Save all filled horim cells to DB, then advance to step 3
-  // Unified finish — ALWAYS commits both draft categories AND horim data,
-  // no matter which tab's finish button was clicked. Fixes the bug where
+  // ── Global planned income draft (source_budget_plans) ──────────────────────
+  const plansDraftKey = yearId ? `hakerem_wizard_draft_plans_${yearId}` : null;
+
+  // Load draft; then seed from DB for sources without a draft value
+  // (covers edit mode and resuming after a previous completed run)
+  useEffect(() => {
+    if (!plansDraftKey || !yearId) return;
+    try {
+      const raw = localStorage.getItem(plansDraftKey);
+      if (raw) {
+        const p = JSON.parse(raw) as Record<string, string>;
+        if (p && typeof p === "object") setPlannedIncome(p);
+      }
+    } catch { /* corrupt draft — start fresh */ }
+    supabase
+      .from("source_budget_plans")
+      .select("source, planned_income")
+      .eq("school_year_id", yearId)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        setPlannedIncome(prev => {
+          const next = { ...prev };
+          for (const row of data) {
+            if (next[row.source] === undefined || next[row.source] === "") {
+              const n = Number(row.planned_income);
+              next[row.source] = n > 0 ? String(n) : "";
+            }
+          }
+          return next;
+        });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plansDraftKey]);
+
+  // Persist draft on every change
+  useEffect(() => {
+    if (!plansDraftKey) return;
+    try { localStorage.setItem(plansDraftKey, JSON.stringify(plannedIncome)); } catch { /* quota */ }
+  }, [plannedIncome, plansDraftKey]);
+
+  // Commit planned income to source_budget_plans — upsert on UNIQUE(school_year_id, source)
+  const commitSourcePlans = async (): Promise<boolean> => {
+    if (!yearId) return true;
+    const rows = Object.entries(plannedIncome)
+      .filter(([src, val]) => src !== "horim" && val !== "" && !isNaN(Number(val)) && Number(val) >= 0)
+      .map(([src, val]) => ({ school_year_id: yearId, source: src, planned_income: Number(val) }));
+    if (rows.length > 0) {
+      const { error } = await supabase
+        .from("source_budget_plans")
+        .upsert(rows, { onConflict: "school_year_id,source" });
+      if (error) {
+        toast.error("שגיאה בשמירת התכנון התקציבי — נסו/י שוב");
+        return false;
+      }
+    }
+    if (plansDraftKey) localStorage.removeItem(plansDraftKey);
+    return true;
+  };
+
+  // Unified finish — ALWAYS commits draft categories, planned income AND horim
+  // data, no matter which tab's finish button was clicked. Fixes the bug where
   // horim data was silently dropped when finishing from a non-horim tab.
   const handleFinishWizardStep2 = async () => {
     setEditingCell(null);
     const ok = await commitDraftCats();
     if (!ok) return;
+    const okPlans = await commitSourcePlans();
+    if (!okPlans) return;
     await commitHorimData();
     setStep(3);
   };
@@ -1502,6 +1566,33 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
             ) : (
               /* ── Regular categories UI (non-horim sources) ── */
               <>
+                {/* Global planned income for this source (horim excluded — its target is derived) */}
+                {(() => {
+                  const activeSrc = orgSources.find(s => s.slug === effectiveCatSrc) ?? orgSources[0];
+                  const c = activeSrc ? wizardStyle(activeSrc) : { label: effectiveCatSrc, color: "#6B6560", light: "#F5F5F2", grad: "#aaa" };
+                  return (
+                    <div style={{ background: c.light, border: `1px solid ${c.color}30`, borderRadius: "12px", padding: "14px 16px", marginBottom: "18px" }}>
+                      <div style={{ fontSize: "13.5px", fontWeight: "500", color: c.color, marginBottom: "9px" }}>
+                        כמה צפוי להיכנס מ{c.label} השנה?
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                        <span style={{ fontSize: "14px", color: c.color, fontWeight: "500" }}>₪</span>
+                        <input
+                          type="number" min="0"
+                          value={plannedIncome[effectiveCatSrc] ?? ""}
+                          onChange={e => setPlannedIncome(prev => ({ ...prev, [effectiveCatSrc]: e.target.value }))}
+                          onFocus={e => e.target.select()}
+                          placeholder="0"
+                          style={{ width: "150px", padding: "8px 12px", border: `1.5px solid ${c.color}50`, borderRadius: "9px", fontSize: "15px", fontFamily: "Rubik, sans-serif", outline: "none", direction: "ltr", textAlign: "right", background: "#fff" }}
+                        />
+                      </div>
+                      <div style={{ fontSize: "11.5px", color: "#8B857F", marginTop: "8px" }}>
+                        הסכום הכולל שצפוי להתקבל מהמקור השנה · נשמר בסיום ההגדרה
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Quick suggestions */}
                 {(() => {
                   const activeSrc = orgSources.find(s => s.slug === effectiveCatSrc) ?? orgSources[0];
