@@ -119,22 +119,22 @@ function Bar({ pct, gradient }: { pct: number; gradient: string }) {
 function SourceCard({ s }: { s: SourceSummary }) {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
-  const animCashBalance = useCountUp(s.cashBalance);
+  // Iron rule: the big number is ALWAYS the actual balance (income − used)
+  const animCashBalance = useCountUp(s.actualBalance);
   const animIncome      = useCountUp(s.income);
   const animUsed        = useCountUp(s.used);
-  const animPlanned     = useCountUp(s.planned);
-  const animBudgetPct   = useAnimatedPct(s.pct, 80);
-  const animCashPct     = useAnimatedPct(s.cashPct, 80);
+  const animPlanned     = useCountUp(s.plannedIncome);
+  const budgetPct       = s.plannedIncome > 0 ? Math.round((s.used / s.plannedIncome) * 100) : 0;
+  const animBudgetPct   = useAnimatedPct(budgetPct, 80);
 
-  const cashLabel   = s.isIncomeBased ? (s.source === "horim" ? "יתרה מגבייה" : "יתרה מהכנסות") : "יתרה תקציבית";
+  const cashLabel   = s.source === "horim" ? "יתרה בפועל מגבייה" : "יתרה בפועל";
   const incomeLabel = s.source === "horim" ? "גבייה" : "הכנסות";
 
-  const displayPct = !s.isIncomeBased && s.planned === 0 && s.used > 0 ? 100 : s.isIncomeBased ? s.cashPct : s.pct;
-  void animCashPct;
+  const displayPct = budgetPct;
 
   const hero = SOURCE_HERO[s.source] ?? SOURCE_HERO["_default"];
-  const isOverrun = s.planned > 0 && s.used > s.planned;
-  const overrunAmount = isOverrun ? s.used - s.planned : 0;
+  const isOverrun = s.plannedIncome > 0 && s.used > s.plannedIncome;
+  const overrunAmount = isOverrun ? s.used - s.plannedIncome : 0;
 
   return (
     <div
@@ -201,9 +201,9 @@ function SourceCard({ s }: { s: SourceSummary }) {
         </div>
 
         {/* Budget bar */}
-        {s.planned > 0 ? (
+        {s.plannedIncome > 0 ? (
           <div style={{ marginTop: "18px", minWidth: "220px", maxWidth: "360px" }}>
-            <Bar pct={s.pct} gradient={isOverrun ? "linear-gradient(90deg, #F87171, #DC2626)" : hero.barGradient} />
+            <Bar pct={budgetPct} gradient={isOverrun ? "linear-gradient(90deg, #F87171, #DC2626)" : hero.barGradient} />
             {isOverrun ? (
               <div style={{ marginTop: "6px", fontSize: "12px", color: "#FCA5A5", display: "flex", alignItems: "center", gap: "5px" }}>
                 <span className="num">{fmt(animUsed)}</span>
@@ -236,10 +236,10 @@ function SourceCard({ s }: { s: SourceSummary }) {
           WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
           letterSpacing: "-3px", lineHeight: 1,
         }}>
-          {s.planned > 0 || s.used > 0 ? `${animBudgetPct}%` : "—"}
+          {s.plannedIncome > 0 || s.used > 0 ? `${animBudgetPct}%` : "—"}
         </div>
         <div style={{ fontSize: "11px", color: hero.tertiaryText, marginTop: "4px", textAlign: isMobile ? "right" : "center" }}>
-          {s.planned > 0 ? "מהתקציב נוצל" : displayPct > 0 ? "מהתקציב נוצל" : "טרם הוגדר תקציב"}
+          {s.plannedIncome > 0 ? "מהמתוכנן נוצל" : displayPct > 0 ? "מהמתוכנן נוצל" : "טרם הוגדר תקציב"}
         </div>
       </div>
     </div>
@@ -251,8 +251,9 @@ function SourceCard({ s }: { s: SourceSummary }) {
 function BudgetAlertBanner({ sources }: { sources: SourceSummary[] }) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
-  const overruns = sources.filter(s => s.planned > 0 && s.used > s.planned && !dismissed.has(`over-${s.source}`));
-  const warnings = sources.filter(s => s.planned > 0 && s.pct >= 80 && s.used <= s.planned && !dismissed.has(`warn-${s.source}`));
+  const pctOf = (s: SourceSummary) => s.plannedIncome > 0 ? Math.round((s.used / s.plannedIncome) * 100) : 0;
+  const overruns = sources.filter(s => s.plannedIncome > 0 && s.used > s.plannedIncome && !dismissed.has(`over-${s.source}`));
+  const warnings = sources.filter(s => s.plannedIncome > 0 && pctOf(s) >= 80 && s.used <= s.plannedIncome && !dismissed.has(`warn-${s.source}`));
 
   if (!overruns.length && !warnings.length) return null;
 
@@ -271,7 +272,7 @@ function BudgetAlertBanner({ sources }: { sources: SourceSummary[] }) {
           <div style={{ flex: 1 }}>
             <span style={{ fontSize: "13.5px", fontWeight: "600", color: "#991B1B" }}>{s.label}</span>
             <span style={{ fontSize: "13px", color: "#B91C1C", marginRight: "6px" }}>
-              {" "}— חריגה של {fmt(s.used - s.planned)} מעל התקציב ({s.pct}%)
+              {" "}— חריגה של {fmt(s.used - s.plannedIncome)} מעל המתוכנן ({pctOf(s)}%)
             </span>
           </div>
           <Link to="/budget"
@@ -296,7 +297,7 @@ function BudgetAlertBanner({ sources }: { sources: SourceSummary[] }) {
           <div style={{ flex: 1 }}>
             <span style={{ fontSize: "13.5px", fontWeight: "600", color: "#92400E" }}>{s.label}</span>
             <span style={{ fontSize: "13px", color: "#B45309", marginRight: "6px" }}>
-              {" "}— {s.pct}% מהתקציב נוצל (נותר {fmt(s.planned - s.used)})
+              {" "}— {pctOf(s)}% מהמתוכנן נוצל (נותר {fmt(s.plannedIncome - s.used)})
             </span>
           </div>
           <Link to="/budget"
@@ -2010,15 +2011,16 @@ export default function DashboardPage() {
     }
   }, [isLoading, data, wizardTriggered, orgId, membership?.organization?.setup_completed_at]);
 
-  const totals = data?.totals ?? { planned: 0, used: 0, balance: 0, pct: 0 };
+  const totals = data?.totals ?? { planned: 0, used: 0, balance: 0, pct: 0, plannedIncome: 0, actualBalance: 0 };
   const incomeTotals = data?.incomeTotals ?? { fromIncome: 0, fromParentCollections: 0, grand: 0 };
   const yearName = data?.schoolYear?.name ?? "—";
 
   // Animations
-  const animBalance = useCountUp(incomeTotals.grand - totals.used);
+  const animBalance = useCountUp(totals.actualBalance);
   const animUsed    = useCountUp(totals.used);
-  const animPlanned = useCountUp(totals.planned);
-  const animPct     = useAnimatedPct(totals.pct, 80);
+  const animPlanned = useCountUp(totals.plannedIncome);
+  const heroPct     = totals.plannedIncome > 0 ? Math.round((totals.used / totals.plannedIncome) * 100) : 0;
+  const animPct     = useAnimatedPct(heroPct, 80);
   const animFromIncome     = useCountUp(incomeTotals.fromIncome);
   const animFromParentColl = useCountUp(incomeTotals.fromParentCollections);
 

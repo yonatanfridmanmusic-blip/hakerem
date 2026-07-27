@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getViewAsOrg } from "@/lib/view-as";
+import { computeTarget, type Grade, type GradeSectionAmount } from "@/hooks/use-horim";
 
 export interface SourceSummary {
   source: string;
   label: string;
-  // Budget planning (from budget_categories)
+  // Budget planning (from budget_categories) — legacy fields, still used by reports
   planned: number;
   used: number;
   balance: number;   // planned - used
@@ -15,12 +16,18 @@ export interface SourceSummary {
   cashBalance: number;   // income - used  (for horim) OR planned - used (gefen/iriyah if no income)
   cashPct: number;       // used / income %
   isIncomeBased: boolean; // true if cash figures come from actual collections, false if from budget
+  // ── Planned-vs-actual model (phase 1.4) ──
+  plannedIncome: number; // global planned income: source_budget_plans; horim = derived collection target
+  actualBalance: number; // income - used — ALWAYS actual, never plan-based
 }
 
 export interface DashboardSummary {
   schoolYear: { id: string; name: string } | null;
   sources: SourceSummary[];
-  totals: { planned: number; used: number; balance: number; pct: number };
+  totals: {
+    planned: number; used: number; balance: number; pct: number;
+    plannedIncome: number; actualBalance: number;
+  };
   incomeTotals: { fromIncome: number; fromParentCollections: number; grand: number };
 }
 
@@ -33,7 +40,7 @@ export function useDashboardSummary() {
       const empty: DashboardSummary = {
         schoolYear: null,
         sources: [],
-        totals: { planned: 0, used: 0, balance: 0, pct: 0 },
+        totals: { planned: 0, used: 0, balance: 0, pct: 0, plannedIncome: 0, actualBalance: 0 },
         incomeTotals: { fromIncome: 0, fromParentCollections: 0, grand: 0 },
       };
 
@@ -82,6 +89,33 @@ export function useDashboardSummary() {
               { slug: "iriyah", label: "עירייה" },
               { slug: "horim",  label: "הורים" },
             ];
+
+      // 2b. Global planned income per source (planned-vs-actual model)
+      const { data: planRows } = await supabase
+        .from("source_budget_plans")
+        .select("source, planned_income")
+        .eq("school_year_id", yearId);
+      const plansMap: Record<string, number> = {};
+      (planRows ?? []).forEach((r) => { plansMap[r.source] = Number(r.planned_income); });
+
+      // 2c. horim planned income = derived collection target
+      // (same computeTarget the horim screen uses — basis-aware p85/p100/custom/actual)
+      const { data: gradeRows } = await supabase
+        .from("grades")
+        .select("id, name, student_count")
+        .eq("school_year_id", yearId);
+      const { data: gsaRows } = await supabase
+        .from("grade_section_amounts")
+        .select("id, grade_id, parent_section_id, amount_per_student, working_budget_basis, custom_working_budget, actual_collected")
+        .eq("school_year_id", yearId);
+      const horimPlannedIncome = (gsaRows ?? []).reduce((sum, gsa) => {
+        const grade = (gradeRows ?? []).find((g) => g.id === gsa.grade_id);
+        if (!grade) return sum;
+        return sum + computeTarget(
+          grade as unknown as Grade,
+          { ...gsa, amount_per_student: Number(gsa.amount_per_student) } as unknown as GradeSectionAmount,
+        );
+      }, 0);
 
       // 3. Budget categories (planned amounts)
       const { data: categories, error: catError } = await supabase
@@ -157,10 +191,15 @@ export function useDashboardSummary() {
         const cashBalance = isIncomeBased ? income - used : balance;
         const cashPct = income > 0 ? Math.round((used / income) * 100) : pct;
 
+        // Planned-vs-actual model: global planned income + iron-rule balance
+        const plannedIncome = source === "horim" ? horimPlannedIncome : (plansMap[source] ?? 0);
+        const actualBalance = income - used; // ALWAYS actual — never falls back to plan
+
         return {
           source, label,
           planned, used, balance, pct,
           income, cashBalance, cashPct, isIncomeBased,
+          plannedIncome, actualBalance,
         };
       });
 
@@ -169,11 +208,16 @@ export function useDashboardSummary() {
       const totalUsed    = sources.reduce((s, x) => s + x.used, 0);
       const totalBalance = totalPlanned - totalUsed;
       const totalPct     = totalPlanned > 0 ? Math.round((totalUsed / totalPlanned) * 100) : 0;
+      const totalPlannedIncome = sources.reduce((s, x) => s + x.plannedIncome, 0);
+      const totalActualBalance = sources.reduce((s, x) => s + x.actualBalance, 0);
 
       return {
         schoolYear: yearData,
         sources,
-        totals: { planned: totalPlanned, used: totalUsed, balance: totalBalance, pct: totalPct },
+        totals: {
+          planned: totalPlanned, used: totalUsed, balance: totalBalance, pct: totalPct,
+          plannedIncome: totalPlannedIncome, actualBalance: totalActualBalance,
+        },
         incomeTotals: {
           fromIncome,
           fromParentCollections: parentCollTotal,
