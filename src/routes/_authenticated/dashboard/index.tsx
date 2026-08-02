@@ -3,6 +3,7 @@ import { AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowDownLeft, Users } 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDashboardSummary, type SourceSummary } from "@/hooks/use-dashboard-summary";
+import { useSourceBreakdown } from "@/hooks/use-source-breakdown";
 import { useOrganization, usePendingMembersCount } from "@/hooks/use-organization";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { supabase } from "@/integrations/supabase/client";
@@ -118,7 +119,11 @@ function Bar({ pct, gradient }: { pct: number; gradient: string }) {
 
 function SourceCard({ s }: { s: SourceSummary }) {
   const isMobile = useIsMobile();
-  const navigate = useNavigate();
+  // Accordion: click expands the per-section breakdown (lazy-fetched)
+  const [expanded, setExpanded] = useState(false);
+  const { data: breakdown, isLoading: breakdownLoading } = useSourceBreakdown(s.source, expanded);
+  const detailTo = s.source === "horim" ? "/horim" : "/budget";
+  const detailLabel = s.source === "horim" ? "למסך ההורים ←" : "למצב תקציבי ←";
   // Iron rule: the big number is ALWAYS the actual balance (income − used)
   const animCashBalance = useCountUp(s.actualBalance);
   const animIncome      = useCountUp(s.income);
@@ -151,7 +156,7 @@ function SourceCard({ s }: { s: SourceSummary }) {
 
   return (
     <div
-      onClick={() => void navigate({ to: "/budget" })}
+      onClick={() => setExpanded((e) => !e)}
       style={{
         background: hero.bg,
         borderRadius: "20px", padding: isMobile ? "24px 20px" : "32px 36px",
@@ -229,7 +234,7 @@ function SourceCard({ s }: { s: SourceSummary }) {
         <div style={{ marginTop: "12px", display: "flex", flexWrap: "wrap", gap: "7px" }}>
           {expectedRemaining > 0 && (
             <span style={chipStyle}>
-              עוד אמור להיכנס <span className="num" style={{ fontWeight: "600", color: "#fff" }}>{fmt(expectedRemaining)}</span>
+              אמור להיכנס עוד <span className="num" style={{ fontWeight: "600", color: "#fff" }}>{fmt(expectedRemaining)}</span>
             </span>
           )}
           {incomeOverage > 0 && (
@@ -297,7 +302,98 @@ function SourceCard({ s }: { s: SourceSummary }) {
         <div style={{ fontSize: "11px", color: hero.tertiaryText, marginTop: "4px", textAlign: isMobile ? "right" : "center" }}>
           {s.plannedIncome > 0 ? "מהמתוכנן נוצל" : displayPct > 0 ? "מהמתוכנן נוצל" : "טרם הוגדר תקציב"}
         </div>
+        <div style={{ fontSize: "11px", color: hero.tertiaryText, marginTop: "10px", textAlign: isMobile ? "right" : "center" }}>
+          פירוט לפי סעיף {expanded ? "▴" : "▾"}
+        </div>
       </div>
+
+      {/* ── Accordion: per-section breakdown ── */}
+      {expanded && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            flexBasis: "100%", position: "relative", zIndex: 1,
+            background: "rgba(0,0,0,0.18)", borderRadius: "14px",
+            padding: "14px 16px", cursor: "default",
+          }}
+        >
+          {breakdownLoading ? (
+            <div style={{ fontSize: "13px", color: hero.secondaryText, padding: "6px 0" }}>טוען פירוט...</div>
+          ) : !breakdown || breakdown.length === 0 ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+              <span style={{ fontSize: "13px", color: hero.secondaryText }}>
+                {s.source === "horim" ? "אין סעיפי גבייה עדיין" : "אין קטגוריות עדיין"}
+              </span>
+              <Link to={detailTo} style={{ fontSize: "12px", color: "#fff", textDecoration: "none", fontWeight: "600", whiteSpace: "nowrap" }}>
+                {detailLabel}
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr 76px 76px" : "1fr 100px 100px 100px 100px",
+                gap: "8px", padding: "0 4px 8px",
+                borderBottom: "1px solid rgba(255,255,255,0.14)",
+                fontSize: "10.5px", fontWeight: "600", color: hero.tertiaryText,
+                letterSpacing: "0.04em",
+              }}>
+                <span>סעיף</span>
+                {!isMobile && <span style={{ textAlign: "left" }}>מתוכנן</span>}
+                <span style={{ textAlign: "left" }}>נכנס</span>
+                {!isMobile && <span style={{ textAlign: "left" }}>יצא</span>}
+                <span style={{ textAlign: "left" }}>יתרה</span>
+              </div>
+              {breakdown.map((row) => (
+                <div key={row.id} style={{
+                  display: "grid",
+                  gridTemplateColumns: isMobile ? "1fr 76px 76px" : "1fr 100px 100px 100px 100px",
+                  gap: "8px", padding: "9px 4px",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  alignItems: "center",
+                }}>
+                  <span style={{
+                    fontSize: "13px", fontWeight: "500",
+                    color: row.unassigned ? "#FCD34D" : "#fff",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {row.name}
+                  </span>
+                  {!isMobile && (
+                    <span className="num" style={{ fontSize: "12.5px", color: hero.secondaryText, textAlign: "left" }}>
+                      {row.planned > 0 ? fmt(row.planned) : "—"}
+                    </span>
+                  )}
+                  <span className="num" style={{ fontSize: "12.5px", color: row.income > 0 ? "#86EFAC" : hero.tertiaryText, textAlign: "left" }}>
+                    {row.income > 0 ? fmt(row.income) : "—"}
+                  </span>
+                  {!isMobile && (
+                    <span className="num" style={{ fontSize: "12.5px", color: row.used > 0 ? "#FCA5A5" : hero.tertiaryText, textAlign: "left" }}>
+                      {row.used > 0 ? fmt(row.used) : "—"}
+                    </span>
+                  )}
+                  <span className="num" style={{
+                    fontSize: "12.5px", fontWeight: "600", textAlign: "left",
+                    color: row.balance > 0 ? "#86EFAC" : row.balance < 0 ? "#FCA5A5" : hero.tertiaryText,
+                  }}>
+                    {fmt(row.balance)}
+                  </span>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "flex-start", marginTop: "10px" }}>
+                <Link to={detailTo}
+                  style={{
+                    fontSize: "12px", color: "#fff", textDecoration: "none", fontWeight: "600",
+                    padding: "6px 14px", borderRadius: "8px",
+                    background: "rgba(255,255,255,0.14)", whiteSpace: "nowrap",
+                  }}>
+                  {detailLabel}
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -2244,7 +2340,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div style={{ marginTop: "5px", fontSize: "12px", color: "rgba(122,170,142,0.6)" }}>
-                עוד צפוי להיכנס: <span className="num" style={{ color: "#7AAA8E" }}>{fmt(totals.plannedIncome - incomeTotals.grand)}</span>
+                צפוי להיכנס עוד: <span className="num" style={{ color: "#7AAA8E" }}>{fmt(totals.plannedIncome - incomeTotals.grand)}</span>
               </div>
             )
           )}
