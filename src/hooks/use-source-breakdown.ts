@@ -16,6 +16,15 @@ import { computeTarget, type Grade, type GradeSectionAmount } from "@/hooks/use-
  *   plus "לא משויך" (null-section collections/refunds + horim income rows).
  * Iron rule everywhere: balance = income − used.
  */
+export interface GradeBreakdownRow {
+  id: string;
+  name: string;
+  planned: number; // derived target for this grade × section
+  income: number;  // collected
+  used: number;    // refunds
+  balance: number; // income − used (iron rule)
+}
+
 export interface BreakdownRow {
   id: string;
   name: string;
@@ -24,6 +33,8 @@ export interface BreakdownRow {
   used: number;
   balance: number;
   unassigned?: boolean;
+  /** horim sections only: per-grade detail — "יש כסף בסל תרבות לשכבה א'?" */
+  grades?: GradeBreakdownRow[];
 }
 
 export function useSourceBreakdown(source: string, enabled: boolean) {
@@ -40,25 +51,36 @@ export function useSourceBreakdown(source: string, enabled: boolean) {
           supabase.from("parent_sections").select("id, name").eq("school_year_id", yearId).eq("is_active", true).order("order_index"),
           supabase.from("grade_section_amounts").select("id, grade_id, parent_section_id, amount_per_student, working_budget_basis, custom_working_budget, actual_collected").eq("school_year_id", yearId),
           supabase.from("grades").select("id, name, student_count").eq("school_year_id", yearId),
-          supabase.from("parent_collections").select("parent_section_id, amount").eq("school_year_id", yearId),
-          supabase.from("parent_refunds").select("parent_section_id, amount").eq("school_year_id", yearId),
+          supabase.from("parent_collections").select("parent_section_id, grade_id, amount").eq("school_year_id", yearId),
+          supabase.from("parent_refunds").select("parent_section_id, grade_id, amount").eq("school_year_id", yearId),
           supabase.from("income").select("amount").eq("school_year_id", yearId).eq("source", "horim"),
         ]);
 
         const rows: BreakdownRow[] = (sections ?? []).map((sec) => {
-          const planned = (gsa ?? [])
-            .filter((row) => row.parent_section_id === sec.id)
-            .reduce((sum, row) => {
-              const grade = (grades ?? []).find((g) => g.id === row.grade_id);
-              if (!grade) return sum;
-              return sum + computeTarget(
-                grade as unknown as Grade,
-                { ...row, amount_per_student: Number(row.amount_per_student) } as unknown as GradeSectionAmount,
-              );
-            }, 0);
-          const income = (colls ?? []).filter((c) => c.parent_section_id === sec.id).reduce((s, c) => s + Number(c.amount), 0);
-          const used = (refunds ?? []).filter((r) => r.parent_section_id === sec.id).reduce((s, r) => s + Number(r.amount), 0);
-          return { id: sec.id, name: sec.name, planned, income, used, balance: income - used };
+          // Per-grade detail for this section (level 3 of the accordion)
+          const gradeRows: GradeBreakdownRow[] = (grades ?? [])
+            .map((grade) => {
+              const gsaRow = (gsa ?? []).find((row) => row.parent_section_id === sec.id && row.grade_id === grade.id);
+              const target = gsaRow
+                ? computeTarget(
+                    grade as unknown as Grade,
+                    { ...gsaRow, amount_per_student: Number(gsaRow.amount_per_student) } as unknown as GradeSectionAmount,
+                  )
+                : 0;
+              const gIncome = (colls ?? [])
+                .filter((c) => c.parent_section_id === sec.id && c.grade_id === grade.id)
+                .reduce((s, c) => s + Number(c.amount), 0);
+              const gUsed = (refunds ?? [])
+                .filter((r) => r.parent_section_id === sec.id && r.grade_id === grade.id)
+                .reduce((s, r) => s + Number(r.amount), 0);
+              return { id: grade.id, name: grade.name, planned: target, income: gIncome, used: gUsed, balance: gIncome - gUsed };
+            })
+            .filter((g) => g.planned > 0 || g.income > 0 || g.used > 0);
+
+          const planned = gradeRows.reduce((s, g) => s + g.planned, 0);
+          const income = gradeRows.reduce((s, g) => s + g.income, 0);
+          const used = gradeRows.reduce((s, g) => s + g.used, 0);
+          return { id: sec.id, name: sec.name, planned, income, used, balance: income - used, grades: gradeRows };
         });
 
         const unassignedIncome =

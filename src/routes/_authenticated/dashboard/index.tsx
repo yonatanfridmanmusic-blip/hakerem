@@ -121,6 +121,14 @@ function SourceCard({ s }: { s: SourceSummary }) {
   const isMobile = useIsMobile();
   // Accordion: click expands the per-section breakdown (lazy-fetched)
   const [expanded, setExpanded] = useState(false);
+  // Level 3 (horim only): which sections are expanded to show per-grade rows
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
+  const toggleSection = (id: string) =>
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   const { data: breakdown, isLoading: breakdownLoading } = useSourceBreakdown(s.source, expanded);
   const detailTo = s.source === "horim" ? "/horim" : "/budget";
   const detailLabel = s.source === "horim" ? "למסך ההורים ←" : "למצב תקציבי ←";
@@ -344,42 +352,96 @@ function SourceCard({ s }: { s: SourceSummary }) {
                 {!isMobile && <span style={{ textAlign: "left" }}>יצא</span>}
                 <span style={{ textAlign: "left" }}>יתרה</span>
               </div>
-              {breakdown.map((row) => (
-                <div key={row.id} style={{
-                  display: "grid",
-                  gridTemplateColumns: isMobile ? "1fr 76px 76px" : "1fr 100px 100px 100px 100px",
-                  gap: "8px", padding: "9px 4px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  alignItems: "center",
-                }}>
-                  <span style={{
-                    fontSize: "13px", fontWeight: "500",
-                    color: row.unassigned ? "#FCD34D" : "#fff",
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}>
-                    {row.name}
-                  </span>
-                  {!isMobile && (
-                    <span className="num" style={{ fontSize: "12.5px", color: hero.secondaryText, textAlign: "left" }}>
-                      {row.planned > 0 ? fmt(row.planned) : "—"}
-                    </span>
-                  )}
-                  <span className="num" style={{ fontSize: "12.5px", color: row.income > 0 ? "#86EFAC" : hero.tertiaryText, textAlign: "left" }}>
-                    {row.income > 0 ? fmt(row.income) : "—"}
-                  </span>
-                  {!isMobile && (
-                    <span className="num" style={{ fontSize: "12.5px", color: row.used > 0 ? "#FCA5A5" : hero.tertiaryText, textAlign: "left" }}>
-                      {row.used > 0 ? fmt(row.used) : "—"}
-                    </span>
-                  )}
-                  <span className="num" style={{
-                    fontSize: "12.5px", fontWeight: "600", textAlign: "left",
-                    color: row.balance > 0 ? "#86EFAC" : row.balance < 0 ? "#FCA5A5" : hero.tertiaryText,
-                  }}>
-                    {fmt(row.balance)}
-                  </span>
-                </div>
-              ))}
+              {breakdown.map((row) => {
+                const hasGrades = !row.unassigned && (row.grades?.length ?? 0) > 0;
+                const sectionOpen = openSections.has(row.id);
+                return (
+                  <div key={row.id}>
+                    <div
+                      onClick={hasGrades ? () => toggleSection(row.id) : undefined}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: isMobile ? "1fr 76px 76px" : "1fr 100px 100px 100px 100px",
+                        gap: "8px", padding: "9px 4px",
+                        borderBottom: "1px solid rgba(255,255,255,0.08)",
+                        alignItems: "center",
+                        cursor: hasGrades ? "pointer" : "default",
+                      }}
+                    >
+                      <span style={{
+                        fontSize: "13px", fontWeight: "500",
+                        color: row.unassigned ? "#FCD34D" : "#fff",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
+                        {row.name}
+                        {hasGrades && (
+                          <span style={{ color: hero.tertiaryText, marginRight: "6px", fontSize: "11px" }}>
+                            {sectionOpen ? "▴" : "▾"}
+                          </span>
+                        )}
+                      </span>
+                      {!isMobile && (
+                        <span className="num" style={{ fontSize: "12.5px", color: hero.secondaryText, textAlign: "left" }}>
+                          {row.planned > 0 ? fmt(row.planned) : "—"}
+                        </span>
+                      )}
+                      <span className="num" style={{ fontSize: "12.5px", color: row.income > 0 ? "#86EFAC" : hero.tertiaryText, textAlign: "left" }}>
+                        {row.income > 0 ? fmt(row.income) : "—"}
+                      </span>
+                      {!isMobile && (
+                        <span className="num" style={{ fontSize: "12.5px", color: row.used > 0 ? "#FCA5A5" : hero.tertiaryText, textAlign: "left" }}>
+                          {row.used > 0 ? fmt(row.used) : "—"}
+                        </span>
+                      )}
+                      <span className="num" style={{
+                        fontSize: "12.5px", fontWeight: "600", textAlign: "left",
+                        color: row.balance > 0 ? "#86EFAC" : row.balance < 0 ? "#FCA5A5" : hero.tertiaryText,
+                      }}>
+                        {fmt(row.balance)}
+                      </span>
+                    </div>
+
+                    {/* Level 3: per-grade rows for this section (horim) */}
+                    {hasGrades && sectionOpen && row.grades!.map((g) => (
+                      <div key={g.id} style={{
+                        display: "grid",
+                        gridTemplateColumns: isMobile ? "1fr 76px 76px" : "1fr 100px 100px 100px 100px",
+                        gap: "8px", padding: "7px 4px",
+                        borderBottom: "1px solid rgba(255,255,255,0.05)",
+                        alignItems: "center",
+                        background: "rgba(255,255,255,0.04)",
+                      }}>
+                        <span style={{
+                          fontSize: "12px", color: "rgba(255,255,255,0.75)",
+                          paddingRight: "18px",
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {g.name}
+                        </span>
+                        {!isMobile && (
+                          <span className="num" style={{ fontSize: "12px", color: hero.secondaryText, textAlign: "left" }}>
+                            {g.planned > 0 ? fmt(g.planned) : "—"}
+                          </span>
+                        )}
+                        <span className="num" style={{ fontSize: "12px", color: g.income > 0 ? "#86EFAC" : hero.tertiaryText, textAlign: "left" }}>
+                          {g.income > 0 ? fmt(g.income) : "—"}
+                        </span>
+                        {!isMobile && (
+                          <span className="num" style={{ fontSize: "12px", color: g.used > 0 ? "#FCA5A5" : hero.tertiaryText, textAlign: "left" }}>
+                            {g.used > 0 ? fmt(g.used) : "—"}
+                          </span>
+                        )}
+                        <span className="num" style={{
+                          fontSize: "12px", fontWeight: "600", textAlign: "left",
+                          color: g.balance > 0 ? "#86EFAC" : g.balance < 0 ? "#FCA5A5" : hero.tertiaryText,
+                        }}>
+                          {fmt(g.balance)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
               <div style={{ display: "flex", justifyContent: "flex-start", marginTop: "10px" }}>
                 <Link to={detailTo}
                   style={{
