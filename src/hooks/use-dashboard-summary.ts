@@ -19,6 +19,7 @@ export interface SourceSummary {
   // ── Planned-vs-actual model (phase 1.4) ──
   plannedIncome: number; // global planned income: source_budget_plans; horim = derived collection target
   actualBalance: number; // income - used — ALWAYS actual, never plan-based
+  plannedIncomeFull: number; // horim: full 100% target (if everyone pays); others: = plannedIncome
 }
 
 export interface DashboardSummary {
@@ -116,6 +117,12 @@ export function useDashboardSummary() {
           { ...gsa, amount_per_student: Number(gsa.amount_per_student) } as unknown as GradeSectionAmount,
         );
       }, 0);
+      // Full 100% target — the potential if every family pays in full
+      const horimPlannedIncomeFull = (gsaRows ?? []).reduce((sum, gsa) => {
+        const grade = (gradeRows ?? []).find((g) => g.id === gsa.grade_id);
+        if (!grade) return sum;
+        return sum + Number(gsa.amount_per_student) * grade.student_count;
+      }, 0);
 
       // 3. Budget categories (planned amounts)
       const { data: categories, error: catError } = await supabase
@@ -193,13 +200,14 @@ export function useDashboardSummary() {
 
         // Planned-vs-actual model: global planned income + iron-rule balance
         const plannedIncome = source === "horim" ? horimPlannedIncome : (plansMap[source] ?? 0);
+        const plannedIncomeFull = source === "horim" ? horimPlannedIncomeFull : plannedIncome;
         const actualBalance = income - used; // ALWAYS actual — never falls back to plan
 
         return {
           source, label,
           planned, used, balance, pct,
           income, cashBalance, cashPct, isIncomeBased,
-          plannedIncome, actualBalance,
+          plannedIncome, actualBalance, plannedIncomeFull,
         };
       });
 

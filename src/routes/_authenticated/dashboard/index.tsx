@@ -136,6 +136,19 @@ function SourceCard({ s }: { s: SourceSummary }) {
   const isOverrun = s.plannedIncome > 0 && s.used > s.plannedIncome;
   const overrunAmount = isOverrun ? s.used - s.plannedIncome : 0;
 
+  // Planned-vs-actual secondary figures
+  const isNegative = s.actualBalance < 0;
+  const expectedRemaining = Math.max(s.plannedIncome - s.income, 0); // עוד אמור להיכנס
+  const incomeOverage = s.plannedIncome > 0 ? Math.max(s.income - s.plannedIncome, 0) : 0; // נכנס מעבר למתוכנן
+  const allocationOver = s.plannedIncome > 0 && s.planned > s.plannedIncome; // חילקה יותר משאמור להיכנס
+  const targetMet = s.plannedIncome > 0 && s.income >= s.plannedIncome && s.actualBalance > 0; // עודף סוף שנה
+  const chipStyle: React.CSSProperties = {
+    display: "inline-flex", alignItems: "center", gap: "5px",
+    padding: "4px 11px", borderRadius: "99px",
+    background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.85)",
+    fontSize: "12px", whiteSpace: "nowrap",
+  };
+
   return (
     <div
       onClick={() => void navigate({ to: "/budget" })}
@@ -181,9 +194,21 @@ function SourceCard({ s }: { s: SourceSummary }) {
         <div style={{ fontSize: "12px", color: hero.subtleText, fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px" }}>
           {s.label} — {cashLabel}
         </div>
-        <div className="num" style={{ fontSize: isMobile ? "36px" : "52px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
+        <div className="num" style={{ fontSize: isMobile ? "36px" : "52px", fontWeight: "300", color: isNegative ? "#FCA5A5" : "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
           {fmt(animCashBalance)}
         </div>
+        {isNegative && (
+          <div style={{ marginTop: "6px", fontSize: "11.5px", color: "rgba(252,165,165,0.75)" }}>
+            ההוצאות גבוהות מההכנסות שנכנסו בפועל
+          </div>
+        )}
+        {targetMet && (
+          <div style={{ marginTop: "8px", display: "inline-flex", alignItems: "center", gap: "6px", background: "rgba(74,222,128,0.18)", border: "1px solid rgba(74,222,128,0.4)", borderRadius: "99px", padding: "4px 12px" }}>
+            <span style={{ fontSize: "12px", color: "#86EFAC", fontWeight: "600" }}>
+              ✓ היעד הושלם — עודף {fmt(s.actualBalance)}
+            </span>
+          </div>
+        )}
         <div style={{ marginTop: "12px", fontSize: "13px", color: hero.secondaryText, display: "flex", gap: "10px", flexWrap: "wrap" }}>
           {s.income > 0 && (
             <span>
@@ -196,6 +221,35 @@ function SourceCard({ s }: { s: SourceSummary }) {
             <span>
               <span className="num">{fmt(animUsed)}</span>
               <span style={{ color: hero.tertiaryText, marginRight: "4px" }}> הוצאות</span>
+            </span>
+          )}
+        </div>
+
+        {/* Planned-vs-actual chips: what's still expected, allocation, horim full target */}
+        <div style={{ marginTop: "12px", display: "flex", flexWrap: "wrap", gap: "7px" }}>
+          {expectedRemaining > 0 && (
+            <span style={chipStyle}>
+              עוד אמור להיכנס <span className="num" style={{ fontWeight: "600", color: "#fff" }}>{fmt(expectedRemaining)}</span>
+            </span>
+          )}
+          {incomeOverage > 0 && (
+            <span style={{ ...chipStyle, background: "rgba(74,222,128,0.18)", border: "1px solid rgba(74,222,128,0.35)", color: "#86EFAC" }}>
+              נכנס <span className="num" style={{ fontWeight: "600" }}>{fmt(incomeOverage)}</span> מעבר למתוכנן ✓
+            </span>
+          )}
+          {s.planned > 0 && (
+            <span style={allocationOver
+              ? { ...chipStyle, background: "rgba(251,191,36,0.16)", border: "1px solid rgba(251,191,36,0.35)", color: "#FCD34D" }
+              : chipStyle}
+              title={allocationOver ? "חולק לקטגוריות יותר מהסכום שצפוי להיכנס" : undefined}
+            >
+              מתוכנן להוצאה <span className="num" style={{ fontWeight: "600", color: allocationOver ? "#FCD34D" : "#fff" }}>{fmt(s.planned)}</span>
+              {allocationOver && " ⚠"}
+            </span>
+          )}
+          {s.source === "horim" && s.plannedIncomeFull > s.plannedIncome && (
+            <span style={chipStyle}>
+              יעד מלא (100%) <span className="num" style={{ fontWeight: "600", color: "#fff" }}>{fmt(s.plannedIncomeFull)}</span>
             </span>
           )}
         </div>
@@ -216,7 +270,9 @@ function SourceCard({ s }: { s: SourceSummary }) {
                 <span className="num">{fmt(animUsed)}</span>
                 <span style={{ color: hero.tertiaryText, margin: "0 4px" }}>מתוך</span>
                 <span className="num">{fmt(animPlanned)}</span>
-                <span style={{ color: hero.tertiaryText, marginRight: "4px" }}>מתוכנן</span>
+                <span style={{ color: hero.tertiaryText, marginRight: "4px" }}>
+                  {s.source === "horim" ? "צפי גבייה (85%)" : "מתוכנן"}
+                </span>
               </div>
             )}
           </div>
@@ -2164,11 +2220,16 @@ export default function DashboardPage() {
         }} />
         <div style={{ position: "relative" }}>
           <div style={{ fontSize: "12px", color: "rgba(122,170,142,0.8)", fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px" }}>
-            יתרה תקציבית — כל המקורות
+            יתרה בפועל — כל המקורות
           </div>
-          <div className="num" style={{ fontSize: isMobile ? "36px" : "52px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
+          <div className="num" style={{ fontSize: isMobile ? "36px" : "52px", fontWeight: "300", color: totals.actualBalance < 0 ? "#FCA5A5" : "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
             {isLoading ? "—" : fmt(animBalance)}
           </div>
+          {!isLoading && totals.actualBalance < 0 && (
+            <div style={{ marginTop: "6px", fontSize: "11.5px", color: "rgba(252,165,165,0.75)" }}>
+              ההוצאות גבוהות מההכנסות שנכנסו בפועל
+            </div>
+          )}
           <div style={{ marginTop: "12px", fontSize: "13px", color: "#7AAA8E" }}>
             <span className="num">{isLoading ? "—" : fmt(animUsed)}</span>
             <span style={{ color: "rgba(122,170,142,0.6)", marginRight: "5px" }}> הוצאות</span>
@@ -2176,6 +2237,17 @@ export default function DashboardPage() {
           <div style={{ marginTop: "5px", fontSize: "12px", color: "rgba(122,170,142,0.6)" }}>
             מתוך תכנון שנתי: <span className="num">{isLoading ? "—" : fmt(animPlanned)}</span>
           </div>
+          {!isLoading && totals.plannedIncome > 0 && (
+            incomeTotals.grand >= totals.plannedIncome ? (
+              <div style={{ marginTop: "8px", display: "inline-flex", alignItems: "center", gap: "6px", background: "rgba(74,222,128,0.18)", border: "1px solid rgba(74,222,128,0.4)", borderRadius: "99px", padding: "4px 12px" }}>
+                <span style={{ fontSize: "12px", color: "#86EFAC", fontWeight: "600" }}>✓ כל התכנון השנתי נכנס</span>
+              </div>
+            ) : (
+              <div style={{ marginTop: "5px", fontSize: "12px", color: "rgba(122,170,142,0.6)" }}>
+                עוד צפוי להיכנס: <span className="num" style={{ color: "#7AAA8E" }}>{fmt(totals.plannedIncome - incomeTotals.grand)}</span>
+              </div>
+            )
+          )}
         </div>
 
         <div style={{ textAlign: isMobile ? "right" : "left", position: "relative", width: isMobile ? "100%" : "auto" }}>
