@@ -143,7 +143,7 @@ function SourceCard({ s }: { s: SourceSummary }) {
   const cashLabel   = s.source === "horim" ? "יתרה בפועל מגבייה" : "יתרה בפועל";
   const incomeLabel = s.source === "horim" ? "גבייה" : "הכנסות";
 
-  const displayPct = budgetPct;
+  // pct shown only when a plan exists
 
   const hero = SOURCE_HERO[s.source] ?? SOURCE_HERO["_default"];
   const isOverrun = s.plannedIncome > 0 && s.used > s.plannedIncome;
@@ -289,27 +289,42 @@ function SourceCard({ s }: { s: SourceSummary }) {
               </div>
             )}
           </div>
-        ) : s.used > 0 ? (
-          <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "6px" }}>
-            <AlertTriangle size={12} style={{ color: "rgba(255,200,150,0.8)", flexShrink: 0 }} />
-            <span style={{ fontSize: "12px", color: "rgba(255,200,150,0.7)" }}>אין תקציב מאושר — יש הוצאות</span>
+        ) : (
+          /* No annual plan yet — gentle invitation, never an error state */
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ marginTop: "16px" }}
+          >
+            <Link to="/settings" style={{
+              display: "inline-flex", alignItems: "center", gap: "6px",
+              padding: "5px 13px", borderRadius: "99px",
+              background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)",
+              color: "rgba(255,255,255,0.75)", fontSize: "12px", textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}>
+              ✦ הגדירו כמה צפוי להיכנס השנה — בהגדרות ←
+            </Link>
           </div>
-        ) : null}
+        )}
       </div>
 
-      {/* Right: big pct */}
+      {/* Right: big pct (only meaningful when an annual plan exists) */}
       <div style={{ textAlign: isMobile ? "right" : "left", position: "relative", width: isMobile ? "100%" : "auto" }}>
-        <div className="num" style={{
-          fontSize: isMobile ? "40px" : "64px", fontWeight: "200",
-          background: hero.pctGradient,
-          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-          letterSpacing: "-3px", lineHeight: 1,
-        }}>
-          {s.plannedIncome > 0 || s.used > 0 ? `${animBudgetPct}%` : "—"}
-        </div>
-        <div style={{ fontSize: "11px", color: hero.tertiaryText, marginTop: "4px", textAlign: isMobile ? "right" : "center" }}>
-          {s.plannedIncome > 0 ? "מהמתוכנן נוצל" : displayPct > 0 ? "מהמתוכנן נוצל" : "טרם הוגדר תקציב"}
-        </div>
+        {s.plannedIncome > 0 && (
+          <>
+            <div className="num" style={{
+              fontSize: isMobile ? "40px" : "64px", fontWeight: "200",
+              background: hero.pctGradient,
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+              letterSpacing: "-3px", lineHeight: 1,
+            }}>
+              {`${animBudgetPct}%`}
+            </div>
+            <div style={{ fontSize: "11px", color: hero.tertiaryText, marginTop: "4px", textAlign: isMobile ? "right" : "center" }}>
+              מהמתוכנן נוצל
+            </div>
+          </>
+        )}
         <div style={{ fontSize: "11px", color: hero.tertiaryText, marginTop: "10px", textAlign: isMobile ? "right" : "center" }}>
           פירוט לפי סעיף {expanded ? "▴" : "▾"}
         </div>
