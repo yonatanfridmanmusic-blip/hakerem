@@ -47,6 +47,10 @@ export function useSourceBreakdown(source: string, enabled: boolean) {
       if (!yearId) return [];
 
       if (source === "horim") {
+        // The year's collection percentage — targets follow it (single source of truth)
+        const { data: yearRow } = await supabase
+          .from("school_years").select("collection_percentage").eq("id", yearId).maybeSingle();
+        const collectionPct = Number(yearRow?.collection_percentage) > 0 ? Number(yearRow?.collection_percentage) : 85;
         const [{ data: sections }, { data: gsa }, { data: grades }, { data: colls }, { data: refunds }, { data: horimIncome }] = await Promise.all([
           supabase.from("parent_sections").select("id, name").eq("school_year_id", yearId).eq("is_active", true).order("order_index"),
           supabase.from("grade_section_amounts").select("id, grade_id, parent_section_id, amount_per_student, working_budget_basis, custom_working_budget, actual_collected").eq("school_year_id", yearId),
@@ -65,6 +69,7 @@ export function useSourceBreakdown(source: string, enabled: boolean) {
                 ? computeTarget(
                     grade as unknown as Grade,
                     { ...gsaRow, amount_per_student: Number(gsaRow.amount_per_student) } as unknown as GradeSectionAmount,
+                    collectionPct,
                   )
                 : 0;
               const gIncome = (colls ?? [])

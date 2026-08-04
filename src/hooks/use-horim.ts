@@ -502,16 +502,41 @@ export function useDeleteParentRefund() {
   });
 }
 
-// Helper: compute target for a grade+section
+// Helper: compute target for a grade+section.
+// collectionPct = the school year's collection percentage (school_years.collection_percentage).
+// Historical note: basis value 'p85' now means "לפי אחוז השנה" — reinterpreted (decision 27.7),
+// no data migration; for every existing customer the pct is 85 so the math is unchanged.
 export function computeTarget(
   grade: Grade,
-  gsa: GradeSectionAmount | undefined
+  gsa: GradeSectionAmount | undefined,
+  collectionPct: number = 85,
 ): number {
   if (!gsa || gsa.amount_per_student === 0) return 0;
+  const mult = (collectionPct > 0 ? collectionPct : 85) / 100;
   const basis = gsa.working_budget_basis ?? "p85";
-  if (basis === "p85") return gsa.amount_per_student * grade.student_count * 0.85;
+  if (basis === "p85") return gsa.amount_per_student * grade.student_count * mult;
   if (basis === "p100") return gsa.amount_per_student * grade.student_count;
   if (basis === "custom") return gsa.custom_working_budget ?? 0;
   if (basis === "actual") return gsa.actual_collected ?? 0;
-  return gsa.amount_per_student * grade.student_count * 0.85;
+  return gsa.amount_per_student * grade.student_count * mult;
+}
+
+// The active year's collection percentage — the single source for every target calculation.
+// Falls back to 85 defensively (missing/zero value).
+export function useCollectionPct() {
+  return useQuery<number>({
+    queryKey: ["collection-pct"],
+    queryFn: async () => {
+      const yearId = await getActiveYearId();
+      if (!yearId) return 85;
+      const { data } = await supabase
+        .from("school_years")
+        .select("collection_percentage")
+        .eq("id", yearId)
+        .maybeSingle();
+      const n = Number(data?.collection_percentage);
+      return n > 0 ? n : 85;
+    },
+    staleTime: 1000 * 60,
+  });
 }

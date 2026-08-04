@@ -117,7 +117,7 @@ function Bar({ pct, gradient }: { pct: number; gradient: string }) {
   );
 }
 
-function SourceCard({ s }: { s: SourceSummary }) {
+function SourceCard({ s, collectionPct = 85 }: { s: SourceSummary; collectionPct?: number }) {
   const isMobile = useIsMobile();
   // Accordion: click expands the per-section breakdown (lazy-fetched)
   const [expanded, setExpanded] = useState(false);
@@ -284,7 +284,7 @@ function SourceCard({ s }: { s: SourceSummary }) {
                 <span style={{ color: hero.tertiaryText, margin: "0 4px" }}>מתוך</span>
                 <span className="num">{fmt(animPlanned)}</span>
                 <span style={{ color: hero.tertiaryText, marginRight: "4px" }}>
-                  {s.source === "horim" ? "צפי גבייה (85%)" : "מתוכנן"}
+                  {s.source === "horim" ? `צפי גבייה (${collectionPct}%)` : "מתוכנן"}
                 </span>
               </div>
             )}
@@ -2515,7 +2515,7 @@ export default function DashboardPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {isLoading
           ? [1, 2, 3].map((i) => <SkeletonCard key={i} />)
-          : (data?.sources ?? []).map((s) => <SourceCard key={s.source} s={s} />)
+          : (data?.sources ?? []).map((s) => <SourceCard key={s.source} s={s} collectionPct={data?.collectionPct ?? 85} />)
         }
       </div>
     </div>

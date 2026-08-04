@@ -17,6 +17,7 @@ import {
   useUpdateParentRefund,
   useDeleteParentRefund,
   useUpsertGradeSectionAmount,
+  useCollectionPct,
   useAddParentCollection,
   useUpdateParentCollection,
   useDeleteParentCollection,
@@ -1231,7 +1232,11 @@ export default function HorimPage() {
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [showSectionsModal, setShowSectionsModal] = useState(false);
   const [preGradeId, setPreGradeId] = useState<string | undefined>();
-  const [basis, setBasis] = useState<85 | 100>(85);
+  // Basis: "year" = the school year's collection percentage (school_years.collection_percentage),
+  // "full" = 100%. The year's pct is the wired default — no more hardcoded 85.
+  const { data: yearPct = 85 } = useCollectionPct();
+  const [basisMode, setBasisMode] = useState<"year" | "full">("year");
+  const basis = basisMode === "year" ? yearPct : 100;
   const [guardMsg, setGuardMsg] = useState<string | null>(null);
   const [editingCollection, setEditingCollection] = useState<ParentCollection | null>(null);
   const [deletingCollectionId, setDeletingCollectionId] = useState<string | null>(null);
@@ -1368,16 +1373,16 @@ export default function HorimPage() {
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
             {/* Basis toggle */}
             <div style={{ display: "flex", background: "#F0EBE6", borderRadius: "8px", padding: "3px", gap: "2px" }}>
-              {([85, 100] as const).map((b) => (
-                <button key={b} onClick={() => setBasis(b)} style={{
+              {([["year", `${yearPct}%`], ["full", "100%"]] as const).map(([mode, label]) => (
+                <button key={mode} onClick={() => setBasisMode(mode)} style={{
                   padding: "5px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "500",
                   border: "none", cursor: "pointer", fontFamily: "var(--font-sans)",
-                  background: basis === b ? "#fff" : "transparent",
-                  color: basis === b ? "#8B2F6E" : "#888079",
-                  boxShadow: basis === b ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+                  background: basisMode === mode ? "#fff" : "transparent",
+                  color: basisMode === mode ? "#8B2F6E" : "#888079",
+                  boxShadow: basisMode === mode ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
                   transition: "all 0.15s",
                 }}>
-                  {b}%
+                  {label}
                 </button>
               ))}
             </div>
@@ -1563,7 +1568,7 @@ export default function HorimPage() {
                     const gsa = gsaMap.get(`${g.id}:${sec.id}`);
                     if (!gsa || gsa.amount_per_student === 0) return null;
                     const target100 = gsa.amount_per_student * g.student_count;
-                    const target85  = target100 * 0.85;
+                    const target85  = target100 * (yearPct / 100);
                     const collected = collectionsMap.get(`${g.id}:${sec.id}`) ?? 0;
                     const remaining = Math.max(0, target85 - collected);
                     const pct       = target85 > 0 ? Math.round((collected / target85) * 100) : 0;
@@ -1588,7 +1593,7 @@ export default function HorimPage() {
                         <div style={{ fontSize: "13px", fontWeight: "600", color: "#8B2F6E" }}>{sec.name}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                           <span className="num" style={{ fontSize: "12px", color: "#888079" }}>
-                            נגבה {fmt(ttlColl)} מתוך {fmt(ttl85)} (85%)
+                            נגבה {fmt(ttlColl)} מתוך {fmt(ttl85)} ({yearPct}%)
                           </span>
                           <span style={{
                             fontSize: "12px", fontWeight: "700",
@@ -1603,7 +1608,7 @@ export default function HorimPage() {
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
                           <thead>
                             <tr style={{ background: "#FAFAF9" }}>
-                              {["שכבה", "תלמידים", "יעד 100%", "יעד 85%", "נגבה", "נותר", "התקדמות"].map((h) => (
+                              {["שכבה", "תלמידים", "יעד 100%", `יעד ${yearPct}%`, "נגבה", "נותר", "התקדמות"].map((h) => (
                                 <th key={h} style={{ padding: "8px 12px", fontWeight: "600", color: "#6B6560", fontSize: "11px", borderBottom: "1px solid #F0EBE4", whiteSpace: "nowrap", textAlign: h === "שכבה" ? "right" : "left" }}>{h}</th>
                               ))}
                             </tr>

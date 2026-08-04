@@ -30,6 +30,7 @@ export interface DashboardSummary {
     plannedIncome: number; actualBalance: number;
   };
   incomeTotals: { fromIncome: number; fromParentCollections: number; grand: number };
+  collectionPct: number; // the year's collection percentage (drives horim targets)
 }
 
 export function useDashboardSummary() {
@@ -43,6 +44,7 @@ export function useDashboardSummary() {
         sources: [],
         totals: { planned: 0, used: 0, balance: 0, pct: 0, plannedIncome: 0, actualBalance: 0 },
         incomeTotals: { fromIncome: 0, fromParentCollections: 0, grand: 0 },
+        collectionPct: 85,
       };
 
       // 0. Resolve org — super_admin "View As" override takes priority
@@ -65,7 +67,7 @@ export function useDashboardSummary() {
       // 1. Active school year (filtered to this org)
       const { data: yearData, error: yearError } = await supabase
         .from("school_years")
-        .select("id, name")
+        .select("id, name, collection_percentage")
         .eq("organization_id", orgId)
         .eq("is_active", true)
         .maybeSingle();
@@ -74,6 +76,9 @@ export function useDashboardSummary() {
       if (!yearData) return empty;
 
       const yearId = yearData.id;
+      const collectionPct = Number((yearData as { collection_percentage?: number }).collection_percentage) > 0
+        ? Number((yearData as { collection_percentage?: number }).collection_percentage)
+        : 85;
 
       // 2. Org budget sources (dynamic — includes custom sources)
       const { data: orgSources } = await supabase
@@ -115,6 +120,7 @@ export function useDashboardSummary() {
         return sum + computeTarget(
           grade as unknown as Grade,
           { ...gsa, amount_per_student: Number(gsa.amount_per_student) } as unknown as GradeSectionAmount,
+          collectionPct,
         );
       }, 0);
       // Full 100% target — the potential if every family pays in full
@@ -220,7 +226,7 @@ export function useDashboardSummary() {
       const totalActualBalance = sources.reduce((s, x) => s + x.actualBalance, 0);
 
       return {
-        schoolYear: yearData,
+        schoolYear: { id: yearData.id, name: yearData.name },
         sources,
         totals: {
           planned: totalPlanned, used: totalUsed, balance: totalBalance, pct: totalPct,
@@ -231,6 +237,7 @@ export function useDashboardSummary() {
           fromParentCollections: parentCollTotal,
           grand: fromIncome + parentCollTotal,
         },
+        collectionPct,
       };
     },
     staleTime: 1000 * 60 * 2,

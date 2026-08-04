@@ -21,7 +21,7 @@ import { useBudgetCategories } from "@/hooks/use-expenses";
 import { useAddBudgetCategory } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { useSourceBudgetPlans } from "@/hooks/use-source-budget-plans";
-import { useGrades, useGradeSectionAmounts, computeTarget, useParentCollections, useAllParentSections } from "@/hooks/use-horim";
+import { useGrades, useGradeSectionAmounts, computeTarget, useParentCollections, useAllParentSections, useCollectionPct } from "@/hooks/use-horim";
 
 export const Route = createFileRoute("/_authenticated/income/")({
   component: IncomePage,
@@ -669,9 +669,10 @@ export default function IncomePage() {
   const { data: sourcePlans } = useSourceBudgetPlans();
   const { data: horimGrades } = useGrades();
   const { data: horimGSA } = useGradeSectionAmounts();
+  const { data: collectionPct = 85 } = useCollectionPct();
   const horimTarget = (horimGSA ?? []).reduce((sum, gsa) => {
     const grade = (horimGrades ?? []).find((g) => g.id === gsa.grade_id);
-    return grade ? sum + computeTarget(grade, gsa) : sum;
+    return grade ? sum + computeTarget(grade, gsa, collectionPct) : sum;
   }, 0);
   const plannedFor = (slug: string): number =>
     slug === "horim" ? horimTarget : (sourcePlans?.[slug] ?? 0);

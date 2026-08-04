@@ -3,6 +3,7 @@ import React, { useMemo, useState } from "react";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { toast } from "sonner";
 import { useDashboardSummary, type DashboardSummary } from "@/hooks/use-dashboard-summary";
+import { useCollectionPct } from "@/hooks/use-horim";
 import { useOrgBudgetSources, FALLBACK_SOURCES } from "@/hooks/use-budget-sources";
 import {
   useGrades, useParentSections, useGradeSectionAmounts,
@@ -177,6 +178,7 @@ function buildAnnualHTML(
 ): string {
   const { schoolYear, sources, totals, incomeTotals } = data;
   const yearName = schoolYear?.name ?? "";
+  const collPct = data.collectionPct > 0 ? data.collectionPct : 85; // אחוז הגבייה של השנה
   const sourceRows = sources.map((s) => {
     const cfg = cfgMap[s.source] ?? { ...NEUTRAL_CFG, label: s.label };
     const balance = s.planned - s.used;
@@ -207,7 +209,7 @@ function buildAnnualHTML(
       const a = amounts.find(am => am.grade_id === g.id && am.parent_section_id === sec.id);
       if (!a || a.amount_per_student === 0) return null;
       const t100 = a.amount_per_student * g.student_count;
-      const t85 = t100 * 0.85;
+      const t85 = t100 * (collPct / 100);
       const coll = collections.filter(c => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
       const rem = Math.max(0, t85 - coll);
       const pct = t85 > 0 ? Math.round((coll / t85) * 100) : 0;
@@ -224,7 +226,7 @@ function buildAnnualHTML(
     ).join("");
     const footRow = gradeData.length > 1 ? `<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${gradeData.reduce((s,r)=>s+r.g.student_count,0)}</td><td class="l">${fmt(totT100)}</td><td class="l" style="color:#8B2F6E">${fmt(totT85)}</td><td class="l green">${fmt(totColl)}</td><td class="l" style="color:${totRem<=0?"#2D6644":"#B5472A"}">${totRem<=0?'<span class="done-badge">✓</span>':fmt(totRem)}</td><td class="l"><div class="bar-label">${totPct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totPct,100)}%;background:#8B2F6E"></div></div></td></tr>` : "";
     return `<div class="section-break"><h2 style="border-right:4px solid #8B2F6E;padding-right:10px">הורים · ${sec.name} — פירוט לפי שכבה</h2>
-    <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה</th><th class="l">נותר</th><th class="l">התקדמות</th></tr></thead>
+    <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד ${collPct}%</th><th class="l">נגבה</th><th class="l">נותר</th><th class="l">התקדמות</th></tr></thead>
     <tbody>${gradeRowsHtml}${footRow}</tbody></table></div>`;
   }).join("");
 
@@ -273,18 +275,18 @@ function buildAnnualHTML(
 </body></html>`;
 }
 
-function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: GradeSectionAmount[], collections: ParentCollection[], yearName: string, refunds: ParentRefund[] = [], cfgMapPdf?: SourceCfgMap): string {
+function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: GradeSectionAmount[], collections: ParentCollection[], yearName: string, refunds: ParentRefund[] = [], cfgMapPdf?: SourceCfgMap, collPct: number = 85): string {
   void cfgMapPdf;
   const rows = grades.map((grade) => {
     const ga = amounts.filter((a) => a.grade_id === grade.id);
-    const target = sections.reduce((s, sec) => s + computeTarget(grade, ga.find((a) => a.parent_section_id === sec.id)), 0);
+    const target = sections.reduce((s, sec) => s + computeTarget(grade, ga.find((a) => a.parent_section_id === sec.id), collPct), 0);
     const collected = collections.filter((c) => c.grade_id === grade.id).reduce((s, c) => s + c.amount, 0);
     const remaining = target - collected;
     const pct = target > 0 ? Math.round((collected / target) * 100) : 0;
     const barColor = pct >= 100 ? "#2D6644" : pct > 80 ? "#E67E22" : "#8B2F6E";
     return `<tr><td style="font-weight:600">${grade.name}</td><td class="l" style="color:#6B7A72">${grade.student_count}</td><td class="l">${fmt(target)}</td><td class="l green" style="font-weight:600">${fmt(collected)}</td><td class="l" style="font-weight:700;color:${remaining <= 0 ? "#2D6644" : "#B5472A"}">${remaining <= 0 ? '<span class="done-badge">✓ הושלם</span>' : fmt(remaining)}</td><td class="l" style="min-width:110px"><div class="bar-label">${pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(pct, 100)}%;background:${barColor}"></div></div></td></tr>`;
   }).join("");
-  const tT = grades.map((g) => { const ga = amounts.filter((a) => a.grade_id === g.id); return sections.reduce((s, sec) => s + computeTarget(g, ga.find((a) => a.parent_section_id === sec.id)), 0); }).reduce((a, b) => a + b, 0);
+  const tT = grades.map((g) => { const ga = amounts.filter((a) => a.grade_id === g.id); return sections.reduce((s, sec) => s + computeTarget(g, ga.find((a) => a.parent_section_id === sec.id), collPct), 0); }).reduce((a, b) => a + b, 0);
   const tC = collections.reduce((s, c) => s + c.amount, 0);
   const tR = tT - tC;
   const tP = tT > 0 ? Math.round((tC / tT) * 100) : 0;
@@ -300,7 +302,7 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
       collected += collections.filter((c) => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
     });
     if (total100 === 0) return "";
-    const total85 = total100 * 0.85;
+    const total85 = total100 * (collPct / 100);
     const remaining85 = Math.max(0, total85 - collected);
     const pct = total85 > 0 ? Math.round((collected / total85) * 100) : 0;
     const barColor = pct >= 100 ? "#2D6644" : pct > 80 ? "#E67E22" : "#8B2F6E";
@@ -320,19 +322,19 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
     <h2>סיכום גבייה</h2>
     <div class="kpi-grid kpi-4">
       <div class="kpi-card"><div class="kpi-label">יעד גבייה (100%)</div><div class="kpi-value">${fmt(tT)}</div><div class="kpi-sub">${tS} תלמידים</div></div>
-      <div class="kpi-card" style="border-color:#DDD0E8"><div class="kpi-label">יעד גבייה (85%)</div><div class="kpi-value plum">${fmt(tT * 0.85)}</div></div>
+      <div class="kpi-card" style="border-color:#DDD0E8"><div class="kpi-label">יעד גבייה (${collPct}%)</div><div class="kpi-value plum">${fmt(tT * (collPct / 100))}</div></div>
       <div class="kpi-card" style="background:#EDFBF3;border-color:#C6E8D0"><div class="kpi-label">נגבה עד כה</div><div class="kpi-value green">${fmt(tC)}</div><div style="margin-top:8px"><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(tP, 100)}%;background:#2D6644"></div></div><div style="font-size:10px;color:#4A6656;margin-top:3px;font-weight:500">${tP}% מהיעד</div></div></div>
       <div class="kpi-card" style="background:${tR <= 0 ? "#EDFBF3" : "#FDF1EA"};border-color:${tR <= 0 ? "#C6E8D0" : "#EDCFC6"}"><div class="kpi-label">טרם נגבה</div><div class="kpi-value ${tR <= 0 ? "green" : "rust"}">${fmt(tR)}</div></div>
     </div>
     ${secRows ? `<h2>גבייה לפי סעיף</h2>
-    <table><thead><tr><th>סעיף</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה</th><th class="l">נותר (מ-85%)</th><th class="l">התקדמות</th></tr></thead>
+    <table><thead><tr><th>סעיף</th><th class="l">יעד 100%</th><th class="l">יעד ${collPct}%</th><th class="l">נגבה</th><th class="l">נותר (מ-${collPct}%)</th><th class="l">התקדמות</th></tr></thead>
     <tbody>${secRows}</tbody></table>` : ""}
     ${sections.map((sec) => {
       const gradeData = grades.map((g) => {
         const a = amounts.find(am => am.grade_id === g.id && am.parent_section_id === sec.id);
         if (!a || a.amount_per_student === 0) return null;
         const t100 = a.amount_per_student * g.student_count;
-        const t85 = t100 * 0.85;
+        const t85 = t100 * (collPct / 100);
         const coll = collections.filter(c => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
         const rem = Math.max(0, t85 - coll);
         const pct = t85 > 0 ? Math.round((coll / t85) * 100) : 0;
@@ -349,7 +351,7 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
       ).join("");
       const footRow = gradeData.length > 1 ? `<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${gradeData.reduce((s,r)=>s+r.g.student_count,0)}</td><td class="l">${fmt(totT100)}</td><td class="l" style="color:#8B2F6E">${fmt(totT85)}</td><td class="l green">${fmt(totColl)}</td><td class="l" style="color:${totRem<=0?"#2D6644":"#B5472A"}">${totRem<=0?'<span class="done-badge">✓</span>':fmt(totRem)}</td><td class="l"><div class="bar-label">${totPct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totPct,100)}%;background:#8B2F6E"></div></div></td></tr>` : "";
       return `<div class="section-break"><h2 style="border-right:4px solid #8B2F6E;padding-right:10px">${sec.name} — פירוט לפי שכבה</h2>
-    <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה</th><th class="l">נותר</th><th class="l">התקדמות</th></tr></thead>
+    <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד ${collPct}%</th><th class="l">נגבה</th><th class="l">נותר</th><th class="l">התקדמות</th></tr></thead>
     <tbody>${gradeRows}${footRow}</tbody></table></div>`;
     }).join("")}
     <h2>פירוט לפי שכבה</h2>
@@ -383,6 +385,7 @@ function buildPeriodicHTML(
   collections: ParentCollection[] = [],
   periodFrom: string | null = null,
   periodTo: string | null = null,
+  collPct: number = 85,
 ): string {
   const { sources, totals } = data;
   // Per-source annual context from categories (aggregate planned + ytd by source)
@@ -439,7 +442,7 @@ function buildPeriodicHTML(
       const a = amounts.find(am => am.grade_id === g.id && am.parent_section_id === sec.id);
       if (!a || a.amount_per_student === 0) return null;
       const t100 = a.amount_per_student * g.student_count;
-      const t85  = t100 * 0.85;
+      const t85  = t100 * (collPct / 100);
       const collPeriod = periodCollections.filter(c => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
       const collYtd    = collections.filter(c => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
       if (collPeriod === 0 && collYtd === 0) return null;
@@ -458,7 +461,7 @@ function buildPeriodicHTML(
       ? `<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${gradeData.reduce((s,r)=>s+r.g.student_count,0)}</td><td class="l">${fmt(gradeData.reduce((s,r)=>s+r.t100,0))}</td><td class="l" style="color:#8B2F6E">${fmt(totT85)}</td><td class="l green">${fmt(totPeriod)}</td><td class="l green">${fmt(totYtd)}</td><td class="l"><div class="bar-label">${totPct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(totPct,100)}%;background:#8B2F6E"></div></div></td></tr>`
       : "";
     return `<div class="section-break"><h2 style="border-right:4px solid #8B2F6E;padding-right:10px">הורים · ${sec.name} — גבייה בתקופה</h2>
-    <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד 85%</th><th class="l">נגבה בתקופה</th><th class="l">נגבה מצטבר</th><th class="l">התקדמות</th></tr></thead>
+    <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד 100%</th><th class="l">יעד ${collPct}%</th><th class="l">נגבה בתקופה</th><th class="l">נגבה מצטבר</th><th class="l">התקדמות</th></tr></thead>
     <tbody>${gradeRowsHtml}${footRow}</tbody></table></div>`;
   }).join("");
 
@@ -512,6 +515,7 @@ function ReportsPage() {
   const [tab, setTab] = useState<Tab>("annual");
 
   const annualQuery   = useDashboardSummary();
+  const { data: pageCollPct = 85 } = useCollectionPct();
   const gradesQuery   = useGrades();
   const sectionsQuery = useParentSections();
   const amountsQuery  = useGradeSectionAmounts();
@@ -562,14 +566,14 @@ function ReportsPage() {
       if (!annualQuery.data) return;
       openPrint(buildAnnualHTML(annualQuery.data, cfgMap, allCategories ?? [], grades, sections, amounts, collections, refunds));
     } else if (tab === "horim") {
-      openPrint(buildHorimHTML(grades, sections, amounts, collections, yearName, refunds));
+      openPrint(buildHorimHTML(grades, sections, amounts, collections, yearName, refunds, undefined, pageCollPct));
     } else if (tab === "periodic" && periodicData) {
       const label = periodType === "custom"
         ? `${customFrom} — ${customTo}`
         : (selectedRange?.label ?? "תקופה נבחרת");
       const fromD = periodType === "custom" ? (customFrom || null) : (selectedRange?.from ?? null);
       const toD   = periodType === "custom" ? (customTo   || null) : (selectedRange?.to   ?? null);
-      openPrint(buildPeriodicHTML(periodicData, label, yearName, cfgMap, periodicCategories ?? [], grades, sections, amounts, collections, fromD, toD));
+      openPrint(buildPeriodicHTML(periodicData, label, yearName, cfgMap, periodicCategories ?? [], grades, sections, amounts, collections, fromD, toD, pageCollPct));
     }
   }
 
@@ -641,6 +645,7 @@ function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, a
   data: DashboardSummary | undefined; isLoading: boolean; cfgMap: SourceCfgMap; categories: CategoryReport[];
   grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[]; refunds: ParentRefund[];
 }) {
+  const { data: collPct = 85 } = useCollectionPct();
   const isMobile = useIsMobile();
   if (isLoading) return <Loader />;
   if (!data?.schoolYear) return <EmptyState text="אין שנת לימודים פעילה" />;
@@ -720,7 +725,7 @@ function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, a
               return sum + (a ? a.amount_per_student * g.student_count : 0);
             }, 0);
             if (t100 === 0) return null;
-            const t85 = t100 * 0.85;
+            const t85 = t100 * (collPct / 100);
             const coll = collections.filter(c => c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
             const rem = Math.max(0, t85 - coll);
             const pct = t85 > 0 ? Math.round((coll / t85) * 100) : 0;
@@ -743,9 +748,9 @@ function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, a
                   <tr>
                     <th style={th}>סעיף</th>
                     <th style={thL}>יעד 100%</th>
-                    <th style={thL}>יעד 85%</th>
+                    <th style={thL}>יעד {collPct}%</th>
                     <th style={thL}>נגבה</th>
-                    <th style={thL}>נותר (מ-85%)</th>
+                    <th style={thL}>נותר (מ-{collPct}%)</th>
                     <th style={{ ...thL, minWidth: "140px" }}>התקדמות</th>
                   </tr>
                 </thead>
@@ -866,12 +871,13 @@ function AnnualReport({ data, isLoading, cfgMap, categories, grades, sections, a
 // ─── Horim Report ─────────────────────────────────────────────────────────────
 
 function HorimReport({ grades, sections, amounts, collections, refunds, isLoading }: { grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[]; refunds: ParentRefund[]; isLoading: boolean }) {
+  const { data: collPct = 85 } = useCollectionPct();
   const isMobile = useIsMobile();
   if (isLoading) return <Loader />;
   if (grades.length === 0) return <EmptyState text="אין שכבות — הגדר שכבות במסך ההגדרות" />;
   const rows = grades.map((grade) => {
     const ga = amounts.filter((a) => a.grade_id === grade.id);
-    const target = sections.reduce((s, sec) => s + computeTarget(grade, ga.find((a) => a.parent_section_id === sec.id)), 0);
+    const target = sections.reduce((s, sec) => s + computeTarget(grade, ga.find((a) => a.parent_section_id === sec.id), collPct), 0);
     const collected = collections.filter((c) => c.grade_id === grade.id).reduce((s, c) => s + c.amount, 0);
     const remaining = target - collected;
     const pct = target > 0 ? Math.round((collected / target) * 100) : 0;
@@ -881,7 +887,7 @@ function HorimReport({ grades, sections, amounts, collections, refunds, isLoadin
   const tC = rows.reduce((s, r) => s + r.collected, 0);
   const tR = tT - tC;
   const tP = tT > 0 ? Math.round((tC / tT) * 100) : 0;
-  const tT85 = tT * 0.85;
+  const tT85 = tT * (collPct / 100);
 
   // Per-section summary
   const sectionSummary = sections.map((sec) => {
@@ -893,7 +899,7 @@ function HorimReport({ grades, sections, amounts, collections, refunds, isLoadin
       secCollected += collections.filter((c) => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
     });
     if (total100 === 0) return null;
-    const total85 = total100 * 0.85;
+    const total85 = total100 * (collPct / 100);
     const remaining85 = Math.max(0, total85 - secCollected);
     const pct = total85 > 0 ? Math.round((secCollected / total85) * 100) : 0;
     return { sec, total100, total85, secCollected, remaining85, pct };
@@ -927,9 +933,9 @@ function HorimReport({ grades, sections, amounts, collections, refunds, isLoadin
               <tr>
                 <th style={th}>סעיף</th>
                 <th style={thL}>יעד 100%</th>
-                <th style={thL}>יעד 85%</th>
+                <th style={thL}>יעד {collPct}%</th>
                 <th style={thL}>נגבה</th>
-                <th style={thL}>נותר (מ-85%)</th>
+                <th style={thL}>נותר (מ-{collPct}%)</th>
                 <th style={{ ...thL, minWidth: "140px" }}>התקדמות</th>
               </tr>
             </thead>
@@ -959,7 +965,7 @@ function HorimReport({ grades, sections, amounts, collections, refunds, isLoadin
           const a = amounts.find(am => am.grade_id === g.id && am.parent_section_id === sec.id);
           if (!a || a.amount_per_student === 0) return null;
           const t100 = a.amount_per_student * g.student_count;
-          const t85 = t100 * 0.85;
+          const t85 = t100 * (collPct / 100);
           const coll = collections.filter(c => c.grade_id === g.id && c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
           const rem = Math.max(0, t85 - coll);
           const pct = t85 > 0 ? Math.round((coll / t85) * 100) : 0;
@@ -978,7 +984,7 @@ function HorimReport({ grades, sections, amounts, collections, refunds, isLoadin
                 <span style={{ background: "#F4EBF2", color: "#6B2356", borderRadius: "8px", padding: "3px 10px", fontSize: "12.5px", fontWeight: 700 }}>{sec.name}</span>
                 <span style={{ fontWeight: 700, fontSize: "14px", color: "#1A1A1A" }}>פירוט לפי שכבה</span>
               </div>
-              <span style={{ fontSize: "13px", fontWeight: 700, color: totPct >= 85 ? "#2D6644" : "#8B2F6E" }}>{totPct}% נגבה מיעד 85%</span>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: totPct >= 85 ? "#2D6644" : "#8B2F6E" }}>{totPct}% נגבה מיעד {collPct}%</span>
             </div>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead style={{ background: "#FAF5F9" }}>
@@ -986,7 +992,7 @@ function HorimReport({ grades, sections, amounts, collections, refunds, isLoadin
                   <th style={th}>שכבה</th>
                   <th style={thL}>תלמידים</th>
                   <th style={thL}>יעד 100%</th>
-                  <th style={thL}>יעד 85%</th>
+                  <th style={thL}>יעד {collPct}%</th>
                   <th style={thL}>נגבה</th>
                   <th style={thL}>נותר</th>
                   <th style={{ ...thL, minWidth: "140px" }}>התקדמות</th>
@@ -1119,6 +1125,7 @@ function PeriodicReport({
   cfgMap: SourceCfgMap; categories: PeriodicCategory[];
   grades: Grade[]; sections: ParentSection[]; amounts: GradeSectionAmount[]; collections: ParentCollection[];
 }) {
+  const { data: collPct = 85 } = useCollectionPct();
   const isMobile = useIsMobile();
   const periodTypeOptions: { key: PeriodType; label: string; emoji: string }[] = [
     { key: "monthly",   label: "חודשי",           emoji: "📅" },
@@ -1439,7 +1446,7 @@ function PeriodicReport({
               }, 0);
               const coll = periodColl.filter(c => c.parent_section_id === sec.id).reduce((s, c) => s + c.amount, 0);
               if (coll === 0) return null;
-              const t85 = t100 * 0.85;
+              const t85 = t100 * (collPct / 100);
               const pct = t85 > 0 ? Math.round((coll / t85) * 100) : 0;
               return { sec, t85, coll, pct };
             }).filter((r): r is NonNullable<typeof r> => r !== null);
@@ -1458,7 +1465,7 @@ function PeriodicReport({
                   <thead style={{ background: "#FAF5F9" }}>
                     <tr>
                       <th style={th}>סעיף</th>
-                      <th style={thL}>יעד 85% (שנתי)</th>
+                      <th style={thL}>יעד {collPct}% (שנתי)</th>
                       <th style={thL}>נגבה בתקופה</th>
                       <th style={{ ...thL, minWidth: "140px" }}>% מהיעד השנתי</th>
                     </tr>
