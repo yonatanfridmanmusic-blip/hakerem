@@ -5,6 +5,7 @@
 // The version label in the sidebar footer re-opens the full changelog on demand.
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { X, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,7 +16,10 @@ import { APP_VERSION, CHANGELOG, entriesSince, type ChangelogEntry } from "@/lib
 
 export function WhatsNewModal({ entries, onClose }: { entries: ChangelogEntry[]; onClose: () => void }) {
   if (entries.length === 0) return null;
-  return (
+  // Portal to <body>: the sidebar is position:sticky (own stacking context), so a
+  // modal rendered inside it gets painted under the page content. Portalling makes
+  // the modal viewport-level regardless of where it was opened from.
+  return createPortal(
     <div style={{
       position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.4)",
       display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
@@ -70,7 +74,8 @@ export function WhatsNewModal({ entries, onClose }: { entries: ChangelogEntry[];
           ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
