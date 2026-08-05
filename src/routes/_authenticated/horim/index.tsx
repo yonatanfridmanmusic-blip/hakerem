@@ -18,6 +18,7 @@ import {
   useDeleteParentRefund,
   useUpsertGradeSectionAmount,
   useCollectionPct,
+  useSetCollectionPct,
   useAddParentCollection,
   useUpdateParentCollection,
   useDeleteParentCollection,
@@ -1236,7 +1237,12 @@ export default function HorimPage() {
   // "full" = 100%. The year's pct is the wired default — no more hardcoded 85.
   const { data: yearPct = 85 } = useCollectionPct();
   const [basisMode, setBasisMode] = useState<"year" | "full">("year");
-  const basis = basisMode === "year" ? yearPct : 100;
+  // Forecast mode: a temporary what-if view. null = off. NEVER persisted —
+  // resets on refresh; only the explicit "קבע" button writes the setting.
+  const [forecastPct, setForecastPct] = useState<number | null>(null);
+  const [confirmSetPct, setConfirmSetPct] = useState(false);
+  const setCollectionPct = useSetCollectionPct();
+  const basis = forecastPct ?? (basisMode === "year" ? yearPct : 100);
   const [guardMsg, setGuardMsg] = useState<string | null>(null);
   const [editingCollection, setEditingCollection] = useState<ParentCollection | null>(null);
   const [deletingCollectionId, setDeletingCollectionId] = useState<string | null>(null);
@@ -1373,18 +1379,31 @@ export default function HorimPage() {
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
             {/* Basis toggle */}
             <div style={{ display: "flex", background: "#F0EBE6", borderRadius: "8px", padding: "3px", gap: "2px" }}>
-              {([["year", `${yearPct}%`], ["full", "100%"]] as const).map(([mode, label]) => (
-                <button key={mode} onClick={() => setBasisMode(mode)} style={{
-                  padding: "5px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "500",
-                  border: "none", cursor: "pointer", fontFamily: "var(--font-sans)",
-                  background: basisMode === mode ? "#fff" : "transparent",
-                  color: basisMode === mode ? "#8B2F6E" : "#888079",
-                  boxShadow: basisMode === mode ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
-                  transition: "all 0.15s",
-                }}>
-                  {label}
-                </button>
-              ))}
+              {([["year", `${yearPct}%`], ["full", "100%"]] as const).map(([mode, label]) => {
+                const active = forecastPct === null && basisMode === mode;
+                return (
+                  <button key={mode} onClick={() => { setForecastPct(null); setConfirmSetPct(false); setBasisMode(mode); }} style={{
+                    padding: "5px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "500",
+                    border: "none", cursor: "pointer", fontFamily: "var(--font-sans)",
+                    background: active ? "#fff" : "transparent",
+                    color: active ? "#8B2F6E" : "#888079",
+                    boxShadow: active ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+                    transition: "all 0.15s",
+                  }}>
+                    {label}
+                  </button>
+                );
+              })}
+              <button onClick={() => { setForecastPct((p) => p === null ? yearPct : null); setConfirmSetPct(false); }} style={{
+                padding: "5px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "500",
+                border: "none", cursor: "pointer", fontFamily: "var(--font-sans)",
+                background: forecastPct !== null ? "#B8860B" : "transparent",
+                color: forecastPct !== null ? "#fff" : "#888079",
+                boxShadow: forecastPct !== null ? "0 1px 3px rgba(0,0,0,0.2)" : "none",
+                transition: "all 0.15s",
+              }}>
+                תחזית {forecastPct !== null ? `${forecastPct}%` : "▾"}
+              </button>
             </div>
             {canWrite && (
               <button
@@ -1441,6 +1460,75 @@ export default function HorimPage() {
           </div>
         </div>
 
+        {/* ── Forecast strip — temporary what-if view, never persisted ── */}
+        {forecastPct !== null && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap",
+            background: "linear-gradient(135deg, #FDF6E3, #FBF0D9)",
+            border: "1.5px solid #E8CF9C", borderRadius: "14px",
+            padding: "12px 18px",
+          }}>
+            <span style={{
+              fontSize: "11px", fontWeight: "700", color: "#fff", background: "#B8860B",
+              borderRadius: "99px", padding: "3px 10px", letterSpacing: "0.05em", whiteSpace: "nowrap",
+            }}>
+              מצב תחזית
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: "220px" }}>
+              <span className="num" style={{ fontSize: "20px", fontWeight: "600", color: "#8B5E0B", minWidth: "52px" }}>
+                {forecastPct}%
+              </span>
+              <input
+                type="range" min={50} max={100} step={1}
+                value={forecastPct}
+                onChange={(e) => { setForecastPct(Number(e.target.value)); setConfirmSetPct(false); }}
+                style={{ flex: 1, maxWidth: "300px", accentColor: "#B8860B", cursor: "grab" }}
+              />
+              <span style={{ fontSize: "11.5px", color: "#8B5E0B", whiteSpace: "nowrap" }}>
+                אחוז השנה הקבוע: <b>{yearPct}%</b>
+              </span>
+            </div>
+            <span style={{ fontSize: "11.5px", color: "#A08040" }}>
+              תצוגה זמנית — לא נשמרת
+            </span>
+            {canWrite && forecastPct !== yearPct && (
+              confirmSetPct ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", color: "#8B5E0B", fontWeight: "600" }}>
+                    לקבוע {forecastPct}% כאחוז השנה? כל היעדים במערכת יתעדכנו.
+                  </span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await setCollectionPct.mutateAsync(forecastPct);
+                        toast.success(`אחוז הגבייה נקבע ל-${forecastPct}%`);
+                        setForecastPct(null); setConfirmSetPct(false); setBasisMode("year");
+                      } catch { toast.error("שגיאה בקביעת אחוז הגבייה"); }
+                    }}
+                    disabled={setCollectionPct.isPending}
+                    style={{ padding: "6px 14px", borderRadius: "8px", border: "none", background: "#B8860B", color: "#fff", fontSize: "12.5px", fontWeight: "600", cursor: "pointer", fontFamily: "var(--font-sans)" }}
+                  >
+                    {setCollectionPct.isPending ? "קובע..." : "כן, קבע"}
+                  </button>
+                  <button onClick={() => setConfirmSetPct(false)}
+                    style={{ padding: "6px 10px", borderRadius: "8px", border: "1px solid #E8CF9C", background: "#fff", color: "#8B5E0B", fontSize: "12.5px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                    ביטול
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmSetPct(true)}
+                  style={{ padding: "6px 14px", borderRadius: "8px", border: "1.5px solid #B8860B", background: "#fff", color: "#8B5E0B", fontSize: "12.5px", fontWeight: "600", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-sans)" }}>
+                  קבע {forecastPct}% כאחוז השנה
+                </button>
+              )
+            )}
+            <button onClick={() => { setForecastPct(null); setConfirmSetPct(false); }}
+              title="חזרה לתצוגה רגילה"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#B8A060", padding: "2px", fontSize: "15px", lineHeight: 1 }}>
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Summary hero */}
         <div style={{

@@ -521,6 +521,31 @@ export function computeTarget(
   return gsa.amount_per_student * grade.student_count * mult;
 }
 
+// Set the year's collection percentage — the explicit "קבע כאחוז השנה" action.
+// This is the ONLY writer; the forecast slider never persists anything.
+export function useSetCollectionPct() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (pct: number) => {
+      if (!(pct >= 50 && pct <= 100)) throw new Error("אחוז גבייה לא תקין");
+      const yearId = await getActiveYearId();
+      if (!yearId) throw new Error("אין שנת לימודים פעילה");
+      const { error } = await supabase
+        .from("school_years")
+        .update({ collection_percentage: pct })
+        .eq("id", yearId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      // Everything derived from the percentage recalculates
+      queryClient.invalidateQueries({ queryKey: ["collection-pct"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["source-breakdown"] });
+      queryClient.invalidateQueries({ queryKey: ["school-years"] });
+    },
+  });
+}
+
 // The active year's collection percentage — the single source for every target calculation.
 // Falls back to 85 defensively (missing/zero value).
 export function useCollectionPct() {
