@@ -410,12 +410,16 @@ async function callClaude(
 
         // ── get_horim_summary ─────────────────────────────────────────────────
         } else if (blk.name === "get_horim_summary") {
-          const [secR, gradeR, gsaR, colR] = await Promise.all([
+          const [secR, gradeR, gsaR, colR, yrPctR] = await Promise.all([
             uc.from("parent_sections").select("id,name,order_index").eq("school_year_id", yid).eq("is_active", true).order("order_index"),
             uc.from("grades").select("id,name,student_count").eq("school_year_id", yid).order("order_index"),
             uc.from("grade_section_amounts").select("grade_id,parent_section_id,amount_per_student").eq("school_year_id", yid),
             uc.from("parent_collections").select("parent_section_id,amount").eq("school_year_id", yid),
+            uc.from("school_years").select("collection_percentage").eq("id", yid).maybeSingle(),
           ]);
+          // אחוז הגבייה של השנה — אותו מקור אמת כמו כל המסכים (fallback הגנתי 85)
+          const collPct = Number((yrPctR.data as { collection_percentage?: number } | null)?.collection_percentage) > 0
+            ? Number((yrPctR.data as { collection_percentage?: number }).collection_percentage) : 85;
           const grades = (gradeR.data ?? []) as { id: string; name: string; student_count: number }[];
           const sections = (secR.data ?? []) as { id: string; name: string }[];
           const gsaMap: Record<string, number> = {};
@@ -425,9 +429,9 @@ async function callClaude(
           const result = sections.map(s => {
             let total100 = 0;
             for (const g of grades) total100 += (gsaMap[g.id + ":" + s.id] ?? 0) * g.student_count;
-            const total85 = total100 * 0.85;
+            const targetAtPct = total100 * (collPct / 100);
             const collected = colMap[s.id] ?? 0;
-            return { section: s.name, total_100_percent: total100, total_85_percent: Math.round(total85), collected, remaining_to_85: Math.round(Math.max(0, total85 - collected)), collection_rate_pct: total85 > 0 ? Math.round((collected / total85) * 100) : 0 };
+            return { section: s.name, collection_target_percent: collPct, total_100_percent: total100, target_at_collection_percent: Math.round(targetAtPct), collected, remaining_to_target: Math.round(Math.max(0, targetAtPct - collected)), collection_rate_pct: targetAtPct > 0 ? Math.round((collected / targetAtPct) * 100) : 0 };
           }).filter(s => s.total_100_percent > 0);
           tr.push({ type: "tool_result", tool_use_id: blk.id, content: JSON.stringify(result) });
 
@@ -439,7 +443,7 @@ async function callClaude(
 
         // ── get_parent_collections ────────────────────────────────────────────
         } else if (blk.name === "get_parent_collections") {
-          const [secR, gradeR, gsaR, colR] = await Promise.all([
+          const [secR, gradeR, gsaR, colR, yrPctR2] = await Promise.all([
             uc.from("parent_sections").select("id,name,order_index").eq("school_year_id", yid).eq("is_active", true).order("order_index"),
             uc.from("grades").select("id,name,student_count,order_index").eq("school_year_id", yid).order("order_index"),
             uc.from("grade_section_amounts").select("grade_id,parent_section_id,amount_per_student").eq("school_year_id", yid),
@@ -457,14 +461,14 @@ async function callClaude(
               const amt = gsaMap[g.id + ":" + sec.id] ?? 0;
               if (amt === 0) return null;
               const t100 = amt * g.student_count;
-              const t85 = Math.round(t100 * 0.85);
+              const tPct = Math.round(t100 * (collPct2 / 100));
               const coll = colMap[g.id + ":" + sec.id] ?? 0;
-              return { grade: g.name, students: g.student_count, amount_per_student: amt, target_100: t100, target_85: t85, collected: coll, remaining: Math.max(0, t85 - coll), pct_of_85: t85 > 0 ? Math.round((coll / t85) * 100) : 0 };
+              return { grade: g.name, students: g.student_count, amount_per_student: amt, target_100: t100, collection_target_percent: collPct2, target_at_collection_percent: tPct, collected: coll, remaining: Math.max(0, tPct - coll), pct_of_target: tPct > 0 ? Math.round((coll / tPct) * 100) : 0 };
             }).filter(Boolean);
             if (gradeRows.length === 0) return null;
             const totColl = gradeRows.reduce((s: number, r) => s + (r as { collected: number }).collected, 0);
-            const totT85 = gradeRows.reduce((s: number, r) => s + (r as { target_85: number }).target_85, 0);
-            return { section: sec.name, total_collected: totColl, total_target_85: totT85, collection_pct: totT85 > 0 ? Math.round((totColl / totT85) * 100) : 0, by_grade: gradeRows };
+            const totTarget = gradeRows.reduce((s: number, r) => s + (r as { target_at_collection_percent: number }).target_at_collection_percent, 0);
+            return { section: sec.name, collection_target_percent: collPct2, total_collected: totColl, total_target_at_percent: totTarget, collection_pct: totTarget > 0 ? Math.round((totColl / totTarget) * 100) : 0, by_grade: gradeRows };
           }).filter(Boolean);
           tr.push({ type: "tool_result", tool_use_id: blk.id, content: JSON.stringify(result) });
 
