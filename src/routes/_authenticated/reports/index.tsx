@@ -287,6 +287,7 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
     return `<tr><td style="font-weight:600">${grade.name}</td><td class="l" style="color:#6B7A72">${grade.student_count}</td><td class="l">${fmt(target)}</td><td class="l green" style="font-weight:600">${fmt(collected)}</td><td class="l" style="font-weight:700;color:${remaining <= 0 ? "#2D6644" : "#B5472A"}">${remaining <= 0 ? '<span class="done-badge">✓ הושלם</span>' : fmt(remaining)}</td><td class="l" style="min-width:110px"><div class="bar-label">${pct}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(pct, 100)}%;background:${barColor}"></div></div></td></tr>`;
   }).join("");
   const tT = grades.map((g) => { const ga = amounts.filter((a) => a.grade_id === g.id); return sections.reduce((s, sec) => s + computeTarget(g, ga.find((a) => a.parent_section_id === sec.id), collPct), 0); }).reduce((a, b) => a + b, 0);
+  const tTFull = grades.map((g) => { const ga = amounts.filter((a) => a.grade_id === g.id); return sections.reduce((s, sec) => s + computeTarget(g, ga.find((a) => a.parent_section_id === sec.id), 100), 0); }).reduce((a, b) => a + b, 0);
   const tC = collections.reduce((s, c) => s + c.amount, 0);
   const tR = tT - tC;
   const tP = tT > 0 ? Math.round((tC / tT) * 100) : 0;
@@ -321,8 +322,8 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
   <div class="content">
     <h2>סיכום גבייה</h2>
     <div class="kpi-grid kpi-4">
-      <div class="kpi-card"><div class="kpi-label">יעד גבייה (100%)</div><div class="kpi-value">${fmt(tT)}</div><div class="kpi-sub">${tS} תלמידים</div></div>
-      <div class="kpi-card" style="border-color:#DDD0E8"><div class="kpi-label">יעד גבייה (${collPct}%)</div><div class="kpi-value plum">${fmt(tT * (collPct / 100))}</div></div>
+      <div class="kpi-card"><div class="kpi-label">יעד גבייה (100%)</div><div class="kpi-value">${fmt(tTFull)}</div><div class="kpi-sub">${tS} תלמידים</div></div>
+      <div class="kpi-card" style="border-color:#DDD0E8"><div class="kpi-label">יעד גבייה (${collPct}%)</div><div class="kpi-value plum">${fmt(tT)}</div></div>
       <div class="kpi-card" style="background:#EDFBF3;border-color:#C6E8D0"><div class="kpi-label">נגבה עד כה</div><div class="kpi-value green">${fmt(tC)}</div><div style="margin-top:8px"><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(tP, 100)}%;background:#2D6644"></div></div><div style="font-size:10px;color:#4A6656;margin-top:3px;font-weight:500">${tP}% מהיעד</div></div></div>
       <div class="kpi-card" style="background:${tR <= 0 ? "#EDFBF3" : "#FDF1EA"};border-color:${tR <= 0 ? "#C6E8D0" : "#EDCFC6"}"><div class="kpi-label">טרם נגבה</div><div class="kpi-value ${tR <= 0 ? "green" : "rust"}">${fmt(tR)}</div></div>
     </div>
@@ -355,7 +356,7 @@ function buildHorimHTML(grades: Grade[], sections: ParentSection[], amounts: Gra
     <tbody>${gradeRows}${footRow}</tbody></table></div>`;
     }).join("")}
     <h2>פירוט לפי שכבה</h2>
-    <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד</th><th class="l">נגבה</th><th class="l">טרם נגבה</th><th class="l">התקדמות</th></tr></thead>
+    <table><thead><tr><th>שכבה</th><th class="l">תלמידים</th><th class="l">יעד (${collPct}%)</th><th class="l">נגבה</th><th class="l">טרם נגבה</th><th class="l">התקדמות</th></tr></thead>
     <tbody>${rows}<tr class="total-row"><td>סה"כ</td><td class="l" style="color:#6B7A72">${tS}</td><td class="l">${fmt(tT)}</td><td class="l green">${fmt(tC)}</td><td class="l" style="color:${tR <= 0 ? "#2D6644" : "#B5472A"}">${fmt(tR)}</td><td class="l"><div class="bar-label">${tP}%</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.min(tP, 100)}%;background:#8B2F6E"></div></div></td></tr></tbody></table>
     ${refunds.length > 0 ? (() => {
       const gradeMap = new Map(grades.map(g => [g.id, g.name]));
@@ -877,17 +878,19 @@ function HorimReport({ grades, sections, amounts, collections, refunds, isLoadin
   if (grades.length === 0) return <EmptyState text="אין שכבות — הגדר שכבות במסך ההגדרות" />;
   const rows = grades.map((grade) => {
     const ga = amounts.filter((a) => a.grade_id === grade.id);
+    // target = לפי אחוז השנה; targetFull = יעד מלא 100% (בלי הכפלה כפולה!)
     const target = sections.reduce((s, sec) => s + computeTarget(grade, ga.find((a) => a.parent_section_id === sec.id), collPct), 0);
+    const targetFull = sections.reduce((s, sec) => s + computeTarget(grade, ga.find((a) => a.parent_section_id === sec.id), 100), 0);
     const collected = collections.filter((c) => c.grade_id === grade.id).reduce((s, c) => s + c.amount, 0);
     const remaining = target - collected;
     const pct = target > 0 ? Math.round((collected / target) * 100) : 0;
-    return { grade, target, collected, remaining, pct };
+    return { grade, target, targetFull, collected, remaining, pct };
   });
-  const tT = rows.reduce((s, r) => s + r.target, 0);
+  const tT = rows.reduce((s, r) => s + r.target, 0);        // יעד לפי אחוז השנה
+  const tTFull = rows.reduce((s, r) => s + r.targetFull, 0); // יעד מלא 100%
   const tC = rows.reduce((s, r) => s + r.collected, 0);
   const tR = tT - tC;
   const tP = tT > 0 ? Math.round((tC / tT) * 100) : 0;
-  const tT85 = tT * (collPct / 100);
 
   // Per-section summary
   const sectionSummary = sections.map((sec) => {
@@ -909,8 +912,8 @@ function HorimReport({ grades, sections, amounts, collections, refunds, isLoadin
     <div>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" }}>
         {[
-          { label: "יעד גבייה (100%)", value: tT,   color: "#1A1A1A", bg: "#FAFAF8", border: "#EEE9E2",  sub: null },
-          { label: "יעד גבייה (85%)", value: tT85,  color: "#8B2F6E", bg: "#F7F0F5", border: "#DDD0E8",  sub: null },
+          { label: "יעד גבייה (100%)", value: tTFull, color: "#1A1A1A", bg: "#FAFAF8", border: "#EEE9E2",  sub: null },
+          { label: `יעד גבייה (${collPct}%)`, value: tT, color: "#8B2F6E", bg: "#F7F0F5", border: "#DDD0E8",  sub: null },
           { label: "נגבה",            value: tC,    color: "#2D6644", bg: "#EDFBF3", border: "#C6E8D0",  sub: tP },
           { label: "טרם נגבה",        value: tR,    color: tR > 0 ? "#B5472A" : "#2D6644", bg: tR > 0 ? "#FDF1EA" : "#EDFBF3", border: tR > 0 ? "#EDCFC6" : "#C6E8D0", sub: null },
         ].map((c) => (
@@ -1036,7 +1039,7 @@ function HorimReport({ grades, sections, amounts, collections, refunds, isLoadin
       <div style={{ background: "#fff", borderRadius: "16px", border: "1px solid #EEE9E2", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
         <div style={{ padding: "16px 22px", borderBottom: "1px solid #F4F1EC" }}><div style={{ fontWeight: 700, fontSize: "14.5px", color: "#1A1A1A" }}>גבייה לפי שכבה</div></div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead style={{ background: "#FAFAF8" }}><tr><th style={th}>שכבה</th><th style={thL}>תלמידים</th><th style={thL}>יעד גבייה</th><th style={thL}>נגבה</th><th style={thL}>טרם נגבה</th><th style={{ ...thL, minWidth: "140px" }}>התקדמות</th></tr></thead>
+          <thead style={{ background: "#FAFAF8" }}><tr><th style={th}>שכבה</th><th style={thL}>תלמידים</th><th style={thL}>יעד גבייה ({collPct}%)</th><th style={thL}>נגבה</th><th style={thL}>טרם נגבה</th><th style={{ ...thL, minWidth: "140px" }}>התקדמות</th></tr></thead>
           <tbody>
             {rows.map(({ grade, target, collected, remaining, pct }) => (
               <tr key={grade.id}>
