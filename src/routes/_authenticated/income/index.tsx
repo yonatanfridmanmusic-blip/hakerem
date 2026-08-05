@@ -674,6 +674,11 @@ export default function IncomePage() {
     const grade = (horimGrades ?? []).find((g) => g.id === gsa.grade_id);
     return grade ? sum + computeTarget(grade, gsa, collectionPct) : sum;
   }, 0);
+  // Full 100% target — shown alongside the year-pct target (both views at a glance)
+  const horimTargetFull = (horimGSA ?? []).reduce((sum, gsa) => {
+    const grade = (horimGrades ?? []).find((g) => g.id === gsa.grade_id);
+    return grade ? sum + gsa.amount_per_student * grade.student_count : sum;
+  }, 0);
   const plannedFor = (slug: string): number =>
     slug === "horim" ? horimTarget : (sourcePlans?.[slug] ?? 0);
   const anyPlanned = sources.some((s) => plannedFor(s.slug) > 0);
@@ -750,7 +755,12 @@ export default function IncomePage() {
                           <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                             <span className="num" style={{ fontSize: "12px", color: pct >= 100 ? "#8FDCA8" : "rgba(255,255,255,0.55)" }}>{pct}%</span>
                             <span className="num" style={{ fontSize: "13px", color: "#fff", fontWeight: "300" }}>
-                              {fmt(amt)} <span style={{ color: "rgba(255,255,255,0.45)", fontSize: "11.5px" }}>מתוך {fmt(planned)} מתוכנן</span>
+                              {fmt(amt)}{" "}
+                              <span style={{ color: "rgba(255,255,255,0.45)", fontSize: "11.5px" }}>
+                                {s.slug === "horim" && horimTargetFull > planned
+                                  ? <>מתוך {fmt(planned)} ({collectionPct}%) · מלא {fmt(horimTargetFull)}</>
+                                  : <>מתוך {fmt(planned)} מתוכנן</>}
+                              </span>
                             </span>
                           </div>
                         </div>
