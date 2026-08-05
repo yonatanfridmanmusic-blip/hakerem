@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/layout/app-shell";
 import { AiAgentProvider, AiChatPanel, AiFloatingButton } from "@/components/ai-agent";
+import { WhatsNewGate } from "@/components/whats-new";
 import { getViewAsOrg, clearViewAsOrg } from "@/lib/view-as";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 
@@ -111,6 +112,7 @@ function AuthenticatedLayout() {
       </AppShell>
       {!viewAs && <AiChatPanel />}
       {!viewAs && <AiFloatingButton />}
+      {!viewAs && <WhatsNewGate />}
       <ViewAsBanner />
     </AiAgentProvider>
   );

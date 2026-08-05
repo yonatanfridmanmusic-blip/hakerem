@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useOrganization, useOrgMembers } from "@/hooks/use-organization";
 import { getViewAsOrg } from "@/lib/view-as";
 import { useQueryClient } from "@tanstack/react-query";
+import { VersionFooter, VersionFooterLight } from "@/components/whats-new";
 
 const NAV_ITEMS = [
   { label: "לוח בקרה",   shortLabel: "בקרה",   href: "/dashboard", icon: LayoutDashboard },
@@ -223,6 +224,7 @@ function MobileHeader() {
                 <LogOut size={14} color="#DC2626" />
                 התנתקות
               </button>
+              <VersionFooterLight />
             </div>
           </>
         )}
@@ -535,6 +537,7 @@ function AppSidebar({ onClose }: AppSidebarProps) {
             <LogOut size={13} />
           </button>
         </div>
+        <VersionFooter />
       </div>
     </aside>
   );
