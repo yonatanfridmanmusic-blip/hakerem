@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-is-mobile";
-import { Plus, X, Check, ChevronDown, ChevronUp, Users, Settings2, Pencil, Trash2 } from "lucide-react";
+import { Plus, X, Check, ChevronDown, ChevronUp, Users, Settings2, Pencil, Trash2, FileUp } from "lucide-react";
+import { KesafimImportModal } from "@/components/kesafim-import";
 import { useCanWrite } from "@/hooks/use-organization";
 import { DateInput } from "@/components/ui/date-input";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
@@ -1232,6 +1233,7 @@ export default function HorimPage() {
   const [showModal, setShowModal] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [showSectionsModal, setShowSectionsModal] = useState(false);
+  const [showKesafimImport, setShowKesafimImport] = useState(false);
   const [preGradeId, setPreGradeId] = useState<string | undefined>();
   // Basis: "year" = the school year's collection percentage (school_years.collection_percentage),
   // "full" = 100%. The year's pct is the wired default — no more hardcoded 85.
@@ -1326,6 +1328,9 @@ export default function HorimPage() {
       {showSectionsModal && (
         <ManageSectionsModal sections={allSections} onClose={() => setShowSectionsModal(false)} />
       )}
+      {showKesafimImport && (
+        <KesafimImportModal grades={grades} sections={sections} onClose={() => setShowKesafimImport(false)} />
+      )}
       {editingCollection && (
         <EditCollectionModal collection={editingCollection} sections={sections} onClose={() => setEditingCollection(null)} />
       )}
@@ -1405,6 +1410,25 @@ export default function HorimPage() {
                 תחזית {forecastPct !== null ? `${forecastPct}%` : "▾"}
               </button>
             </div>
+            {canWrite && (
+              <button
+                onClick={() => {
+                  if (grades.length === 0) { setGuardMsg("יש להגדיר שכבות תחילה"); return; }
+                  setShowKesafimImport(true);
+                }}
+                style={{
+                  display: "flex", alignItems: "center", gap: "6px",
+                  padding: "10px 14px",
+                  border: "1px solid #E8E2D9", borderRadius: "10px",
+                  background: "#fff", color: "#6B6560",
+                  fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)",
+                }}
+                title="ייבוא דוח סטטוס גביה מתוכנת כספים 2000"
+              >
+                <FileUp size={15} />
+                ייבוא מכספים 2000
+              </button>
+            )}
             {canWrite && (
               <button
                 onClick={() => setShowSectionsModal(true)}
