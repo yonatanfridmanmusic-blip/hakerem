@@ -674,6 +674,89 @@ export type Database = {
           },
         ]
       }
+      kesafim_imports: {
+        Row: {
+          committed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          file_path: string
+          id: string
+          parsed_payload: Json | null
+          report_date: string | null
+          report_school_id: string | null
+          school_year_id: string
+          status: string
+        }
+        Insert: {
+          committed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          file_path: string
+          id?: string
+          parsed_payload?: Json | null
+          report_date?: string | null
+          report_school_id?: string | null
+          school_year_id: string
+          status?: string
+        }
+        Update: {
+          committed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          file_path?: string
+          id?: string
+          parsed_payload?: Json | null
+          report_date?: string | null
+          report_school_id?: string | null
+          school_year_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kesafim_imports_school_year_id_fkey"
+            columns: ["school_year_id"]
+            isOneToOne: false
+            referencedRelation: "school_years"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kesafim_section_map: {
+        Row: {
+          id: string
+          organization_id: string
+          parent_section_id: string
+          report_name_normalized: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          parent_section_id: string
+          report_name_normalized: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          parent_section_id?: string
+          report_name_normalized?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kesafim_section_map_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kesafim_section_map_parent_section_id_fkey"
+            columns: ["parent_section_id"]
+            isOneToOne: false
+            referencedRelation: "parent_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       license_codes: {
         Row: {
           code: string
@@ -920,6 +1003,7 @@ export type Database = {
           created_by: string | null
           grade_id: string
           id: string
+          import_id: string | null
           notes: string | null
           parent_section_id: string | null
           school_year_id: string
@@ -932,6 +1016,7 @@ export type Database = {
           created_by?: string | null
           grade_id: string
           id?: string
+          import_id?: string | null
           notes?: string | null
           parent_section_id?: string | null
           school_year_id: string
@@ -944,12 +1029,20 @@ export type Database = {
           created_by?: string | null
           grade_id?: string
           id?: string
+          import_id?: string | null
           notes?: string | null
           parent_section_id?: string | null
           school_year_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "parent_collections_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "kesafim_imports"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "parent_collections_grade_id_fkey"
             columns: ["grade_id"]
