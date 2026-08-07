@@ -34,7 +34,9 @@ interface ViewGrade { label: string; rows: ViewRow[]; invalid: ParsedRow[]; tota
  * "הכנסות" לא נפגעת), אות שכבה סופית בודדת, ורווחים.
  */
 export function normalizeReportName(raw: string): string {
-  let s = raw.trim();
+  // אחידות גרשיים: המודל מפיק לפעמים " ולפעמים ״ (גרשיים עבריים) לאותו שם
+  // (נצפה בפועל: תל"ן מול תל״ן) — מנרמלים לגרשיים עבריים כדי שהזיכרון יתפוס.
+  let s = raw.trim().replace(/["”“]/g, "״").replace(/['’‘`´]/g, "׳");
   let changed = true;
   while (changed) {
     changed = false;
