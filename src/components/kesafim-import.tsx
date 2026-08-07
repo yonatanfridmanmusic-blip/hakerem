@@ -99,11 +99,13 @@ const chipStyle = (active: boolean): React.CSSProperties => ({
 // ─── הקומפוננטה ───────────────────────────────────────────────────────────────
 
 export function KesafimImportModal({
-  onClose, grades, sections,
+  onClose, grades, sections, onCommitted,
 }: {
   onClose: () => void;
   grades: Grade[];
   sections: ParentSection[];
+  /** שלב 5 (שילוב בוויזארד): נקרא פעם אחת אחרי שהייבוא סומן committed. אופציונלי — ברירת מחדל ללא שינוי התנהגות. */
+  onCommitted?: () => void;
 }) {
   const qc = useQueryClient();
   const { data: membership } = useOrganization();
@@ -485,6 +487,7 @@ export function KesafimImportModal({
         seconds: Math.round((performance.now() - t0) / 100) / 10,
       });
       setPhase("done");
+      onCommitted?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
       setPhase("review");

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowDownLeft, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDashboardSummary, type SourceSummary } from "@/hooks/use-dashboard-summary";
 import { useSourceBreakdown } from "@/hooks/use-source-breakdown";
 import { useOrganization, usePendingMembersCount } from "@/hooks/use-organization";
@@ -11,7 +11,8 @@ import { useCreateSchoolYear } from "@/hooks/use-school-years";
 import { useAddGrade, useDeleteGrade, useGrades } from "@/hooks/use-grades";
 import { useAddBudgetCategory, useDeleteBudgetCategory, useUpdatePlannedAmount, type BudgetSource } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, useAddBudgetSource, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
-import { syncHorimBudgetCategory } from "@/hooks/use-horim";
+import { syncHorimBudgetCategory, useParentSections } from "@/hooks/use-horim";
+import { KesafimImportModal } from "@/components/kesafim-import";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { toast } from "sonner";
 
@@ -1067,6 +1068,76 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
     return true;
   };
 
+  // ── כספים 2000: ייבוא בוויזארד (שלב 5) — בלוק אדיטיבי, mode "first" בלבד ────
+  // הייבוא כותב ישירות ל-DB דרך הרכיב הקיים (ללא שינוי בלוגיקה שלו);
+  // הטיוטה של טאב ההורים מפנה לו את הדרך אחרי commit מוצלח.
+  const [showKesafimImport, setShowKesafimImport] = useState(false);
+  const [kesafimConfirmOpen, setKesafimConfirmOpen] = useState(false);
+  const [showManualAfterImport, setShowManualAfterImport] = useState(false);
+  const { data: wizardParentSections = [] } = useParentSections();
+  // "המצב המיובא": קיים ייבוא committed לשנה + מספרי סיכום לבאנר (React Query —
+  // שורד resume וגם דפדפן אחר, בניגוד ל-localStorage)
+  const { data: kesafimImported = null } = useQuery({
+    queryKey: ["kesafim-imported-info", yearId],
+    enabled: mode === "first" && !!yearId,
+    queryFn: async () => {
+      const { data: imps } = await supabase
+        .from("kesafim_imports")
+        .select("id, report_date")
+        .eq("school_year_id", yearId)
+        .eq("status", "committed")
+        .order("created_at", { ascending: false });
+      if (!imps || imps.length === 0) return null;
+      const { data: cols } = await supabase
+        .from("parent_collections")
+        .select("amount, parent_section_id")
+        .eq("school_year_id", yearId)
+        .not("import_id", "is", null);
+      const total = (cols ?? []).reduce((s, c) => s + Number(c.amount), 0);
+      const sectionCount = new Set((cols ?? []).map((c) => c.parent_section_id)).size;
+      return {
+        total, rows: (cols ?? []).length, sections: sectionCount,
+        reportDate: (imps[0].report_date as string | null),
+      };
+    },
+  });
+
+  // טיוטת הורים לא-טריוויאלית — מחייבת אזהרה לפני ייבוא (הכרעה מאושרת בתוכנית שלב 5)
+  const horimDraftNonTrivial =
+    wizardSections.some(s => s.name !== "שכר לימוד") ||
+    Object.values(wizardSectionDefaults).some(v => v !== "" && Number(v) > 0) ||
+    Object.values(wizardGSA).some(g => Object.values(g).some(v => v && v !== "na" && Number(v) > 0));
+
+  const openKesafimImport = () => {
+    setKesafimConfirmOpen(false);
+    // מגן מפני cache ריק/ישן של סעיפים לפני מסך המיפוי של הייבוא
+    queryClient.invalidateQueries({ queryKey: ["parent-sections"] });
+    setShowKesafimImport(true);
+  };
+
+  // לחיצה על "העלאת דוח": אם יש טיוטה ידנית שטרם נשמרה — אזהרה קודם
+  const requestKesafimImport = () => {
+    if (horimDraftNonTrivial) setKesafimConfirmOpen(true);
+    else openKesafimImport();
+  };
+
+  // אחרי ייבוא מוצלח: הטיוטה הידנית של ההורים מוסרת — הדוח קבע את הסעיפים והיעדים.
+  // לא נוגע בטיוטות הקטגוריות/התכנון ולא בזרימת הסיום המאוחד.
+  const handleKesafimCommitted = () => {
+    try { if (horimDraftKey) localStorage.removeItem(horimDraftKey); } catch { /* quota */ }
+    setWizardSections([]);
+    setWizardSectionGrades({});
+    setWizardSectionDefaults({});
+    setWizardGSA({});
+    setHorimView('sections');
+    setShowManualAfterImport(false);
+    setKesafimConfirmOpen(false);
+    queryClient.invalidateQueries({ queryKey: ["kesafim-imported-info", yearId] });
+  };
+
+  const kesafimDateHe = (iso: string | null) => (iso ? iso.split("-").reverse().join(".") : "");
+  const kesafimFmt = (n: number) => n.toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
   // Unified finish — ALWAYS commits draft categories, planned income AND horim
   // data, no matter which tab's finish button was clicked. Fixes the bug where
   // horim data was silently dropped when finishing from a non-horim tab.
@@ -1416,6 +1487,88 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
               horimView === 'sections' ? (
                 /* ── View A: Define sections + grade applicability ── */
                 <div>
+                  {/* ── כספים 2000: נקודת השילוב של שלב 5 (mode "first" בלבד) ── */}
+                  {mode === "first" && sortedGrades.length > 0 && (kesafimImported ? (
+                    /* מצב מיובא: באנר סיכום במקום הטיוטה הידנית */
+                    <div style={{ background: "#F7EDF4", border: "1px solid #DDB8D4", borderRadius: "14px", padding: "16px 18px", marginBottom: "18px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                        <div style={{ width: "22px", height: "22px", borderRadius: "50%", background: "#EDFBF3", border: "1px solid #B6E8C4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#2D6644" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </div>
+                        <span style={{ fontSize: "14px", fontWeight: "600", color: "#1A1A1A" }}>דוח כספים 2000 יובא בהצלחה</span>
+                      </div>
+                      <div style={{ fontSize: "12.5px", color: "#6B6560", lineHeight: 1.7, marginBottom: "12px" }}>
+                        נרשמו <b className="num">{kesafimImported.rows}</b> שורות גבייה ב-<b className="num">{kesafimImported.sections}</b> סעיפים,
+                        בסך <b className="num">{kesafimFmt(kesafimImported.total)} ₪</b>
+                        {kesafimImported.reportDate && <> (דוח מ-<span className="num">{kesafimDateHe(kesafimImported.reportDate)}</span>)</>}.
+                        הסעיפים, היעדים והגבייה כבר שמורים במערכת — נותר רק לסיים את ההגדרה.
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                        <button type="button" disabled={committingCats} onClick={handleFinishWizardStep2}
+                          style={{ padding: "9px 18px", background: "linear-gradient(135deg,#2D6644,#1A3D2B)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "13.5px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: committingCats ? "wait" : "pointer", opacity: committingCats ? 0.7 : 1, boxShadow: "0 3px 10px rgba(26,61,43,0.25)" }}>
+                          {committingCats ? "שומר..." : "סיים הגדרה ←"}
+                        </button>
+                        <button type="button" onClick={requestKesafimImport}
+                          style={{ padding: "9px 14px", background: "#fff", color: "#8B2F6E", border: "1.5px solid #C080A8", borderRadius: "10px", fontSize: "13px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                          העלאת דוח נוסף
+                        </button>
+                        {!showManualAfterImport && (
+                          <button type="button" onClick={() => setShowManualAfterImport(true)}
+                            style={{ padding: "9px 10px", background: "none", color: "#8B2F6E", border: "none", fontSize: "12.5px", fontFamily: "Rubik, sans-serif", cursor: "pointer", textDecoration: "underline" }}>
+                            הוספת סעיפים ידנית
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* טרם יובא: כרטיס האופציה לצד ההזנה הידנית */
+                    <div style={{ marginBottom: "18px", border: "1.5px dashed #D4A0C8", borderRadius: "14px", padding: "16px 18px", background: "#FDFAFC" }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                        <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: "linear-gradient(135deg,#F7EDF4,#EDD8E8)", border: "1px solid #DDB8D4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8B2F6E" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                          </svg>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: "14px", fontWeight: "600", color: "#1A1A1A", marginBottom: "4px" }}>
+                            יש לכם את תוכנת כספים 2000?
+                            <span style={{ marginRight: "8px", fontSize: "11px", fontWeight: "400", color: "#AAA099", background: "#F0EBE4", borderRadius: "99px", padding: "2px 8px" }}>אופציונלי</span>
+                          </div>
+                          <div style={{ fontSize: "12.5px", color: "#6B6560", lineHeight: 1.6 }}>
+                            העלו את דוח "סטטוס גביה לשיכבה" (0637) — והמערכת תקים לבד את סעיפי הגבייה, היעדים
+                            והגבייה שנרשמה, עם מסך אישור לפני כל כתיבה. אפשר גם להמשיך בהזנה ידנית כרגיל.
+                          </div>
+                          {kesafimConfirmOpen ? (
+                            <div style={{ marginTop: "10px", background: "#FEF7E6", border: "1px solid #F0D9A8", borderRadius: "10px", padding: "10px 12px" }}>
+                              <div style={{ fontSize: "12.5px", color: "#92400E", lineHeight: 1.6, marginBottom: "8px" }}>
+                                שימו לב: הוזנו כאן נתונים ידנית שטרם נשמרו. אחרי ייבוא מוצלח הטיוטה הידנית תוסר —
+                                הדוח יקבע את הסעיפים והיעדים. ממשיכים לייבוא?
+                              </div>
+                              <div style={{ display: "flex", gap: "8px" }}>
+                                <button type="button" onClick={openKesafimImport}
+                                  style={{ padding: "6px 14px", background: "#B45309", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12.5px", fontFamily: "Rubik, sans-serif", cursor: "pointer", fontWeight: "500" }}>
+                                  כן, המשך לייבוא
+                                </button>
+                                <button type="button" onClick={() => setKesafimConfirmOpen(false)}
+                                  style={{ padding: "6px 12px", background: "none", color: "#92400E", border: "1px solid #F0D9A8", borderRadius: "8px", fontSize: "12.5px", fontFamily: "Rubik, sans-serif", cursor: "pointer" }}>
+                                  ביטול
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={requestKesafimImport}
+                              style={{ marginTop: "10px", padding: "8px 16px", border: "1.5px solid #8B2F6E", borderRadius: "8px", background: "#fff", color: "#8B2F6E", fontSize: "13px", fontWeight: "500", cursor: "pointer", fontFamily: "Rubik, sans-serif", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                              </svg>
+                              העלאת דוח כספים 2000
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {(!kesafimImported || showManualAfterImport) && (<>
                   <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "16px", lineHeight: 1.6 }}>
                     הגדירו את סעיפי הגבייה וסמנו לאילו שכבות כל סעיף מתאים.
                   </div>
@@ -1594,6 +1747,7 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                       </button>
                     )}
                   </div>
+                  </>)}
                 </div>
               ) : (
                 /* ── View B: Amounts matrix ── */
@@ -2131,6 +2285,16 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
         )}
 
       </div>
+
+      {/* ── כספים 2000: מודאל הייבוא — הרכיב הקיים, ללא שינוי בלוגיקה שלו ── */}
+      {showKesafimImport && (
+        <KesafimImportModal
+          grades={sortedGrades}
+          sections={wizardParentSections}
+          onClose={() => setShowKesafimImport(false)}
+          onCommitted={handleKesafimCommitted}
+        />
+      )}
     </div>
   );
 }
