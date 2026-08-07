@@ -2291,7 +2291,11 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
         <KesafimImportModal
           grades={sortedGrades}
           sections={wizardParentSections}
-          onClose={() => setShowKesafimImport(false)}
+          onClose={() => {
+            setShowKesafimImport(false);
+            // רענון "המצב המיובא" גם בסגירה בלי commit — מכסה ביטול ייבוא דרך היומן
+            queryClient.invalidateQueries({ queryKey: ["kesafim-imported-info", yearId] });
+          }}
           onCommitted={handleKesafimCommitted}
         />
       )}
