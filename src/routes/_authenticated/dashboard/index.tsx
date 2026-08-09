@@ -1136,7 +1136,8 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   };
 
   const kesafimDateHe = (iso: string | null) => (iso ? iso.split("-").reverse().join(".") : "");
-  const kesafimFmt = (n: number) => n.toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  // סכומים בבאנר תמיד בשתי ספרות עשרוניות (תיקון נוסח, בדיקת 8.8)
+  const kesafimFmt = (n: number) => n.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // Unified finish — ALWAYS commits draft categories, planned income AND horim
   // data, no matter which tab's finish button was clicked. Fixes the bug where
@@ -1536,7 +1537,7 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                           </div>
                           <div style={{ fontSize: "12.5px", color: "#6B6560", lineHeight: 1.6 }}>
                             העלו את דוח "סטטוס גביה לשיכבה" (0637) — והמערכת תקים לבד את סעיפי הגבייה, היעדים
-                            והגבייה שנרשמה, עם מסך אישור לפני כל כתיבה. אפשר גם להמשיך בהזנה ידנית כרגיל.
+                            והגבייה שנרשמה, ותוכלו לאשר הכל לפני שנשמר. אפשר גם להמשיך בהזנה ידנית כרגיל.
                           </div>
                           {kesafimConfirmOpen ? (
                             <div style={{ marginTop: "10px", background: "#FEF7E6", border: "1px solid #F0D9A8", borderRadius: "10px", padding: "10px 12px" }}>
@@ -2285,6 +2286,22 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
         )}
 
       </div>
+
+      {/* ── overlay שמירה — חיווי בלבד על ה-state הקיים committingCats,
+             אפס נגיעה בלוגיקת השמירה (תיקון 5, בדיקת 8.8) ── */}
+      {committingCats && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 70, background: "rgba(13,33,24,0.55)",
+          backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{ background: "#fff", borderRadius: "18px", padding: "30px 40px", boxShadow: "0 24px 80px rgba(0,0,0,0.3)", textAlign: "center", fontFamily: "Rubik, sans-serif" }}>
+            <div style={{ width: "28px", height: "28px", border: "3px solid #E8E2D9", borderTopColor: "#2D6644", borderRadius: "50%", margin: "0 auto 14px", animation: "hakerem-save-spin 0.9s linear infinite" }} />
+            <style>{`@keyframes hakerem-save-spin { to { transform: rotate(360deg); } }`}</style>
+            <div style={{ fontSize: "15px", fontWeight: "500", color: "#1A1A1A", marginBottom: "4px" }}>שומרים את ההגדרות שלכם...</div>
+            <div style={{ fontSize: "12.5px", color: "#6B6560" }}>אל תסגרו את החלון</div>
+          </div>
+        </div>
+      )}
 
       {/* ── כספים 2000: מודאל הייבוא — הרכיב הקיים, ללא שינוי בלוגיקה שלו ── */}
       {showKesafimImport && (

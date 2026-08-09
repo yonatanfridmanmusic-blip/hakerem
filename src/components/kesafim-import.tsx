@@ -50,6 +50,35 @@ export function normalizeReportName(raw: string): string {
   return s;
 }
 
+/**
+ * דמיון בין שני שמות מנורמלים — שכבת ההצעות החכמה במיפוי (תיקוני בדיקת 8.8).
+ * מדרג: זהות (1) · הכלה מלאה (0.9) · חפיפת מילים — מילה זהה או תחילית משותפת
+ * באורך ≥3 (0.75, תופס "טיולים"/"טיול שנתי", "ספרים"/"ספרי לימוד") · דמיון
+ * ביגרמות (Dice). ההצעה לעולם גלויה לאישור — אין ניחוש שקט.
+ */
+export function nameSimilarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) return 0.9;
+  const wordsA = a.split(/\s+/).filter((w) => w.length >= 3);
+  const wordsB = b.split(/\s+/).filter((w) => w.length >= 3);
+  for (const wa of wordsA) {
+    for (const wb of wordsB) {
+      if (wa === wb || wa.startsWith(wb) || wb.startsWith(wa)) return 0.75;
+    }
+  }
+  const bigrams = (s: string) => { const r: string[] = []; for (let i = 0; i < s.length - 1; i++) r.push(s.slice(i, i + 2)); return r; };
+  const A = bigrams(a), B = bigrams(b);
+  if (A.length === 0 || B.length === 0) return 0;
+  const pool = [...B];
+  let inter = 0;
+  for (const g of A) { const i = pool.indexOf(g); if (i >= 0) { inter++; pool.splice(i, 1); } }
+  return (2 * inter) / (A.length + B.length);
+}
+
+/** סף ההצעה: הכלה או חפיפת מילים או דמיון ביגרמות גבוה מאוד */
+const SUGGEST_THRESHOLD = 0.7;
+
 /** "שכבה א" → "א" */
 function reportGradeLetter(label: string): string {
   return label.replace("שכבה", "").trim();
@@ -71,7 +100,7 @@ function formatDateHe(iso: string | null): string {
 // ─── סטייט המיפוי ─────────────────────────────────────────────────────────────
 
 type MappingMode = "map" | "create" | "skip";
-interface Mapping { mode: MappingMode; sectionId: string; newName: string; fromMemory: boolean }
+interface Mapping { mode: MappingMode; sectionId: string; newName: string; fromMemory: boolean; suggested?: boolean }
 
 type Phase = "pick" | "processing" | "review" | "committing" | "done" | "log";
 type ImportMode = "first" | "update";
@@ -259,14 +288,30 @@ export function KesafimImportModal({
         // סעיף מנוהל-ייבוא (יש לו זיכרון) — ברירת מחדל: עדכן יעד לפי הדוח
         choices[r.norm] = "update";
       } else {
-        const byName = sections.find((s) => s.name.trim() === r.norm);
+        // נרמול דו-צדדי (תיקון 1, בדיקת 8.8): גם שמות הסעיפים הקיימים עוברים
+        // נרמול מלא (גרשיים/גרש, רווחים, אות שכבה סופית) — "תל\"ן" הקיים
+        // חייב להתאים ל"תל״ן" מהדוח.
+        const byName = sections.find((s) => normalizeReportName(s.name) === r.norm);
         if (byName) {
           maps[r.norm] = { mode: "map", sectionId: byName.id, newName: r.norm, fromMemory: false };
           // סעיף שנוצר ידנית — ברירת מחדל: השאר את היעד שלי
           choices[r.norm] = "keep";
         } else {
-          maps[r.norm] = { mode: "create", sectionId: "", newName: r.norm, fromMemory: false };
-          choices[r.norm] = "update";
+          // שכבת ההצעות החכמה (תיקון 2): אין התאמה מדויקת אבל יש סעיף קיים
+          // דומה — ברירת המחדל היא הסעיף הקיים, עם חיווי בולט לאישור.
+          // יצירת סעיף חדש נשארת זמינה בבחירה מפורשת.
+          let best: { id: string; score: number } | null = null;
+          for (const s of sections) {
+            const score = nameSimilarity(normalizeReportName(s.name), r.norm);
+            if (score >= SUGGEST_THRESHOLD && (!best || score > best.score)) best = { id: s.id, score };
+          }
+          if (best) {
+            maps[r.norm] = { mode: "map", sectionId: best.id, newName: r.norm, fromMemory: false, suggested: true };
+            choices[r.norm] = "keep";
+          } else {
+            maps[r.norm] = { mode: "create", sectionId: "", newName: r.norm, fromMemory: false };
+            choices[r.norm] = "update";
+          }
         }
       }
     }));
@@ -365,6 +410,11 @@ export function KesafimImportModal({
         written.push({ gradeId: gradeMatch[g.label], gradeLabel: g.label, row: r, per });
       }));
 
+      // מעקב "מה הייבוא הזה יצר" — נשמר ב-parsed_payload._created לניקוי מלא
+      // בביטול (תיקון 3, בדיקת 8.8)
+      const createdSectionIds: string[] = [];
+      const createdGsaCells: { grade_id: string; parent_section_id: string }[] = [];
+
       // 1. סעיפים חדשים — insert אחד
       const usedNorms = [...new Set(written.map((w) => w.row.norm))];
       const sectionIdByNorm: Record<string, string> = {};
@@ -375,7 +425,8 @@ export function KesafimImportModal({
         if (m.mode === "map") { sectionIdByNorm[norm] = m.sectionId; continue; }
         const name = m.newName.trim();
         if (!name) throw new Error(`שם סעיף ריק (מקור: "${norm}")`);
-        const existing = sections.find((s) => s.name.trim() === name);
+        // זיהוי כפילויות בנרמול דו-צדדי (תיקון 1) — מונע יצירת תאום לסעיף קיים
+        const existing = sections.find((s) => normalizeReportName(s.name) === normalizeReportName(name));
         if (existing) { sectionIdByNorm[norm] = existing.id; continue; }
         if (!nameToNorms.has(name)) { nameToNorms.set(name, []); createNorms.push(norm); }
         nameToNorms.get(name)!.push(norm);
@@ -391,7 +442,10 @@ export function KesafimImportModal({
           .insert(names.map((name) => ({ school_year_id: yearId, name, order_index: nextOrder++, is_active: true })))
           .select("id, name");
         if (error) throw new Error(`יצירת סעיפים נכשלה: ${error.message}`);
-        (created ?? []).forEach((c) => nameToNorms.get(c.name.trim())?.forEach((n) => { sectionIdByNorm[n] = c.id; }));
+        (created ?? []).forEach((c) => {
+          createdSectionIds.push(c.id);
+          nameToNorms.get(c.name.trim())?.forEach((n) => { sectionIdByNorm[n] = c.id; });
+        });
       }
       const sectionName = (id: string) =>
         sections.find((s) => s.id === id)?.name ?? mappings[usedNorms.find((n) => sectionIdByNorm[n] === id) ?? ""]?.newName ?? "";
@@ -413,6 +467,9 @@ export function KesafimImportModal({
         if (ex) {
           if (targetChoice[w.row.norm] === "keep") continue;
           if (Math.abs(Number(ex.amount_per_student) - w.per) <= 0.005) continue;
+        } else if (!createdGsaCells.some((c) => c.grade_id === w.gradeId && c.parent_section_id === secId)) {
+          // תא יעד שלא היה קיים לפני הייבוא — נרשם למעקב הביטול
+          createdGsaCells.push({ grade_id: w.gradeId, parent_section_id: secId });
         }
         gsaRows.push({ school_year_id: yearId, grade_id: w.gradeId, parent_section_id: secId, amount_per_student: w.per });
       }
@@ -471,9 +528,16 @@ export function KesafimImportModal({
         if (error) throw new Error(`רישום הגבייה נכשל: ${error.message}`);
       }
 
-      // 6. סגירת הייבוא
+      // 6. סגירת הייבוא + רישום מה נוצר (לניקוי מלא בביטול — תיקון 3)
+      const newMapNorms = usedNorms.filter((n) => !memoryMap[n]);
       const { error: cmtErr } = await supabase.from("kesafim_imports")
-        .update({ status: "committed", committed_at: new Date().toISOString() }).eq("id", importId);
+        .update({
+          status: "committed", committed_at: new Date().toISOString(),
+          parsed_payload: {
+            ...(parsed as unknown as Record<string, unknown>),
+            _created: { section_ids: createdSectionIds, gsa_cells: createdGsaCells, map_norms: newMapNorms },
+          } as never,
+        }).eq("id", importId);
       if (cmtErr) throw new Error(`סימון הייבוא כהושלם נכשל: ${cmtErr.message}`);
 
       ["parent-collections", "grade-section-amounts", "budget-categories", "budget-plan",
@@ -530,12 +594,123 @@ export function KesafimImportModal({
   async function cancelImport(id: string) {
     setCancelling(true);
     try {
-      const { error: delErr } = await supabase.from("parent_collections").delete().eq("import_id", id);
+      const yearId = await getActiveYearId();
+      if (!yearId) throw new Error("אין שנת לימודים פעילה");
+
+      // מה הייבוא הזה יצר (נרשם ב-commit). ייבואים ישנים ללא רישום — מוחקים
+      // שורות גבייה בלבד, כמו קודם.
+      const { data: impRow, error: impErr } = await supabase.from("kesafim_imports")
+        .select("parsed_payload").eq("id", id).maybeSingle();
+      if (impErr) throw new Error(`קריאת רשומת הייבוא נכשלה: ${impErr.message}`);
+      const createdInfo = (impRow?.parsed_payload as {
+        _created?: { section_ids?: string[]; gsa_cells?: { grade_id: string; parent_section_id: string }[]; map_norms?: string[] };
+      } | null)?._created;
+
+      // 1. מחיקת שורות הגבייה של ה-batch
+      const { data: delRows, error: delErr } = await supabase.from("parent_collections")
+        .delete().eq("import_id", id).select("id");
       if (delErr) throw new Error(`מחיקת שורות הייבוא נכשלה: ${delErr.message}`);
+      const deletedRows = (delRows ?? []).length;
+
+      // 2. ניקוי מה שהייבוא יצר ואין עליו שום נתון אחר (תיקון 3, בדיקת 8.8)
+      let deletedSections = 0, deletedGsa = 0, deletedCats = 0, deletedMaps = 0;
+      if (createdInfo) {
+        const candidateIds = createdInfo.section_ids ?? [];
+        let safeIds: string[] = [];
+        if (candidateIds.length > 0) {
+          // "נתון אחר" = גבייה כלשהי (ידנית/ייבוא אחר) או החזר על הסעיף
+          const [colR, refR] = await Promise.all([
+            supabase.from("parent_collections").select("parent_section_id").in("parent_section_id", candidateIds),
+            supabase.from("parent_refunds").select("parent_section_id").in("parent_section_id", candidateIds),
+          ]);
+          if (colR.error) throw new Error(`בדיקת גביות נכשלה: ${colR.error.message}`);
+          if (refR.error) throw new Error(`בדיקת החזרים נכשלה: ${refR.error.message}`);
+          const used = new Set([
+            ...(colR.data ?? []).map((r) => r.parent_section_id),
+            ...(refR.data ?? []).map((r) => r.parent_section_id),
+          ]);
+          safeIds = candidateIds.filter((sid) => !used.has(sid));
+        }
+
+        if (safeIds.length > 0) {
+          const { data: secRows, error: secErr } = await supabase.from("parent_sections")
+            .select("id, name").in("id", safeIds);
+          if (secErr) throw new Error(`קריאת סעיפים נכשלה: ${secErr.message}`);
+          const names = (secRows ?? []).map((s) => s.name);
+
+          const { data: mapDel, error: mapErr } = await supabase.from("kesafim_section_map")
+            .delete().in("parent_section_id", safeIds).select("id");
+          if (mapErr) throw new Error(`מחיקת מיפויים נכשלה: ${mapErr.message}`);
+          deletedMaps = (mapDel ?? []).length;
+
+          const { data: gsaDel, error: gsaErr } = await supabase.from("grade_section_amounts")
+            .delete().in("parent_section_id", safeIds).select("id");
+          if (gsaErr) throw new Error(`מחיקת יעדים נכשלה: ${gsaErr.message}`);
+          deletedGsa += (gsaDel ?? []).length;
+
+          if (names.length > 0) {
+            const { data: catDel, error: catErr } = await supabase.from("budget_categories")
+              .delete().eq("school_year_id", yearId).eq("source", "horim").in("name", names).select("id");
+            if (catErr) throw new Error(`מחיקת קטגוריות נכשלה: ${catErr.message}`);
+            deletedCats = (catDel ?? []).length;
+          }
+
+          const { data: secDel, error: sdErr } = await supabase.from("parent_sections")
+            .delete().in("id", safeIds).select("id");
+          if (sdErr) throw new Error(`מחיקת סעיפים נכשלה: ${sdErr.message}`);
+          deletedSections = (secDel ?? []).length;
+        }
+
+        // יעדי gsa שהייבוא יצר על סעיפים ששרדו — נמחקים רק אם אין גבייה בתא
+        const survivingCells = (createdInfo.gsa_cells ?? []).filter((c) => !safeIds.includes(c.parent_section_id));
+        const touchedSecIds = new Set<string>();
+        for (const cell of survivingCells) {
+          const { data: cellCols, error: ccErr } = await supabase.from("parent_collections")
+            .select("id").eq("grade_id", cell.grade_id).eq("parent_section_id", cell.parent_section_id).limit(1);
+          if (ccErr) throw new Error(`בדיקת תא נכשלה: ${ccErr.message}`);
+          if ((cellCols ?? []).length > 0) continue;
+          const { data: gDel, error: gErr } = await supabase.from("grade_section_amounts")
+            .delete().eq("grade_id", cell.grade_id).eq("parent_section_id", cell.parent_section_id).select("id");
+          if (gErr) throw new Error(`מחיקת יעד נכשלה: ${gErr.message}`);
+          if ((gDel ?? []).length > 0) { deletedGsa += (gDel ?? []).length; touchedSecIds.add(cell.parent_section_id); }
+        }
+
+        // סנכרון קטגוריות התקציב לסעיפים ששרדו ויעדיהם השתנו (אותה סמנטיקה כמו ב-commit)
+        if (touchedSecIds.size > 0) {
+          const [allGsaR, secNamesR] = await Promise.all([
+            supabase.from("grade_section_amounts")
+              .select("grade_id, parent_section_id, amount_per_student").eq("school_year_id", yearId),
+            supabase.from("parent_sections").select("id, name").in("id", [...touchedSecIds]),
+          ]);
+          if (allGsaR.error) throw new Error(`קריאת יעדים לסנכרון נכשלה: ${allGsaR.error.message}`);
+          if (secNamesR.error) throw new Error(`קריאת סעיפים לסנכרון נכשלה: ${secNamesR.error.message}`);
+          const gradeStudents: Record<string, number> = Object.fromEntries(grades.map((g) => [g.id, Number(g.student_count)]));
+          for (const sec of secNamesR.data ?? []) {
+            const planned = (allGsaR.data ?? [])
+              .filter((g) => g.parent_section_id === sec.id)
+              .reduce((s, g) => s + Number(g.amount_per_student) * (gradeStudents[g.grade_id] ?? 0), 0);
+            const { error } = await supabase.from("budget_categories")
+              .update({ planned_amount: planned })
+              .eq("school_year_id", yearId).eq("source", "horim").eq("name", sec.name);
+            if (error) throw new Error(`סנכרון התקציב נכשל: ${error.message}`);
+          }
+        }
+      }
+
       const { error: updErr } = await supabase.from("kesafim_imports").update({ status: "cancelled" }).eq("id", id);
       if (updErr) throw new Error(`סימון הביטול נכשל: ${updErr.message}`);
-      ["parent-collections", "dashboard", "source-breakdown", "budget-plan"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-      toast.success("הייבוא בוטל ושורותיו הוסרו");
+
+      ["parent-collections", "dashboard", "source-breakdown", "budget-plan",
+        "parent-sections", "parent-sections-all", "grade-section-amounts", "budget-categories",
+      ].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+
+      // סיכום הביטול — מה נמחק בפועל
+      const parts = [`${deletedRows} שורות גבייה`];
+      if (deletedSections > 0) parts.push(`${deletedSections} סעיפים`);
+      if (deletedGsa > 0) parts.push(`${deletedGsa} יעדים`);
+      if (deletedCats > 0) parts.push(`${deletedCats} קטגוריות תקציב`);
+      if (deletedMaps > 0) parts.push(`${deletedMaps} מיפויים`);
+      toast.success(`הייבוא בוטל — נמחקו: ${parts.join(" · ")}`);
       setCancelConfirm(null);
       await loadLog();
     } catch (e) {
@@ -742,7 +917,7 @@ export function KesafimImportModal({
                                         [r.norm]: v === "__create"
                                           ? { mode: "create", sectionId: "", newName: m?.newName || r.norm, fromMemory: false }
                                           : v === "__skip"
-                                            ? { ...m, mode: "skip", fromMemory: false }
+                                            ? { ...m, mode: "skip", fromMemory: false, suggested: false }
                                             : { mode: "map", sectionId: v, newName: m?.newName || r.norm, fromMemory: false },
                                       });
                                     }}
@@ -759,6 +934,11 @@ export function KesafimImportModal({
                                   )}
                                   {m?.fromMemory && (
                                     <span style={{ fontSize: "10.5px", color: "#7A9E7E" }}>✓ מיפוי זכור מייבוא קודם</span>
+                                  )}
+                                  {m?.suggested && m?.mode === "map" && (
+                                    <span style={{ fontSize: "10.5px", fontWeight: "600", color: "#8B5E0B", background: "#FDF6E3", border: "1px solid #E8CF9C", borderRadius: "6px", padding: "2px 7px", alignSelf: "flex-start" }}>
+                                      נראה כמו סעיף קיים — זה אותו סעיף?
+                                    </span>
                                   )}
                                 </div>
                               </td>
@@ -785,11 +965,11 @@ export function KesafimImportModal({
                                           <div style={{ display: "flex", gap: "5px" }}>
                                             <button type="button" onClick={() => setTargetChoice({ ...targetChoice, [r.norm]: "keep" })}
                                               style={chipStyle(targetChoice[r.norm] === "keep")} className="num">
-                                              השאר שלי ({fmt(conflict.existing)})
+                                              היעד שהגדרתי ({fmt(conflict.existing)} ₪)
                                             </button>
                                             <button type="button" onClick={() => setTargetChoice({ ...targetChoice, [r.norm]: "update" })}
                                               style={chipStyle(targetChoice[r.norm] === "update")} className="num">
-                                              לפי הדוח ({fmt(conflict.fromReport)})
+                                              היעד מתוך כספים 2000 ({fmt(conflict.fromReport)} ₪)
                                             </button>
                                           </div>
                                           <span style={{ fontSize: "10px", color: "#AAA099" }}>הבחירה חלה על כל שכבות הסעיף</span>

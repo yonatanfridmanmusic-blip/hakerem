@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { Plus, X, Check, ChevronDown, ChevronUp, Users, Settings2, Pencil, Trash2, FileUp } from "lucide-react";
-import { KesafimImportModal } from "@/components/kesafim-import";
-import { useCanWrite } from "@/hooks/use-organization";
+import { KesafimImportModal, normalizeReportName } from "@/components/kesafim-import";
+import { useCanWrite, useOrganization } from "@/hooks/use-organization";
+import { supabase } from "@/integrations/supabase/client";
+import { getActiveYearId } from "@/lib/active-year";
 import { DateInput } from "@/components/ui/date-input";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { toast } from "sonner";
@@ -155,6 +158,38 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
   const addSection = useAddParentSection();
   const toggleSection = useToggleParentSection();
   const inputRef = useRef<HTMLInputElement>(null);
+  const qc = useQueryClient();
+  const { data: membership } = useOrganization();
+  const orgId = membership?.organization?.id;
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // הקשר לכל סעיף (תיקון 4, בדיקת 8.8): סך גבייה, מספר יעדים, מקור, תאריך יצירה
+  const { data: ctx } = useQuery({
+    queryKey: ["sections-context", orgId],
+    enabled: !!orgId,
+    queryFn: async () => {
+      const yearId = await getActiveYearId();
+      if (!yearId || !orgId) return null;
+      const [colR, gsaR, mapR, secR] = await Promise.all([
+        supabase.from("parent_collections").select("parent_section_id, amount").eq("school_year_id", yearId),
+        supabase.from("grade_section_amounts").select("parent_section_id").eq("school_year_id", yearId),
+        supabase.from("kesafim_section_map").select("parent_section_id").eq("organization_id", orgId),
+        supabase.from("parent_sections").select("id, created_at").eq("school_year_id", yearId),
+      ]);
+      if (colR.error || gsaR.error || mapR.error || secR.error) throw new Error("שגיאה בטעינת נתוני הסעיפים");
+      const collected: Record<string, number> = {};
+      (colR.data ?? []).forEach((r) => {
+        if (!r.parent_section_id) return;
+        collected[r.parent_section_id] = (collected[r.parent_section_id] ?? 0) + Number(r.amount);
+      });
+      const targets: Record<string, number> = {};
+      (gsaR.data ?? []).forEach((r) => { targets[r.parent_section_id] = (targets[r.parent_section_id] ?? 0) + 1; });
+      const imported = new Set((mapR.data ?? []).map((r) => r.parent_section_id));
+      const createdAt: Record<string, string> = Object.fromEntries((secR.data ?? []).map((s) => [s.id, s.created_at as string]));
+      return { collected, targets, imported: [...imported], createdAt };
+    },
+  });
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -166,48 +201,149 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
       await addSection.mutateAsync({ name: trimmed });
       toast.success("סעיף נוסף");
       setNewName("");
+      qc.invalidateQueries({ queryKey: ["sections-context"] });
       inputRef.current?.focus();
     } catch { toast.error("שגיאה בהוספה"); }
   };
+
+  // מחיקת סעיף ריק מגבייה: מוחקת גם יעדים, קטגוריית תקציב ורשומות מיפוי.
+  // בטיחות: אימות טרי מול ה-DB שאין גבייה או החזרים על הסעיף.
+  const handleDelete = async (s: ParentSection) => {
+    setDeleting(true);
+    try {
+      const yearId = await getActiveYearId();
+      if (!yearId) throw new Error("אין שנת לימודים פעילה");
+      const [colR, refR] = await Promise.all([
+        supabase.from("parent_collections").select("id").eq("parent_section_id", s.id).limit(1),
+        supabase.from("parent_refunds").select("id").eq("parent_section_id", s.id).limit(1),
+      ]);
+      if (colR.error || refR.error) throw new Error("בדיקת הסעיף נכשלה");
+      if ((colR.data ?? []).length > 0) throw new Error("לסעיף נרשמה גבייה — לא ניתן למחוק");
+      if ((refR.data ?? []).length > 0) throw new Error("לסעיף נרשמו החזרים — לא ניתן למחוק");
+
+      const { error: gsaErr } = await supabase.from("grade_section_amounts").delete().eq("parent_section_id", s.id);
+      if (gsaErr) throw new Error(`מחיקת היעדים נכשלה: ${gsaErr.message}`);
+      const { error: mapErr } = await supabase.from("kesafim_section_map").delete().eq("parent_section_id", s.id);
+      if (mapErr) throw new Error(`מחיקת המיפויים נכשלה: ${mapErr.message}`);
+      const { error: catErr } = await supabase.from("budget_categories")
+        .delete().eq("school_year_id", yearId).eq("source", "horim").eq("name", s.name);
+      if (catErr) throw new Error(`מחיקת קטגוריית התקציב נכשלה: ${catErr.message}`);
+      const { error: secErr } = await supabase.from("parent_sections").delete().eq("id", s.id);
+      if (secErr) throw new Error(`מחיקת הסעיף נכשלה: ${secErr.message}`);
+
+      ["parent-sections", "parent-sections-all", "grade-section-amounts", "budget-categories",
+        "budget-plan", "dashboard", "source-breakdown", "sections-context",
+      ].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      toast.success(`הסעיף "${s.name}" נמחק`);
+      setDeleteConfirm(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה במחיקת הסעיף");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const dateHe = (iso?: string) => (iso ? iso.slice(0, 10).split("-").reverse().join(".") : "");
+  const fmtNum = (n: number) => n.toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.4)",
       display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
     }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: "#fff", borderRadius: "18px", width: "100%", maxWidth: "400px", boxShadow: "0 24px 80px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+      <div style={{ background: "#fff", borderRadius: "18px", width: "100%", maxWidth: "460px", maxHeight: "82vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 80px rgba(0,0,0,0.2)", overflow: "hidden" }}>
         {/* Header */}
-        <div style={{ padding: "20px 24px", borderBottom: "1px solid #EAE5DE", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid #EAE5DE", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>ניהול סעיפי גבייה</div>
-            <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>הוסף או השבת סעיפים</div>
+            <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>הוספה, השבתה ומחיקה של סעיפים</div>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#AAA099", display: "flex" }}><X size={18} /></button>
         </div>
 
-        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* גוף נגלל — גובה מוגבל (תיקון 4) */}
+        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto", flex: 1 }}>
           {/* Existing sections */}
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            {sections.map((s) => (
-              <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "10px", border: "1px solid #EAE5DE", background: s.is_active ? "#fff" : "#FAFAF8" }}>
-                <span style={{ fontSize: "14px", color: s.is_active ? "#1A1A1A" : "#AAA099" }}>{s.name}</span>
-                <button
-                  onClick={() => toggleSection.mutate(
-                    { id: s.id, isActive: !s.is_active },
-                    { onError: () => toast.error("שגיאה בעדכון הסעיף") }
+            {sections.map((s) => {
+              const col = ctx?.collected[s.id] ?? 0;
+              const tgt = ctx?.targets[s.id] ?? 0;
+              const isImported = (ctx?.imported ?? []).includes(s.id);
+              const isDupName = sections.filter((o) => normalizeReportName(o.name) === normalizeReportName(s.name)).length > 1;
+              const deletable = !!ctx && col === 0;
+              return (
+                <div key={s.id} style={{ borderRadius: "10px", border: "1px solid #EAE5DE", background: s.is_active ? "#fff" : "#FAFAF8", overflow: "hidden" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", gap: "10px" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "14px", color: s.is_active ? "#1A1A1A" : "#AAA099" }}>{s.name}</span>
+                        <span style={{ fontSize: "10px", fontWeight: "600", color: isImported ? "#8B2F6E" : "#888079", background: isImported ? "#F7EDF4" : "#F3F0EB", borderRadius: "99px", padding: "2px 8px" }}>
+                          {isImported ? "ייבוא" : "ידני"}
+                        </span>
+                        {isDupName && ctx?.createdAt[s.id] && (
+                          <span title="קיים סעיף נוסף עם שם זהה — תג הבחנה" style={{ fontSize: "10px", color: "#8B5E0B", background: "#FDF6E3", border: "1px solid #E8CF9C", borderRadius: "99px", padding: "2px 8px" }} className="num">
+                            נוצר {dateHe(ctx.createdAt[s.id])}
+                          </span>
+                        )}
+                      </div>
+                      {/* שורת הקשר */}
+                      <div style={{ fontSize: "11.5px", color: "#888079", marginTop: "3px" }} className="num">
+                        {ctx ? <>נגבה {fmtNum(col)} ₪ · {tgt} יעדים</> : "טוען..."}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                      {deletable && (
+                        <button
+                          onClick={() => setDeleteConfirm(deleteConfirm === s.id ? null : s.id)}
+                          title="מחיקת סעיף (אין עליו גבייה)"
+                          style={{
+                            padding: "4px 10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer",
+                            border: "1px solid #E5B5B0", background: "#fff", color: "#C0392B",
+                            fontFamily: "var(--font-sans)", display: "flex", alignItems: "center", gap: "4px",
+                          }}
+                        >
+                          <Trash2 size={11} />מחק
+                        </button>
+                      )}
+                      <button
+                        onClick={() => toggleSection.mutate(
+                          { id: s.id, isActive: !s.is_active },
+                          { onError: () => toast.error("שגיאה בעדכון הסעיף") }
+                        )}
+                        style={{
+                          padding: "4px 12px", borderRadius: "6px", fontSize: "12px", cursor: "pointer",
+                          border: `1px solid ${s.is_active ? "#E8E2D9" : "#8B2F6E"}`,
+                          background: s.is_active ? "#F5F3F0" : "#F4EBF2",
+                          color: s.is_active ? "#888079" : "#8B2F6E",
+                          fontFamily: "var(--font-sans)",
+                        }}
+                      >
+                        {s.is_active ? "השבת" : "הפעל"}
+                      </button>
+                    </div>
+                  </div>
+                  {/* אישור דו-שלבי למחיקה — מפרט מה יימחק */}
+                  {deleteConfirm === s.id && (
+                    <div style={{ padding: "10px 14px", background: "#FDEBEA", borderTop: "1px solid #F2D3CF" }}>
+                      <div style={{ fontSize: "12px", color: "#A93226", lineHeight: 1.6, marginBottom: "8px" }}>
+                        למחוק את הסעיף "{s.name}"? יימחקו גם <b className="num">{tgt}</b> יעדי גבייה,
+                        קטגוריית התקציב שלו ורשומות המיפוי מכספים 2000. אין גבייה רשומה על הסעיף. פעולה זו אינה הפיכה.
+                      </div>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button onClick={() => void handleDelete(s)} disabled={deleting} style={{
+                          padding: "5px 14px", border: "none", borderRadius: "7px", background: "#C0392B",
+                          color: "#fff", fontSize: "12px", cursor: "pointer", fontFamily: "var(--font-sans)",
+                        }}>{deleting ? "מוחק..." : "כן, מחק סעיף"}</button>
+                        <button onClick={() => setDeleteConfirm(null)} style={{
+                          padding: "5px 12px", border: "1px solid #E8E2D9", borderRadius: "7px", background: "#fff",
+                          color: "#6B6560", fontSize: "12px", cursor: "pointer", fontFamily: "var(--font-sans)",
+                        }}>ביטול</button>
+                      </div>
+                    </div>
                   )}
-                  style={{
-                    padding: "4px 12px", borderRadius: "6px", fontSize: "12px", cursor: "pointer",
-                    border: `1px solid ${s.is_active ? "#E8E2D9" : "#8B2F6E"}`,
-                    background: s.is_active ? "#F5F3F0" : "#F4EBF2",
-                    color: s.is_active ? "#888079" : "#8B2F6E",
-                    fontFamily: "var(--font-sans)",
-                  }}
-                >
-                  {s.is_active ? "השבת" : "הפעל"}
-                </button>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
 
           {/* Add new section */}
@@ -236,7 +372,7 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
           </form>
         </div>
 
-        <div style={{ padding: "0 24px 20px" }}>
+        <div style={{ padding: "16px 24px", borderTop: "1px solid #EAE5DE", flexShrink: 0 }}>
           <button onClick={onClose} style={{ width: "100%", padding: "10px", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>סגור</button>
         </div>
       </div>
