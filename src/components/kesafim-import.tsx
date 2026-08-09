@@ -366,9 +366,10 @@ export function KesafimImportModal({
   const plan = useMemo(() => {
     const newSections = new Set<string>();
     const mappedIds = new Set<string>();
-    let rows = 0, total = 0, unchanged = 0;
+    let rows = 0, total = 0, unchanged = 0, writable = 0;
     viewGrades.forEach((g, gi) => g.rows.forEach((r, ri) => {
       if (!rowIsWritten(gi, ri, g, r)) return;
+      writable++;
       const m = mappings[r.norm];
       if (m?.mode === "create") newSections.add(m.newName.trim());
       if (m?.mode === "map" && m.sectionId) mappedIds.add(m.sectionId);
@@ -377,18 +378,22 @@ export function KesafimImportModal({
         if (delta === 0) { unchanged++; return; }
         rows++; total += delta;
       } else {
+        // תיקון קדם-מיזוג 2.2.0: שורת זכות בסכום 0 לא נכתבת כשורת גבייה —
+        // היעדים (מהחובה) נרשמים ממילא. בדוח אפס: 0 שורות גבייה.
+        if (r.paid === 0) return;
         rows++; total += r.paid;
       }
     }));
-    return { rows, total, unchanged, newSections: [...newSections], mappedSectionIds: [...mappedIds] };
+    return { rows, total, unchanged, writable, newSections: [...newSections], mappedSectionIds: [...mappedIds] };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewGrades, mappings, rowSkip, gradeMatch, mode, cellSums]);
 
   const manualOverlap = mode === "first"
     ? plan.mappedSectionIds.reduce((s, id) => s + (manualBySection[id] ?? 0), 0) : 0;
   const unmatchedGrades = viewGrades.filter((g) => !gradeMatch[g.label]);
+  // דוח אפס עדיין ניתן לאישור — היעדים נרשמים גם בלי שורות גבייה
   const canCommit = parsed !== null && unmatchedGrades.length === 0 && phase === "review" &&
-    (mode === "update" ? true : plan.rows > 0);
+    (mode === "update" ? true : plan.writable > 0);
 
   // ─── כתיבה באישור — batched, הכל await מפורש ───────────────────────────────
   async function commit() {
@@ -516,7 +521,9 @@ export function KesafimImportModal({
       for (const w of written) {
         const secId = sectionIdByNorm[w.row.norm];
         const amount = mode === "update" ? cellDelta(w.row, w.gradeLabel).delta : w.row.paid;
-        if (mode === "update" && amount === 0) continue;
+        // סכום 0 לא נכתב באף מצב: בעדכון — דלתא אפס; בייבוא ראשון — זכות 0
+        // (היעדים כבר נרשמו בשלב 3). תיקון קדם-מיזוג 2.2.0.
+        if (amount === 0) continue;
         collectionRows.push({
           school_year_id: yearId, grade_id: w.gradeId, parent_section_id: secId,
           amount, collection_date: parsed.report.report_date ?? new Date().toISOString().slice(0, 10),
