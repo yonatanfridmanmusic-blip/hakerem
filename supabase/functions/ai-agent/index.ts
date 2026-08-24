@@ -432,7 +432,9 @@ async function callClaude(
             const targetAtPct = total100 * (collPct / 100);
             const collected = colMap[s.id] ?? 0;
             return { section: s.name, collection_target_percent: collPct, total_100_percent: total100, target_at_collection_percent: Math.round(targetAtPct), collected, remaining_to_target: Math.round(Math.max(0, targetAtPct - collected)), collection_rate_pct: targetAtPct > 0 ? Math.round((collected / targetAtPct) * 100) : 0 };
-          }).filter(s => s.total_100_percent > 0);
+          // תיקון 2.2.1: סעיף בלי יעד אבל עם גבייה (למשל "שנה קודמת" בסכום שלילי
+          // מייבוא כספים 2000) חייב להיכלל — אחרת סך הסוכן סוטה מהמסכים.
+          }).filter(s => s.total_100_percent > 0 || s.collected !== 0);
           tr.push({ type: "tool_result", tool_use_id: blk.id, content: JSON.stringify(result) });
 
         // ── get_grades ────────────────────────────────────────────────────────
@@ -448,7 +450,12 @@ async function callClaude(
             uc.from("grades").select("id,name,student_count,order_index").eq("school_year_id", yid).order("order_index"),
             uc.from("grade_section_amounts").select("grade_id,parent_section_id,amount_per_student").eq("school_year_id", yid),
             uc.from("parent_collections").select("grade_id,parent_section_id,amount,collection_date").eq("school_year_id", yid),
+            uc.from("school_years").select("collection_percentage").eq("id", yid).maybeSingle(),
           ]);
+          // תיקון 2.2.1: collPct2 לא היה מוגדר (השאילתה החמישית חסרה) —
+          // ה-handler קרס ב-ReferenceError בכל קריאה. אותה תבנית כמו get_horim_summary.
+          const collPct2 = Number((yrPctR2.data as { collection_percentage?: number } | null)?.collection_percentage) > 0
+            ? Number((yrPctR2.data as { collection_percentage?: number }).collection_percentage) : 85;
           const grades = (gradeR.data ?? []) as { id: string; name: string; student_count: number }[];
           const sections = (secR.data ?? []) as { id: string; name: string }[];
           const filterSec = inp.section_name ? String(inp.section_name).toLowerCase() : null;
@@ -459,10 +466,12 @@ async function callClaude(
           const result = sections.filter(s => !filterSec || s.name.toLowerCase().includes(filterSec)).map(sec => {
             const gradeRows = grades.map(g => {
               const amt = gsaMap[g.id + ":" + sec.id] ?? 0;
-              if (amt === 0) return null;
+              const coll = colMap[g.id + ":" + sec.id] ?? 0;
+              // תיקון 2.2.1: תא בלי יעד נשמט רק אם גם אין בו גבייה — גבייה בלי
+              // יעד (כולל שלילית) נספרת תמיד, כמו במסכים.
+              if (amt === 0 && coll === 0) return null;
               const t100 = amt * g.student_count;
               const tPct = Math.round(t100 * (collPct2 / 100));
-              const coll = colMap[g.id + ":" + sec.id] ?? 0;
               return { grade: g.name, students: g.student_count, amount_per_student: amt, target_100: t100, collection_target_percent: collPct2, target_at_collection_percent: tPct, collected: coll, remaining: Math.max(0, tPct - coll), pct_of_target: tPct > 0 ? Math.round((coll / tPct) * 100) : 0 };
             }).filter(Boolean);
             if (gradeRows.length === 0) return null;
