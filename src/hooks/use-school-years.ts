@@ -85,6 +85,23 @@ export function useCreateSchoolYear() {
 
       if (!mem?.organization_id) throw new Error("לא שויכת לארגון. צור ארגון תחילה.");
 
+      // 2.2.1: חסימת שם שנה כפול בארגון — השוואה אחרי trim וצמצום רווחים.
+      // בדיקה מוסיפה בלבד: אם שאילתת האימות נכשלת, ממשיכים כרגיל (fail-open).
+      const normalizeYearName = (s: string) => s.trim().replace(/\s+/g, " ");
+      const { data: existingYears, error: dupCheckError } = await supabase
+        .from("school_years")
+        .select("name")
+        .eq("organization_id", mem.organization_id);
+      if (!dupCheckError) {
+        const wanted = normalizeYearName(payload.name);
+        const dup = (existingYears ?? []).find((y) => normalizeYearName(y.name) === wanted);
+        if (dup) {
+          throw new Error(
+            `כבר קיימת שנת לימודים בשם "${dup.name}" בארגון שלכם. אם התכוונתם לשנה הקיימת — עברו אליה דרך מסך ההגדרות; אחרת בחרו שם שונה.`,
+          );
+        }
+      }
+
       // Auto-activate if there's no currently active year in this org
       const { data: activeYears } = await supabase
         .from("school_years")
