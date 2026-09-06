@@ -1099,6 +1099,13 @@ export default function BudgetPage() {
   const selectedYear = years.find((y) => y.id === selectedYearId);
   const isCurrentYear = !!selectedYear?.is_active;
 
+  // 2.2.2: תיקון באג רדום — בארגון עם שנה אחת ה-YearPicker לא מרונדר (years.length > 1),
+  // ולכן ה-auto-select שבתוכו לא רץ לעולם והמסך נתקע ב"(טיוטה)" בלי נתוני ניצול.
+  // אותה לוגיקה בדיוק כמו בתוך YearPicker, ברמת הדף — רצה תמיד.
+  useEffect(() => {
+    if (!selectedYearId && activeYear) setSelectedYearId(activeYear.id);
+  }, [activeYear, selectedYearId]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       {/* Header */}
