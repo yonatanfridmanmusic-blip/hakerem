@@ -15,6 +15,7 @@ import {
   type BudgetCategory,
 } from "@/hooks/use-budget-plan";
 import { useSchoolYears } from "@/hooks/use-school-years";
+import { useSourceBudgetPlans } from "@/hooks/use-source-budget-plans";
 import { useOrgBudgetSources, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 
 export const Route = createFileRoute("/_authenticated/budget/")({
@@ -673,6 +674,8 @@ function SourceTab({
   const isMobile = useIsMobile();
   const canWrite = useCanWrite();
   const { data, isLoading } = useBudgetPlan(srcCfg.key, targetYearId);
+  // 2.2.2: צפי ההכנסות הגלובלי (source_budget_plans, השנה הפעילה) — לשורת הגישור בלבד
+  const { data: incomePlans } = useSourceBudgetPlans();
   const categories = data?.categories ?? [];
   const [addingRow, setAddingRow] = useState(false);
 
@@ -758,6 +761,7 @@ function SourceTab({
             >
               {isCurrentYear ? "סה״כ מתוכנן" : "סה״כ מתוכנן (טיוטה)"} —{" "}
               {srcCfg.label}
+              {srcCfg.key === "horim" ? " · יעד מלא (100%)" : ""}
             </div>
             <div
               className="num"
@@ -771,6 +775,21 @@ function SourceTab({
             >
               {fmt(animPlanned)}
             </div>
+            {/* 2.2.2: שורת גישור — כמה מצפי ההכנסות חולק לסעיפים (הורים מכוסה בסימון 100% בכותרת) */}
+            {isCurrentYear && srcCfg.key !== "horim" && incomePlans && (
+              (incomePlans[srcCfg.key] ?? 0) > 0 ? (
+                <div style={{ marginTop: "8px", fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>
+                  חולק לסעיפים{" "}
+                  <span className="num" style={{ color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>{fmt(totalPlanned)}</span>
+                  {" "}מתוך צפי הכנסות{" "}
+                  <span className="num" style={{ color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>{fmt(incomePlans[srcCfg.key])}</span>
+                </div>
+              ) : (
+                <div style={{ marginTop: "8px", fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
+                  לא הוגדר צפי הכנסות למקור זה — אפשר להגדיר בלוח הבקרה
+                </div>
+              )
+            )}
           </div>
 
           {/* Stats — only show used/balance for the active/current year */}

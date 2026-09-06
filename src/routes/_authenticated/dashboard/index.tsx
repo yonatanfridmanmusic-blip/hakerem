@@ -248,7 +248,7 @@ function SourceCard({ s, collectionPct = 85 }: { s: SourceSummary; collectionPct
           )}
           {incomeOverage > 0 && (
             <span style={{ ...chipStyle, background: "rgba(74,222,128,0.18)", border: "1px solid rgba(74,222,128,0.35)", color: "#86EFAC" }}>
-              נכנס <span className="num" style={{ fontWeight: "600" }}>{fmt(incomeOverage)}</span> מעבר למתוכנן ✓
+              נכנס <span className="num" style={{ fontWeight: "600" }}>{fmt(incomeOverage)}</span> מעבר לצפי ✓
             </span>
           )}
           {s.planned > 0 && (
@@ -277,7 +277,7 @@ function SourceCard({ s, collectionPct = 85 }: { s: SourceSummary; collectionPct
                 <span className="num">{fmt(animUsed)}</span>
                 <span style={{ color: "rgba(252,165,165,0.6)", margin: "0 2px" }}>מתוך</span>
                 <span className="num">{fmt(animPlanned)}</span>
-                <span style={{ color: "rgba(252,165,165,0.6)", marginRight: "2px" }}>מתוכנן</span>
+                <span style={{ color: "rgba(252,165,165,0.6)", marginRight: "2px" }}>צפי הכנסות</span>
               </div>
             ) : (
               <div style={{ marginTop: "6px", fontSize: "12px", color: hero.subtleText }}>
@@ -285,7 +285,7 @@ function SourceCard({ s, collectionPct = 85 }: { s: SourceSummary; collectionPct
                 <span style={{ color: hero.tertiaryText, margin: "0 4px" }}>מתוך</span>
                 <span className="num">{fmt(animPlanned)}</span>
                 <span style={{ color: hero.tertiaryText, marginRight: "4px" }}>
-                  {s.source === "horim" ? `צפי גבייה (${collectionPct}%)` : "מתוכנן"}
+                  {s.source === "horim" ? `צפי גבייה (${collectionPct}%)` : "צפי הכנסות"}
                 </span>
               </div>
             )}
@@ -322,7 +322,7 @@ function SourceCard({ s, collectionPct = 85 }: { s: SourceSummary; collectionPct
               {`${animBudgetPct}%`}
             </div>
             <div style={{ fontSize: "11px", color: hero.tertiaryText, marginTop: "4px", textAlign: isMobile ? "right" : "center" }}>
-              מהמתוכנן נוצל
+              מהצפי נוצל
             </div>
           </>
         )}
@@ -502,7 +502,7 @@ function BudgetAlertBanner({ sources }: { sources: SourceSummary[] }) {
           <div style={{ flex: 1 }}>
             <span style={{ fontSize: "13.5px", fontWeight: "600", color: "#991B1B" }}>{s.label}</span>
             <span style={{ fontSize: "13px", color: "#B91C1C", marginRight: "6px" }}>
-              {" "}— חריגה של {fmt(s.used - s.plannedIncome)} מעל המתוכנן ({pctOf(s)}%)
+              {" "}— חריגה של {fmt(s.used - s.plannedIncome)} מעל הצפי ({pctOf(s)}%)
             </span>
           </div>
           <Link to="/budget"
@@ -527,7 +527,7 @@ function BudgetAlertBanner({ sources }: { sources: SourceSummary[] }) {
           <div style={{ flex: 1 }}>
             <span style={{ fontSize: "13.5px", fontWeight: "600", color: "#92400E" }}>{s.label}</span>
             <span style={{ fontSize: "13px", color: "#B45309", marginRight: "6px" }}>
-              {" "}— {pctOf(s)}% מהמתוכנן נוצל (נותר {fmt(s.plannedIncome - s.used)})
+              {" "}— {pctOf(s)}% מהצפי נוצל (נותר {fmt(s.plannedIncome - s.used)})
             </span>
           </div>
           <Link to="/budget"
@@ -2593,12 +2593,12 @@ export default function DashboardPage() {
             <span style={{ color: "rgba(122,170,142,0.6)", marginRight: "5px" }}> הוצאות</span>
           </div>
           <div style={{ marginTop: "5px", fontSize: "12px", color: "rgba(122,170,142,0.6)" }}>
-            מתוך תכנון שנתי: <span className="num">{isLoading ? "—" : fmt(animPlanned)}</span>
+            צפי הכנסות שנתי: <span className="num">{isLoading ? "—" : fmt(animPlanned)}</span>
           </div>
           {!isLoading && totals.plannedIncome > 0 && (
             incomeTotals.grand >= totals.plannedIncome ? (
               <div style={{ marginTop: "8px", display: "inline-flex", alignItems: "center", gap: "6px", background: "rgba(74,222,128,0.18)", border: "1px solid rgba(74,222,128,0.4)", borderRadius: "99px", padding: "4px 12px" }}>
-                <span style={{ fontSize: "12px", color: "#86EFAC", fontWeight: "600" }}>✓ כל התכנון השנתי נכנס</span>
+                <span style={{ fontSize: "12px", color: "#86EFAC", fontWeight: "600" }}>✓ כל צפי ההכנסות נכנס</span>
               </div>
             ) : (
               <div style={{ marginTop: "5px", fontSize: "12px", color: "rgba(122,170,142,0.6)" }}>
@@ -2618,7 +2618,7 @@ export default function DashboardPage() {
             {isLoading ? "—" : `${animPct}%`}
           </div>
           <div style={{ fontSize: "11px", color: "rgba(122,170,142,0.6)", marginTop: "4px", textAlign: isMobile ? "right" : "center" }}>
-            מהתקציב נוצל
+            מהצפי השנתי נוצל
           </div>
         </div>
       </div>

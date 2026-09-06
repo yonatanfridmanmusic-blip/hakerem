@@ -52,8 +52,20 @@ export function useBudgetPlan(source: BudgetSource, targetYearId?: string | null
 
       if (expErr) throw expErr;
 
-      // Total source used (ALL expenses — matches dashboard)
-      const totalSourceUsed = (exps ?? []).reduce((s, e) => s + Number(e.amount), 0);
+      // 2.2.2: החזרי הורים נספרים כ"נוצל" בטאב הורים — אותה נוסחה כמו הדשבורד
+      // (use-dashboard-summary: used = expenses + parent_refunds עבור horim)
+      let refundsTotal = 0;
+      if (source === "horim") {
+        const { data: refunds, error: refErr } = await supabase
+          .from("parent_refunds")
+          .select("amount")
+          .eq("school_year_id", yid);
+        if (refErr) throw refErr;
+        refundsTotal = (refunds ?? []).reduce((s, r) => s + Number(r.amount), 0);
+      }
+
+      // Total source used (ALL expenses — matches dashboard; horim: + refunds)
+      const totalSourceUsed = (exps ?? []).reduce((s, e) => s + Number(e.amount), 0) + refundsTotal;
 
       // Per-category used (categorized expenses only)
       const usedMap: Record<string, number> = {};
