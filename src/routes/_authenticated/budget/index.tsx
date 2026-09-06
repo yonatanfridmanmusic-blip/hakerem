@@ -778,14 +778,14 @@ function SourceTab({
             {/* 2.2.2: שורת גישור — כמה מצפי ההכנסות חולק לסעיפים (הורים מכוסה בסימון 100% בכותרת) */}
             {isCurrentYear && srcCfg.key !== "horim" && incomePlans && (
               (incomePlans[srcCfg.key] ?? 0) > 0 ? (
-                <div style={{ marginTop: "8px", fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>
+                <div style={{ marginTop: "8px", fontSize: "13px", color: "rgba(255,255,255,0.65)" }}>
                   חולק לסעיפים{" "}
-                  <span className="num" style={{ color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>{fmt(totalPlanned)}</span>
+                  <span className="num" style={{ color: "rgba(255,255,255,0.92)", fontWeight: 500 }}>{fmt(totalPlanned)}</span>
                   {" "}מתוך צפי הכנסות{" "}
-                  <span className="num" style={{ color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>{fmt(incomePlans[srcCfg.key])}</span>
+                  <span className="num" style={{ color: "rgba(255,255,255,0.92)", fontWeight: 500 }}>{fmt(incomePlans[srcCfg.key])}</span>
                 </div>
               ) : (
-                <div style={{ marginTop: "8px", fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
+                <div style={{ marginTop: "8px", fontSize: "13px", color: "rgba(255,255,255,0.5)" }}>
                   לא הוגדר צפי הכנסות למקור זה — אפשר להגדיר בלוח הבקרה
                 </div>
               )
