@@ -110,7 +110,28 @@ type ParsedReceipt = {
   suggested_category?: string | null;
 };
 
-async function parseReceiptFile(file: File, categoryNames?: string[]): Promise<ParsedReceipt> {
+// 2.3.0: מסמך בודד מתשובת parse-receipt-v2 — ParsedReceipt + מטא-נתוני אימות
+type ParsedDocument = ParsedReceipt & {
+  pages?: number[] | null;
+  confidence?: "ok" | "needs_review";
+  issues?: string[];
+};
+
+// תרגום קודי issues של המנוע לעברית ידידותית
+function issueLabel(code: string): string {
+  switch (code) {
+    case "amount_missing_or_not_positive": return "סכום חסר או לא תקין";
+    case "supplier_empty": return "שם ספק לא זוהה";
+    case "date_missing_or_malformed": return "תאריך לא זוהה";
+    case "date_out_of_school_year_range": return "תאריך מחוץ לשנת הלימודים";
+    case "duplicate_amount_suspected_bad_split": return "סכום זהה למסמך אחר בקובץ";
+    default: return code;
+  }
+}
+
+// 2.3.0: עוטף רב-מסמכי — פונה ל-parse-receipt-v2 ומחזיר רשומה לכל מסמך בקובץ.
+// category_names נשלח בשני מסלולי ההעלאה (דרישה מחייבת בסבב זה).
+async function parseReceiptFileMulti(file: File, categoryNames?: string[]): Promise<ParsedDocument[]> {
   const file_base64 = await fileToBase64(file);
   const file_media_type = file.type || "application/pdf";
 
@@ -120,7 +141,7 @@ async function parseReceiptFile(file: File, categoryNames?: string[]): Promise<P
   const sessionResp = await supabase.auth.getSession();
   const token = sessionResp.data.session?.access_token ?? supabaseKey;
 
-  const res = await fetch(`${supabaseUrl}/functions/v1/parse-receipt`, {
+  const res = await fetch(`${supabaseUrl}/functions/v1/parse-receipt-v2`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -139,9 +160,9 @@ async function parseReceiptFile(file: File, categoryNames?: string[]): Promise<P
     throw new Error(errMsg);
   }
 
-  const result = await res.json() as { success: boolean; data?: ParsedReceipt; error?: string };
+  const result = await res.json() as { success: boolean; documents?: ParsedDocument[]; error?: string };
   if (!result.success) throw new Error(result.error ?? "Parse failed");
-  return (result.data ?? {}) as ParsedReceipt;
+  return result.documents ?? [];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -177,15 +198,24 @@ type ExpenseFormState = {
   bank_account: "school" | "parents";
 };
 
+// 2.3.0: מסמך עריך בכרטיסי ריבוי-המסמכים של ההעלאה הבודדת
+type EditableDoc = {
+  amount: string; supplier: string; date: string; description: string;
+  budget_category_id: string; include: boolean; needsReview: boolean; issues: string[];
+};
+
 function ExpenseForm({
   initial,
   onSubmit,
+  onSubmitMulti,
   onClose,
   isPending,
   submitLabel,
 }: {
   initial: ExpenseFormState;
   onSubmit: (form: ExpenseFormState, receiptFile: File | null) => Promise<void>;
+  // 2.3.0: שמירת כמה מסמכים מקובץ אחד (רק במסך ההוספה; בעריכה נופלים למסמך הראשון)
+  onSubmitMulti?: (source: string, docs: EditableDoc[], receiptFile: File | null) => Promise<void>;
   onClose: () => void;
   isPending: boolean;
   submitLabel: string;
@@ -194,23 +224,52 @@ function ExpenseForm({
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
-  const [parsedResult, setParsedResult] = useState<ParsedReceipt | null>(null);
+  const [parsedResult, setParsedResult] = useState<ParsedDocument | null>(null);
+  const [multiDocs, setMultiDocs] = useState<EditableDoc[] | null>(null);
+  const [savingMulti, setSavingMulti] = useState(false);
   const { data: categories } = useBudgetCategories(form.source);
   const { data: orgSources } = useOrgBudgetSources();
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  const toEditableDoc = (d: ParsedDocument): EditableDoc => ({
+    amount: d.amount != null ? String(d.amount) : "",
+    supplier: d.supplier ?? "",
+    date: d.date ?? today(),
+    description: d.description ?? "",
+    budget_category_id: (categories ?? []).find((c) => c.name === d.suggested_category)?.id ?? "",
+    include: d.confidence !== "needs_review",
+    needsReview: d.confidence === "needs_review",
+    issues: d.issues ?? [],
+  });
+
   const handleFileSelect = async (file: File | null) => {
     setReceiptFile(file);
     setAutofilled(false);
     setParsedResult(null);
+    setMultiDocs(null);
     if (!file) return;
     setParsing(true);
     try {
       const fileToUse = await compressReceiptFile(file);
       // Keep the compressed version so uploadReceipt doesn't re-compress
       setReceiptFile(fileToUse);
-      const parsed = await parseReceiptFile(fileToUse);
+      // 2.3.0: מנוע v2 — רשומה לכל מסמך; שמות הקטגוריות נשלחים גם במסלול הבודד
+      const docs = await parseReceiptFileMulti(fileToUse, (categories ?? []).map((c) => c.name));
+      if (docs.length === 0) {
+        toast.error("לא זוהה מסמך פיננסי בקובץ");
+        return;
+      }
+      if (docs.length > 1 && onSubmitMulti) {
+        // כמה מסמכים בקובץ אחד — תצוגת כרטיסים, כרטיס לכל מסמך
+        setMultiDocs(docs.map(toEditableDoc));
+        return;
+      }
+      if (docs.length > 1) {
+        // מסך עריכה: אין שמירה מרובה — ממלאים מהמסמך הראשון ומיידעים
+        toast.info(`זוהו ${docs.length} מסמכים בקובץ — הטופס מולא מהמסמך הראשון`);
+      }
+      const parsed = docs[0];
       setParsedResult(parsed);
       setForm((prev) => ({
         ...prev,
@@ -219,10 +278,13 @@ function ExpenseForm({
         supplier: parsed.supplier && prev.supplier === "" ? parsed.supplier : prev.supplier,
         expense_date: parsed.date && prev.expense_date === today() ? parsed.date : prev.expense_date,
         description: parsed.description && prev.description === "" ? parsed.description : prev.description,
+        budget_category_id: prev.budget_category_id === ""
+          ? ((categories ?? []).find((c) => c.name === parsed.suggested_category)?.id ?? "")
+          : prev.budget_category_id,
       }));
       setAutofilled(true);
     } catch (err) {
-      console.error("[parse-receipt] client error:", err);
+      console.error("[parse-receipt-v2] client error:", err);
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`לא ניתן לקרוא את הקבלה: ${msg}`);
     } finally {
@@ -378,14 +440,89 @@ function ExpenseForm({
                 </div>
               )}
             </div>
+            {parsedResult.confidence === "needs_review" && (
+              <div style={{ marginTop: "8px", padding: "7px 10px", background: "#FEF9C3", border: "1px solid #F5C842", borderRadius: "7px", fontSize: "11px", color: "#92400E", fontWeight: 600 }}>
+                ⚠ דורש בדיקה ידנית: {(parsedResult.issues ?? []).map(issueLabel).join(" · ")}
+              </div>
+            )}
             <div style={{ marginTop: "8px", fontSize: "11px", color: "#6B8F7D", borderTop: "1px solid #C8E8D4", paddingTop: "7px" }}>
               הפרטים מולאו בטופס — ניתן לערוך לפני השמירה
             </div>
           </div>
         )}
 
+        {/* 2.3.0: כמה מסמכים בקובץ אחד — כרטיס נפרד לכל מסמך, עריכה וביטול פרטני */}
+        {!parsing && multiDocs && (
+          <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#1A3D2B" }}>
+              זוהו {multiDocs.length} מסמכים בקובץ — כל מסמך יישמר כהוצאה נפרדת
+            </div>
+            {multiDocs.map((d, i) => (
+              <div key={i} style={{
+                padding: "10px 12px", borderRadius: "10px",
+                background: d.needsReview ? "#FFFBEB" : "#F7FBF9",
+                border: `1.5px solid ${d.needsReview ? "#F5C842" : "#A8D9BC"}`,
+                opacity: d.include ? 1 : 0.55,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#6B6560" }}>מסמך {i + 1}</span>
+                  {d.needsReview && (
+                    <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#92400E", background: "#FEF9C3", border: "1px solid #F5C842", borderRadius: "20px", padding: "1px 8px" }}>
+                      דורש בדיקה ידנית{d.issues.length ? `: ${d.issues.map(issueLabel).join(" · ")}` : ""}
+                    </span>
+                  )}
+                  <span style={{ flex: 1 }} />
+                  <button type="button"
+                    onClick={() => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, include: !x.include } : x))}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: "11px", color: d.include ? "#AAA099" : "#2D6644", fontFamily: "var(--font-sans)", padding: 0 }}>
+                    {d.include ? "בטל מסמך זה" : "החזר לשמירה"}
+                  </button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  <input type="number" value={d.amount} placeholder="סכום" min="0" step="0.01" disabled={!d.include}
+                    onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))}
+                    style={{ ...inputStyle, direction: "ltr", textAlign: "right", padding: "7px 10px", fontSize: "13px" }} />
+                  <DateInput value={d.date} onChange={(v) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, date: v } : x))}
+                    style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px" }} />
+                  <input type="text" value={d.supplier} placeholder="ספק" disabled={!d.include}
+                    onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, supplier: e.target.value } : x))}
+                    style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px" }} />
+                  <select value={d.budget_category_id} disabled={!d.include}
+                    onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, budget_category_id: e.target.value } : x))}
+                    style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px", cursor: "pointer" }}>
+                    <option value="">ללא קטגוריה</option>
+                    {(categories ?? []).map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                  </select>
+                  <input type="text" value={d.description} placeholder="תיאור" disabled={!d.include}
+                    onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
+                    style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px", gridColumn: "span 2" }} />
+                </div>
+              </div>
+            ))}
+            <button type="button" disabled={savingMulti || multiDocs.every((d) => !d.include)}
+              onClick={async () => {
+                const included = multiDocs.filter((d) => d.include);
+                if (included.length === 0) { toast.error("לא נבחרו מסמכים לשמירה"); return; }
+                for (const d of included) {
+                  if (!d.amount || Number(d.amount) <= 0) { toast.error("יש מסמך עם סכום חסר או לא תקין"); return; }
+                }
+                setSavingMulti(true);
+                try { await onSubmitMulti!(form.source, included, receiptFile); }
+                finally { setSavingMulti(false); }
+              }}
+              style={{
+                padding: "11px 0", border: "none", borderRadius: "8px",
+                background: savingMulti ? "#888" : "#1A3D2B", color: "#fff",
+                fontSize: "14px", fontWeight: 500, cursor: savingMulti ? "not-allowed" : "pointer",
+                fontFamily: "var(--font-sans)",
+              }}>
+              {savingMulti ? "שומר..." : `שמור ${multiDocs.filter((d) => d.include).length} הוצאות`}
+            </button>
+          </div>
+        )}
+
         {receiptFile && (
-          <button type="button" onClick={() => { setReceiptFile(null); setAutofilled(false); setParsedResult(null); }} style={{
+          <button type="button" onClick={() => { setReceiptFile(null); setAutofilled(false); setParsedResult(null); setMultiDocs(null); }} style={{
             marginTop: "6px", background: "none", border: "none",
             cursor: "pointer", fontSize: "12px", color: "#AAA099",
             display: "flex", alignItems: "center", gap: "4px", padding: 0,
@@ -402,14 +539,14 @@ function ExpenseForm({
           borderRadius: "8px", background: "#fff", color: "#6B6560",
           fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)",
         }}>ביטול</button>
-        <button type="submit" disabled={isPending} style={{
+        {!multiDocs && <button type="submit" disabled={isPending} style={{
           flex: 2, padding: "10px 0", border: "none", borderRadius: "8px",
           background: isPending ? "#888" : "#1A3D2B",
           color: "#fff", fontSize: "14px", fontWeight: "500",
           cursor: isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
         }}>
           {isPending ? "שומר..." : submitLabel}
-        </button>
+        </button>}
       </div>
     </form>
   );
@@ -490,9 +627,29 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
       onClose();
     } catch { toast.error("שגיאה בשמירת ההוצאה"); }
   };
+  // 2.3.0: קובץ אחד עם כמה מסמכים — הוצאה נפרדת לכל מסמך, קובץ הקבלה משותף
+  const handleSubmitMulti = async (source: string, docs: EditableDoc[], receiptFile: File | null) => {
+    try {
+      let receipt_url: string | null = null;
+      if (receiptFile) receipt_url = await uploadReceipt(receiptFile);
+      let saved = 0;
+      for (const d of docs) {
+        await addExpense.mutateAsync({
+          expense_date: d.date || today(), amount: Math.round(Number(d.amount) * 100) / 100,
+          source, bank_account: "school",
+          budget_category_id: d.budget_category_id || null,
+          supplier: d.supplier || null, description: d.description || null,
+          receipt_url,
+        } as NewExpense);
+        saved++;
+      }
+      toast.success(`${saved} הוצאות נוספו בהצלחה`);
+      onClose();
+    } catch { toast.error("שגיאה בשמירת ההוצאות — בדקו מה כבר נשמר ברשימה"); }
+  };
   return (
     <Modal title="הוספת הוצאה" subtitle="הזן את פרטי ההוצאה" onClose={onClose}>
-      <ExpenseForm initial={initial} onSubmit={handleSubmit} onClose={onClose}
+      <ExpenseForm initial={initial} onSubmit={handleSubmit} onSubmitMulti={handleSubmitMulti} onClose={onClose}
         isPending={addExpense.isPending} submitLabel="הוסף הוצאה" />
     </Modal>
   );
@@ -706,12 +863,14 @@ function ExpenseMobileCard({
 
 // ─── Bulk Import Modal ────────────────────────────────────────────────────────
 
-type ImportStatus = "queued" | "parsing" | "ready" | "error" | "saving" | "saved";
+type ImportStatus = "queued" | "parsing" | "ready" | "needs_review" | "error" | "saving" | "saved";
+// 2.3.0: רשומת ייבוא היא פר-מסמך (קובץ אחד יכול להתפצל לכמה רשומות)
 type ImportItem = {
   id: string;
   file: File;
   status: ImportStatus;
-  parsed?: ParsedReceipt;
+  parsed?: ParsedDocument;
+  docLabel?: string;          // "קובץ.pdf · מסמך 2/3" כשקובץ התפצל
   error?: string;
   categoryId?: string;        // per-item: AI-suggested or manually chosen
   duplicate?: Expense;        // existing DB expense with same amount+date+supplier
@@ -776,6 +935,29 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
     const resolveCategoryId = (suggested?: string | null) =>
       cats.find((c) => c.name === suggested)?.id ?? "";
 
+    // 2.3.0: מפענח קובץ אחד ומפצל את הרשומה שלו לרשומה-פר-מסמך.
+    // מסמך needs_review מקבל סטטוס משלו ולא ייכנס לייבוא בלי פעולה מפורשת.
+    const parseFileIntoItems = async (id: string, file: File) => {
+      const docs = await parseReceiptFileMulti(file, categoryNames);
+      if (docs.length === 0) {
+        setItemStatus(id, { status: "error", error: "לא זוהה מסמך פיננסי בקובץ" });
+        return;
+      }
+      setItems((prev) => prev.flatMap((x) => {
+        if (x.id !== id) return [x];
+        return docs.map((doc, di) => ({
+          id: di === 0 ? x.id : `${x.id}_doc${di}`,
+          file: x.file,
+          status: (doc.confidence === "needs_review" ? "needs_review" : "ready") as ImportStatus,
+          parsed: doc,
+          error: undefined,
+          categoryId: resolveCategoryId(doc.suggested_category),
+          duplicate: findDuplicate(doc, allExpenses ?? []),
+          docLabel: docs.length > 1 ? `${x.file.name} · מסמך ${di + 1}/${docs.length}` : undefined,
+        }));
+      }));
+    };
+
     // Pass 1: batches of 3 concurrent requests
     for (let i = 0; i < queued.length; i += 3) {
       const batch = queued.slice(i, i + 3);
@@ -785,10 +967,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
           try {
             const compressed = await compressReceiptFile(it.file);
             setItems((prev) => prev.map((x) => x.id === it.id ? { ...x, file: compressed } : x));
-            const parsed = await parseReceiptFile(compressed, categoryNames);
-            const categoryId = resolveCategoryId(parsed.suggested_category);
-            const duplicate = findDuplicate(parsed, allExpenses ?? []);
-            setItemStatus(it.id, { status: "ready", parsed, error: undefined, categoryId, duplicate });
+            await parseFileIntoItems(it.id, compressed);
           } catch {
             setItemStatus(it.id, { status: "error", error: "לא ניתן לקרוא את המסמך" });
           }
@@ -808,10 +987,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
       setItems((prev) => { currentFile = prev.find((x) => x.id === failId)?.file; return prev; });
       if (!currentFile) continue;
       try {
-        const parsed = await parseReceiptFile(currentFile, categoryNames);
-        const categoryId = resolveCategoryId(parsed.suggested_category);
-        const duplicate = findDuplicate(parsed, allExpenses ?? []);
-        setItemStatus(failId, { status: "ready", parsed, error: undefined, categoryId, duplicate });
+        await parseFileIntoItems(failId, currentFile);
       } catch {
         setItemStatus(failId, { status: "error", error: "לא ניתן לקרוא את המסמך" });
       }
@@ -851,10 +1027,16 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
     if (!ready.length) return;
     setImporting(true);
     let saved = 0;
+    // 2.3.0: קובץ שהתפצל לכמה מסמכים מועלה ל-storage פעם אחת בלבד
+    const uploadedByFile = new Map<File, string>();
     for (const it of ready) {
       setItemStatus(it.id, { status: "saving" });
       try {
-        const receipt_url = await uploadReceipt(it.file);
+        let receipt_url = uploadedByFile.get(it.file);
+        if (!receipt_url) {
+          receipt_url = await uploadReceipt(it.file);
+          uploadedByFile.set(it.file, receipt_url);
+        }
         const p = it.parsed ?? {};
         await addExpense.mutateAsync({
           expense_date: p.date ?? today(),
@@ -887,6 +1069,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
 
   const readyCount = items.filter((it) => it.status === "ready").length;
   const savedCount = items.filter((it) => it.status === "saved").length;
+  const needsReviewCount = items.filter((it) => it.status === "needs_review").length;
   const pendingCount = items.filter((it) => it.status === "queued" || it.status === "error").length;
   const duplicateCount = items.filter((it) => it.status === "ready" && (!!it.duplicate || !!it.batchDuplicateOf)).length;
 
@@ -1004,10 +1187,12 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                 const isDuplicate = !!it.duplicate || !!it.batchDuplicateOf;
                 const borderColor = it.status === "saved" ? "#D4EDE0"
                   : it.status === "error" ? "#FECACA"
+                  : it.status === "needs_review" ? "#F5C842"
                   : isDuplicate ? "#F5C842"
                   : "#EAE5DE";
                 const bgColor = it.status === "saved" ? "#F0FAF5"
                   : it.status === "error" ? "#FEF2F2"
+                  : it.status === "needs_review" ? "#FFFBEB"
                   : isDuplicate ? "#FFFBEB"
                   : "#F7F4EF";
                 return (
@@ -1021,6 +1206,9 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                         <div style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {it.parsed?.supplier ?? it.file.name}
                         </div>
+                        {it.docLabel && (
+                          <div style={{ fontSize: "10.5px", color: "#AAA099", marginTop: "1px" }}>{it.docLabel}</div>
+                        )}
                         {it.parsed && (
                           <div style={{ fontSize: "11px", color: "#6B6560", marginTop: "1px" }}>
                             {[
@@ -1039,12 +1227,44 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                         {it.status === "saving" && "שומר..."}
                         {it.status === "saved" && "✓ נשמר"}
                         {it.status === "error" && "שגיאה"}
+                        {it.status === "needs_review" && (
+                          <span style={{ color: "#D97706", fontWeight: "600" }}>דורש בדיקה ידנית</span>
+                        )}
                         {it.status === "ready" && isDuplicate && (
                           <span style={{ color: "#D97706", fontWeight: "600" }}>⚠ כפילות</span>
                         )}
                         {it.status === "ready" && !isDuplicate && "מוכן"}
                       </div>
                     </div>
+
+                    {/* 2.3.0: מסמך שדורש בדיקה ידנית — מוצג מה שכן זוהה, לא נשמר בלי אישור מפורש */}
+                    {it.status === "needs_review" && (
+                      <div style={{
+                        marginTop: "8px", padding: "8px 10px",
+                        background: "#FEF9C3", border: "1px solid #F5C842",
+                        borderRadius: "8px", fontSize: "11px", color: "#92400E", lineHeight: 1.5,
+                      }}>
+                        <div style={{ fontWeight: "600", marginBottom: "2px" }}>
+                          ⚠ הזיהוי לא ודאי: {(it.parsed?.issues ?? []).map(issueLabel).join(" · ") || "נתונים חלקיים"}
+                        </div>
+                        <div>
+                          {[
+                            it.parsed?.supplier,
+                            it.parsed?.amount != null ? fmt(it.parsed.amount) : null,
+                            it.parsed?.date,
+                          ].filter(Boolean).join(" · ") || "לא זוהו פרטים"}
+                        </div>
+                        <button type="button"
+                          onClick={() => setItemStatus(it.id, { status: "ready" })}
+                          style={{
+                            marginTop: "6px", padding: "5px 10px", borderRadius: "7px",
+                            border: "1px solid #D97706", background: "#fff", color: "#92400E",
+                            fontSize: "11px", fontWeight: "600", cursor: "pointer", fontFamily: "var(--font-sans)",
+                          }}>
+                          בדקתי — אשר לייבוא
+                        </button>
+                      </div>
+                    )}
 
                     {/* Duplicate warning — DB duplicate */}
                     {it.status === "ready" && !!it.duplicate && (
@@ -1092,8 +1312,8 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                       </div>
                     )}
 
-                    {/* Category selector — visible only for "ready" items */}
-                    {it.status === "ready" && (
+                    {/* Category selector — for "ready" and "needs_review" items */}
+                    {(it.status === "ready" || it.status === "needs_review") && (
                       <div style={{ marginTop: "8px" }}>
                         <select
                           value={it.categoryId ?? ""}
@@ -1135,6 +1355,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
             <div style={{ flex: 1, fontSize: "11px", color: "#AAA099", display: "flex", flexWrap: "wrap", gap: "6px" }}>
               {savedCount > 0 && <span style={{ color: "#2D6644", fontWeight: "600" }}>✓ {savedCount} נשמרו</span>}
               {readyCount > 0 && <span>{readyCount} מוכנים</span>}
+              {needsReviewCount > 0 && <span style={{ color: "#D97706", fontWeight: "600" }}>{needsReviewCount} דורשים בדיקה</span>}
               {duplicateCount > 0 && <span style={{ color: "#D97706", fontWeight: "600" }}>⚠ {duplicateCount} כפילויות</span>}
               {pendingCount > 0 && <span>{pendingCount} ממתינים</span>}
             </div>

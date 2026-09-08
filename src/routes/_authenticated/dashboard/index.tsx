@@ -12,6 +12,7 @@ import { useAddGrade, useDeleteGrade, useGrades } from "@/hooks/use-grades";
 import { useAddBudgetCategory, useDeleteBudgetCategory, useUpdatePlannedAmount, type BudgetSource } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, useAddBudgetSource, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { syncHorimBudgetCategory, useParentSections } from "@/hooks/use-horim";
+import { EditPlansModal } from "@/components/edit-plans-modal";
 import { KesafimImportModal } from "@/components/kesafim-import";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { toast } from "sonner";
@@ -118,7 +119,7 @@ function Bar({ pct, gradient }: { pct: number; gradient: string }) {
   );
 }
 
-function SourceCard({ s, collectionPct = 85 }: { s: SourceSummary; collectionPct?: number }) {
+function SourceCard({ s, collectionPct = 85, onEditPlans }: { s: SourceSummary; collectionPct?: number; onEditPlans?: () => void }) {
   const isMobile = useIsMobile();
   // Accordion: click expands the per-section breakdown (lazy-fetched)
   const [expanded, setExpanded] = useState(false);
@@ -296,15 +297,16 @@ function SourceCard({ s, collectionPct = 85 }: { s: SourceSummary; collectionPct
             onClick={(e) => e.stopPropagation()}
             style={{ marginTop: "16px" }}
           >
-            <Link to="/settings" style={{
+            {/* 2.3.0: פותח את חלונית עריכת הצפי במקום — לא מפנה להגדרות */}
+            <button type="button" onClick={() => onEditPlans?.()} style={{
               display: "inline-flex", alignItems: "center", gap: "6px",
               padding: "5px 13px", borderRadius: "99px",
               background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)",
-              color: "rgba(255,255,255,0.75)", fontSize: "12px", textDecoration: "none",
-              whiteSpace: "nowrap",
+              color: "rgba(255,255,255,0.75)", fontSize: "12px", cursor: "pointer",
+              whiteSpace: "nowrap", fontFamily: "var(--font-sans)",
             }}>
-              ✦ הגדירו כמה צפוי להיכנס השנה — בהגדרות ←
-            </Link>
+              ✦ הגדירו כמה צפוי להיכנס השנה ←
+            </button>
           </div>
         )}
       </div>
@@ -2399,6 +2401,8 @@ export default function DashboardPage() {
   const [wizardTriggered, setWizardTriggered] = useState<boolean | null>(null);
   const [wizardDone, setWizardDone] = useState(false);
   const [showNewYearWizard, setShowNewYearWizard] = useState(false);
+  // 2.3.0: חלונית עריכת צפי ההכנסות (נושא 4)
+  const [showEditPlans, setShowEditPlans] = useState(false);
   const [showEditWizard, setShowEditWizard] = useState(false);
 
   // Check if settings page requested to open the edit wizard
@@ -2592,8 +2596,12 @@ export default function DashboardPage() {
             <span className="num">{isLoading ? "—" : fmt(animUsed)}</span>
             <span style={{ color: "rgba(122,170,142,0.6)", marginRight: "5px" }}> הוצאות</span>
           </div>
-          <div style={{ marginTop: "5px", fontSize: "12px", color: "rgba(122,170,142,0.6)" }}>
-            צפי הכנסות שנתי: <span className="num">{isLoading ? "—" : fmt(animPlanned)}</span>
+          <div
+            onClick={() => setShowEditPlans(true)}
+            title="עריכת צפי ההכנסות"
+            style={{ marginTop: "5px", fontSize: "12px", color: "rgba(122,170,142,0.6)", cursor: "pointer" }}
+          >
+            צפי הכנסות שנתי: <span className="num" style={{ textDecoration: "underline", textDecorationColor: "rgba(122,170,142,0.35)", textUnderlineOffset: "3px" }}>{isLoading ? "—" : fmt(animPlanned)}</span>
           </div>
           {!isLoading && totals.plannedIncome > 0 && (
             incomeTotals.grand >= totals.plannedIncome ? (
@@ -2700,7 +2708,8 @@ export default function DashboardPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {isLoading
           ? [1, 2, 3].map((i) => <SkeletonCard key={i} />)
-          : (data?.sources ?? []).map((s) => <SourceCard key={s.source} s={s} collectionPct={data?.collectionPct ?? 85} />)
+          : (data?.sources ?? []).map((s) => <SourceCard key={s.source} s={s} collectionPct={data?.collectionPct ?? 85} onEditPlans={() => setShowEditPlans(true)} />)}
+        {showEditPlans && <EditPlansModal onClose={() => setShowEditPlans(false)} />
         }
       </div>
     </div>
