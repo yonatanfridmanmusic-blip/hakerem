@@ -454,8 +454,13 @@ function ExpenseForm({
         {/* 2.3.0: כמה מסמכים בקובץ אחד — כרטיס נפרד לכל מסמך, עריכה וביטול פרטני */}
         {!parsing && multiDocs && (
           <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
-            <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#1A3D2B" }}>
-              זוהו {multiDocs.length} מסמכים בקובץ — כל מסמך יישמר כהוצאה נפרדת
+            <div>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: "#1A3D2B" }}>
+                זוהו {multiDocs.length} מסמכים בקובץ — כל מסמך יישמר כהוצאה נפרדת
+              </div>
+              <div style={{ fontSize: "12px", color: "#6B6560", marginTop: "3px" }}>
+                בדקו שהפרטים נכונים — אפשר לתקן כל שדה לפני השמירה
+              </div>
             </div>
             {multiDocs.map((d, i) => (
               <div key={i} style={{
@@ -479,23 +484,38 @@ function ExpenseForm({
                   </button>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                  <input type="number" value={d.amount} placeholder="סכום" min="0" step="0.01" disabled={!d.include}
-                    onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))}
-                    style={{ ...inputStyle, direction: "ltr", textAlign: "right", padding: "7px 10px", fontSize: "13px" }} />
-                  <DateInput value={d.date} onChange={(v) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, date: v } : x))}
-                    style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px" }} />
-                  <input type="text" value={d.supplier} placeholder="ספק" disabled={!d.include}
-                    onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, supplier: e.target.value } : x))}
-                    style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px" }} />
-                  <select value={d.budget_category_id} disabled={!d.include}
-                    onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, budget_category_id: e.target.value } : x))}
-                    style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px", cursor: "pointer" }}>
-                    <option value="">ללא קטגוריה</option>
-                    {(categories ?? []).map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                  </select>
-                  <input type="text" value={d.description} placeholder="תיאור" disabled={!d.include}
-                    onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
-                    style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px", gridColumn: "span 2" }} />
+                  <div>
+                    <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>ספק</div>
+                    <input type="text" value={d.supplier} placeholder="שם הספק" disabled={!d.include}
+                      onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, supplier: e.target.value } : x))}
+                      style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>סכום (₪)</div>
+                    <input type="number" value={d.amount} placeholder="0" min="0" step="0.01" disabled={!d.include}
+                      onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))}
+                      style={{ ...inputStyle, direction: "ltr", textAlign: "right", padding: "7px 10px", fontSize: "13px" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>תאריך</div>
+                    <DateInput value={d.date} onChange={(v) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, date: v } : x))}
+                      style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>קטגוריה</div>
+                    <select value={d.budget_category_id} disabled={!d.include}
+                      onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, budget_category_id: e.target.value } : x))}
+                      style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px", cursor: "pointer" }}>
+                      <option value="">ללא קטגוריה</option>
+                      {(categories ?? []).map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                    </select>
+                  </div>
+                  <div style={{ gridColumn: "span 2" }}>
+                    <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>תיאור</div>
+                    <input type="text" value={d.description} placeholder="פרטים נוספים" disabled={!d.include}
+                      onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
+                      style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px" }} />
+                  </div>
                 </div>
               </div>
             ))}
@@ -924,6 +944,10 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
   const setItemStatus = (id: string, updates: Partial<ImportItem>) =>
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...updates } : it)));
 
+  // 2.3.0 (משוב יונתן): עריכת שדות המפתח של מסמך ישירות בכרטיס
+  const setItemParsed = (id: string, patch: Partial<ParsedDocument>) =>
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, parsed: { ...(it.parsed ?? {}), ...patch } } : it)));
+
   const processAll = async () => {
     const queued = items.filter((it) => it.status === "queued" || it.status === "error");
     if (!queued.length) return;
@@ -1183,6 +1207,11 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
           {/* File list */}
           {items.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {items.some((it) => it.status === "ready" || it.status === "needs_review") && (
+                <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#1A3D2B", padding: "2px 2px 2px" }}>
+                  בדקו שהפרטים נכונים — אפשר לתקן כל שדה לפני הייבוא
+                </div>
+              )}
               {items.map((it) => {
                 const isDuplicate = !!it.duplicate || !!it.batchDuplicateOf;
                 const borderColor = it.status === "saved" ? "#D4EDE0"
@@ -1308,6 +1337,29 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                         <div>קובץ זה זהה לקובץ אחר שנבחר באותו ייבוא</div>
                         <div style={{ marginTop: "4px", fontSize: "10px", color: "#B45309" }}>
                           מומלץ להסיר קובץ אחד מהשניים לפני השמירה
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 2.3.0 (משוב יונתן): שלושת שדות המפתח כעריכה גלויה בכל כרטיס */}
+                    {(it.status === "ready" || it.status === "needs_review") && (
+                      <div style={{ marginTop: "8px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 110px 130px", gap: "8px" }}>
+                        <div>
+                          <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>ספק</div>
+                          <input type="text" value={it.parsed?.supplier ?? ""} placeholder="שם הספק"
+                            onChange={(e) => setItemParsed(it.id, { supplier: e.target.value })}
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #E8E2D9", borderRadius: "7px", fontSize: "13px", background: "#fff", color: "#1A1A1A", outline: "none", fontFamily: "var(--font-sans)", direction: "rtl" }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>סכום (₪)</div>
+                          <input type="number" value={it.parsed?.amount ?? ""} placeholder="0" min="0" step="0.01"
+                            onChange={(e) => setItemParsed(it.id, { amount: e.target.value === "" ? null : Number(e.target.value) })}
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #E8E2D9", borderRadius: "7px", fontSize: "13px", background: "#fff", color: "#1A1A1A", outline: "none", fontFamily: "var(--font-sans)", direction: "ltr", textAlign: "right" }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>תאריך</div>
+                          <DateInput value={it.parsed?.date ?? today()} onChange={(v) => setItemParsed(it.id, { date: v })}
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #E8E2D9", borderRadius: "7px", fontSize: "13px", background: "#fff", color: "#1A1A1A", outline: "none", fontFamily: "var(--font-sans)" }} />
                         </div>
                       </div>
                     )}
