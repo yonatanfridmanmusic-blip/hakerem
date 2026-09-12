@@ -586,7 +586,7 @@ function ExpenseForm({
                     <AmountInput value={d.amount} disabled={!d.include}
                       onChange={(v) => edit(i, { amount: v })} />
                     {state === "pending" || state === "review" ? (
-                      <div style={{ fontSize: "10px", color: "#B45309", marginTop: "3px" }}>נא לוודא את הסכום</div>
+                      <div style={{ fontSize: "11.5px", color: "#B45309", marginTop: "3px" }}>נא לוודא את הסכום</div>
                     ) : null}
                   </div>
                   <div>
@@ -594,7 +594,7 @@ function ExpenseForm({
                     <DateInput value={d.date} onChange={(v) => edit(i, { date: v })}
                       style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px", ...(d.multipleDates ? { background: "#FEF9C3", border: "1px solid #F5C842" } : {}) }} />
                     {d.multipleDates && (
-                      <div style={{ fontSize: "10px", color: "#92400E", fontWeight: 600, marginTop: "3px", lineHeight: 1.4 }}>
+                      <div style={{ fontSize: "11.5px", color: "#92400E", fontWeight: 600, marginTop: "3px", lineHeight: 1.4 }}>
                         נמצאו כמה תאריכים במסמך — ודאו שזה תאריך המסמך
                       </div>
                     )}
@@ -608,7 +608,7 @@ function ExpenseForm({
                       {(categories ?? []).map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
                     </select>
                     {state === "pending" || state === "review" ? (
-                      <div style={{ fontSize: "10px", color: d.budget_category_id ? "#6B6560" : "#B45309", marginTop: "3px" }}>
+                      <div style={{ fontSize: "11.5px", color: d.budget_category_id ? "#6B6560" : "#B45309", marginTop: "3px" }}>
                         {d.budget_category_id ? "בדקו את הקטגוריה" : "בחרו קטגוריה"}
                       </div>
                     ) : null}
@@ -1490,7 +1490,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                           <AmountInput value={it.parsed?.amount != null ? String(it.parsed.amount) : ""}
                             onChange={(v) => setItemParsed(it.id, { amount: v === "" ? null : Number(v) })} />
                           {!isApproved && (
-                            <div style={{ fontSize: "10px", color: "#B45309", marginTop: "3px" }}>נא לוודא את הסכום</div>
+                            <div style={{ fontSize: "11.5px", color: "#B45309", marginTop: "3px" }}>נא לוודא את הסכום</div>
                           )}
                         </div>
                         <div>
@@ -1498,7 +1498,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                           <DateInput value={it.parsed?.date ?? today()} onChange={(v) => setItemParsed(it.id, { date: v })}
                             style={{ width: "100%", padding: "7px 10px", borderRadius: "7px", fontSize: "13px", color: "#1A1A1A", outline: "none", fontFamily: "var(--font-sans)", ...(hasMultipleDates(it.parsed) ? { background: "#FEF9C3", border: "1px solid #F5C842" } : { background: "#fff", border: "1px solid #E8E2D9" }) }} />
                           {hasMultipleDates(it.parsed) && (
-                            <div style={{ fontSize: "10px", color: "#92400E", fontWeight: 600, marginTop: "3px", lineHeight: 1.4 }}>
+                            <div style={{ fontSize: "11.5px", color: "#92400E", fontWeight: 600, marginTop: "3px", lineHeight: 1.4 }}>
                               נמצאו כמה תאריכים במסמך — ודאו שזה תאריך המסמך
                             </div>
                           )}
@@ -1528,7 +1528,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                           ))}
                         </select>
                         {!isApproved && (
-                          <div style={{ fontSize: "10px", color: it.categoryId ? "#6B6560" : "#B45309", marginTop: "3px" }}>
+                          <div style={{ fontSize: "11.5px", color: it.categoryId ? "#6B6560" : "#B45309", marginTop: "3px" }}>
                             {it.categoryId ? "בדקו את הקטגוריה" : "בחרו קטגוריה"}
                           </div>
                         )}
