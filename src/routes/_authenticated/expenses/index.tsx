@@ -194,6 +194,57 @@ const labelStyle: React.CSSProperties = {
   color: "#6B6560", display: "block", marginBottom: "6px",
 };
 
+// משוב יונתן 3 (הנגשה): שדה סכום — רק ספרות ונקודה נכנסות פיזית
+// (inputmode="decimal" + סינון תווים), סימן ₪ קבוע בתוך השדה, פונט גדול
+// ובולט מהשדות האחרים, ופסיקי אלפים בתצוגה כשהשדה לא בפוקוס (2,490).
+// אפס ולידציה אחרי הקלדה — קלט שגוי פשוט לא נכנס.
+function AmountInput({ value, onChange, disabled, style }: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  style?: React.CSSProperties;
+}) {
+  // draft: הערך הגולמי בזמן הקלדה (שומר "5." באמצע הקלדה גם כשההורה
+  // מאחסן מספר); מחוץ לפוקוס מוצג הערך המפורמט עם פסיקי אלפים.
+  const [draft, setDraft] = useState<string | null>(null);
+  const sanitize = (raw: string): string => {
+    let v = raw.replace(/[^\d.]/g, "");
+    const dot = v.indexOf(".");
+    if (dot !== -1) v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, "");
+    const [int = "", dec] = v.split(".");
+    return dec !== undefined ? `${int.slice(0, 9)}.${dec.slice(0, 2)}` : int.slice(0, 9);
+  };
+  const formatted = (() => {
+    if (!value) return "";
+    const n = Number(value);
+    return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : value;
+  })();
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={draft !== null ? draft : formatted}
+        disabled={disabled}
+        placeholder="0"
+        onFocus={() => setDraft(value)}
+        onBlur={() => setDraft(null)}
+        onChange={(e) => { const v = sanitize(e.target.value); setDraft(v); onChange(v); }}
+        style={{
+          ...inputStyle, direction: "ltr", textAlign: "right",
+          padding: "7px 10px", paddingLeft: "28px",
+          fontSize: "15px", fontWeight: 700,
+          ...style,
+        }}
+      />
+      <span style={{
+        position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)",
+        fontSize: "13px", fontWeight: 600, color: "#8A837C", pointerEvents: "none",
+      }}>₪</span>
+    </div>
+  );
+}
+
 // ─── Expense Form (shared between Add + Edit) ─────────────────────────────────
 
 type ExpenseFormState = {
@@ -531,10 +582,9 @@ function ExpenseForm({
                       style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>סכום (₪)</div>
-                    <input type="number" value={d.amount} placeholder="0" min="0" step="0.01" disabled={!d.include}
-                      onChange={(e) => edit(i, { amount: e.target.value })}
-                      style={{ ...inputStyle, direction: "ltr", textAlign: "right", padding: "7px 10px", fontSize: "13px" }} />
+                    <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>סכום</div>
+                    <AmountInput value={d.amount} disabled={!d.include}
+                      onChange={(v) => edit(i, { amount: v })} />
                     {state === "pending" || state === "review" ? (
                       <div style={{ fontSize: "10px", color: "#B45309", marginTop: "3px" }}>נא לוודא את הסכום</div>
                     ) : null}
@@ -1132,7 +1182,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
         }
         const p = it.parsed ?? {};
         await addExpense.mutateAsync({
-          expense_date: p.date ?? today(),
+          expense_date: p.date || today(),
           amount: p.amount ?? 0,
           source: bulkSource,
           bank_account: "school",
@@ -1436,10 +1486,9 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #E8E2D9", borderRadius: "7px", fontSize: "13px", background: "#fff", color: "#1A1A1A", outline: "none", fontFamily: "var(--font-sans)", direction: "rtl" }} />
                         </div>
                         <div>
-                          <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>סכום (₪)</div>
-                          <input type="number" value={it.parsed?.amount ?? ""} placeholder="0" min="0" step="0.01"
-                            onChange={(e) => setItemParsed(it.id, { amount: e.target.value === "" ? null : Number(e.target.value) })}
-                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #E8E2D9", borderRadius: "7px", fontSize: "13px", background: "#fff", color: "#1A1A1A", outline: "none", fontFamily: "var(--font-sans)", direction: "ltr", textAlign: "right" }} />
+                          <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>סכום</div>
+                          <AmountInput value={it.parsed?.amount != null ? String(it.parsed.amount) : ""}
+                            onChange={(v) => setItemParsed(it.id, { amount: v === "" ? null : Number(v) })} />
                           {!isApproved && (
                             <div style={{ fontSize: "10px", color: "#B45309", marginTop: "3px" }}>נא לוודא את הסכום</div>
                           )}
