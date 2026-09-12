@@ -26,6 +26,7 @@ interface ParsedDoc {
   amount?: number | null;
   supplier?: string | null;
   date?: string | null;
+  multiple_dates?: boolean | null;
   description?: string | null;
   invoice_number?: string | null;
   suggested_category?: string | null;
@@ -47,12 +48,17 @@ function schoolYearRange(): { min: string; max: string } {
 function validateDocs(docs: ParsedDoc[]): { out: OutDoc[]; allValid: boolean } {
   const { min, max } = schoolYearRange();
   const out: OutDoc[] = docs.map((d) => {
-    const issues: string[] = [];
-    if (d.amount == null || !(Number(d.amount) > 0)) issues.push("amount_missing_or_not_positive");
-    if (!d.supplier || String(d.supplier).trim() === "") issues.push("supplier_empty");
-    if (!d.date || !/^\d{4}-\d{2}-\d{2}$/.test(String(d.date))) issues.push("date_missing_or_malformed");
-    else if (String(d.date) < min || String(d.date) > max) issues.push("date_out_of_school_year_range");
-    return { ...d, confidence: issues.length === 0 ? "ok" : "needs_review", issues };
+    // בעיות "קשות" — מפילות confidence ומפעילות ניסיון חוזר
+    const hard: string[] = [];
+    if (d.amount == null || !(Number(d.amount) > 0)) hard.push("amount_missing_or_not_positive");
+    if (!d.supplier || String(d.supplier).trim() === "") hard.push("supplier_empty");
+    if (!d.date || !/^\d{4}-\d{2}-\d{2}$/.test(String(d.date))) hard.push("date_missing_or_malformed");
+    else if (String(d.date) < min || String(d.date) > max) hard.push("date_out_of_school_year_range");
+    const issues = [...hard];
+    // דגל רך מהמודל (משוב יונתן): יותר מתאריך מועמד אחד במסמך — אזהרה
+    // ב-UI על שדה התאריך, בלי להפיל את המסמך ובלי retry (לא דטרמיניסטי).
+    if (d.multiple_dates === true) issues.push("multiple_dates");
+    return { ...d, confidence: hard.length === 0 ? "ok" : "needs_review", issues };
   });
   // ריבוי מסמכים: סכומים זהים = חשד לפיצול שגוי של אותו מסמך
   if (out.length > 1) {
@@ -97,6 +103,7 @@ async function extractOnce(
 כללי שדות — קריטי:
 - amount: תמיד "סה"כ לתשלום" (או "סה"כ כולל מע"מ") של המסמך כולו. לא שורה פנימית, לא סכום ביניים, לא תעודת משלוח.
 - date: התאריך הנכון הוא השדה "תאריך מסמך" או "תאריך ערך" של המסמך — הוא בלבד. לעולם לא "לתשלום עד", לא תאריך פירעון, לא מועד אחרון לתשלום, לא "מועד הדפסה"/"הודפס בתאריך" (תאריך הדפסה שמודפס בדרך כלל בתחתית הדף), ולא תאריכים של תעודות משלוח פנימיות בתוך חשבונית ריכוז. תאריכים במסמכים ישראליים כתובים יום/חודש/שנה (DD/MM/YY או DD/MM/YYYY) — למשל 3/09/26 הוא 3 בספטמבר 2026. שנה דו-ספרתית פירושה 20YY (26 = 2026; לעולם לא 2003 ולא 1926).
+- multiple_dates: שדה חובה לכל מסמך. סמן true אם מודפסים במסמך יותר מתאריך מועמד אחד (למשל גם תאריך מסמך וגם מועד הדפסה, "לתשלום עד" או תאריכי תעודות משלוח) — גם אם אתה בטוח שבחרת נכון. false רק כשיש תאריך יחיד ולא ניתן להתבלבל.
 - supplier: שם העסק **שהוציא** את המסמך (המוכר/נותן השירות) — מהכותרת הרשמית, הלוגו או פרטי העוסק המורשה. לעולם לא הלקוח המחויב: שם שמופיע אחרי "לכבוד" או כנמען (למשל בית ספר או גן) הוא הלקוח, לא הספק. העתק את שם הספק במדויק, אות-באות, כפי שמודפס — אל תנחש ואל תשלים אותיות. התעלם לחלוטין מפרסומות, סלוגנים, כתובות אתרים ומלל שיווקי המודפסים על הדף.
 - description: תיאור קצר בעברית של מה שנרכש בפועל, מתוך שורות החיוב בלבד — לא מתוך פרסומות, לא מתוך כותרות גרפיות. אם השורה היא שכירות/מנוי/שירות חודשי — כתוב זאת.
 - ${catRule}`,
@@ -117,12 +124,13 @@ async function extractOnce(
                   amount:             { type: "number", description: "סה\"כ לתשלום של המסמך. null אם לא קיים." },
                   supplier:           { type: "string", description: "שם הספק מהכותרת הרשמית. null אם לא קיים." },
                   date:               { type: "string", description: "תאריך המסמך/תאריך ערך YYYY-MM-DD (לא 'לתשלום עד', לא מועד הדפסה; DD/MM/YY ישראלי, YY=20YY). null אם לא קיים." },
+                  multiple_dates:     { type: "boolean", description: "חובה. true אם מודפסים במסמך יותר מתאריך מועמד אחד (תאריך מסמך, מועד הדפסה, לתשלום עד, תאריכי תעודות משלוח); false רק כשיש תאריך יחיד." },
                   description:        { type: "string", description: "תיאור קצר בעברית של הרכישה. null אם לא קיים." },
                   invoice_number:     { type: "string", description: "מספר חשבונית/קבלה. null אם לא קיים." },
                   suggested_category: { type: "string", description: "קטגוריה מהרשימה או null." },
                   pages:              { type: "array", items: { type: "number" }, description: "מספרי העמודים של המסמך בקובץ (מ-1)." },
                 },
-                required: [],
+                required: ["multiple_dates"],
               },
             },
           },

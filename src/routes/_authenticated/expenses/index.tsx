@@ -115,6 +115,7 @@ type ParsedDocument = ParsedReceipt & {
   pages?: number[] | null;
   confidence?: "ok" | "needs_review";
   issues?: string[];
+  multiple_dates?: boolean | null;   // v6: דגל רך — נמצאו כמה תאריכים מועמדים במסמך
 };
 
 // תרגום קודי issues של המנוע לעברית ידידותית
@@ -125,9 +126,16 @@ function issueLabel(code: string): string {
     case "date_missing_or_malformed": return "תאריך לא זוהה";
     case "date_out_of_school_year_range": return "תאריך מחוץ לשנת הלימודים";
     case "duplicate_amount_suspected_bad_split": return "סכום זהה למסמך אחר בקובץ";
+    case "multiple_dates": return "נמצאו כמה תאריכים במסמך — ודאו שזה תאריך המסמך";
     default: return code;
   }
 }
+
+// v6 (משוב יונתן): "multiple_dates" הוא דגל רך מהמנוע — מוצג כאזהרה על שדה
+// התאריך בלבד, ולכן מסונן מרשימת ה-issues הקשות שמוצגות בכרטיס.
+const hardIssues = (issues?: string[]) => (issues ?? []).filter((c) => c !== "multiple_dates");
+const hasMultipleDates = (d?: ParsedDocument | null) =>
+  d?.multiple_dates === true || (d?.issues ?? []).includes("multiple_dates");
 
 // 2.3.0: עוטף רב-מסמכי — פונה ל-parse-receipt-v2 ומחזיר רשומה לכל מסמך בקובץ.
 // category_names נשלח בשני מסלולי ההעלאה (דרישה מחייבת בסבב זה).
@@ -202,6 +210,8 @@ type ExpenseFormState = {
 type EditableDoc = {
   amount: string; supplier: string; date: string; description: string;
   budget_category_id: string; include: boolean; needsReview: boolean; issues: string[];
+  multipleDates: boolean;   // v6: אזהרת ריבוי תאריכים על שדה התאריך
+  approved: boolean;        // משוב יונתן: אישור "הפרטים נכונים" פר-כרטיס
 };
 
 function ExpenseForm({
@@ -238,9 +248,11 @@ function ExpenseForm({
     date: d.date ?? today(),
     description: d.description ?? "",
     budget_category_id: (categories ?? []).find((c) => c.name === d.suggested_category)?.id ?? "",
-    include: d.confidence !== "needs_review",
+    include: true,
     needsReview: d.confidence === "needs_review",
-    issues: d.issues ?? [],
+    issues: hardIssues(d.issues),
+    multipleDates: hasMultipleDates(d),
+    approved: false,
   });
 
   const handleFileSelect = async (file: File | null) => {
@@ -442,7 +454,12 @@ function ExpenseForm({
             </div>
             {parsedResult.confidence === "needs_review" && (
               <div style={{ marginTop: "8px", padding: "7px 10px", background: "#FEF9C3", border: "1px solid #F5C842", borderRadius: "7px", fontSize: "11px", color: "#92400E", fontWeight: 600 }}>
-                ⚠ דורש בדיקה ידנית: {(parsedResult.issues ?? []).map(issueLabel).join(" · ")}
+                ⚠ דורש בדיקה ידנית: {hardIssues(parsedResult.issues).map(issueLabel).join(" · ")}
+              </div>
+            )}
+            {hasMultipleDates(parsedResult) && (
+              <div style={{ marginTop: "8px", padding: "7px 10px", background: "#FEF9C3", border: "1px solid #F5C842", borderRadius: "7px", fontSize: "11px", color: "#92400E", fontWeight: 600 }}>
+                ⚠ נמצאו כמה תאריכים במסמך — ודאו שזה תאריך המסמך
               </div>
             )}
             <div style={{ marginTop: "8px", fontSize: "11px", color: "#6B8F7D", borderTop: "1px solid #C8E8D4", paddingTop: "7px" }}>
@@ -451,34 +468,57 @@ function ExpenseForm({
           </div>
         )}
 
-        {/* 2.3.0: כמה מסמכים בקובץ אחד — כרטיס נפרד לכל מסמך, עריכה וביטול פרטני */}
-        {!parsing && multiDocs && (
+        {/* 2.3.0 + משוב יונתן: מסך בדיקה מודרך — כרטיס לכל מסמך, אישור אחד לכל כרטיס */}
+        {!parsing && multiDocs && (() => {
+          const included = multiDocs.filter((d) => d.include);
+          const approvedCount = included.filter((d) => d.approved).length;
+          const allApproved = included.length > 0 && approvedCount === included.length;
+          // כל עריכת שדה מחזירה את הכרטיס למצב "ממתין לבדיקה"
+          const edit = (i: number, patch: Partial<EditableDoc>) =>
+            setMultiDocs((prev) => prev!.map((x, j) => (j === i ? { ...x, ...patch, approved: false } : x)));
+          return (
           <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
             <div>
-              <div style={{ fontSize: "13px", fontWeight: 700, color: "#1A3D2B" }}>
-                זוהו {multiDocs.length} מסמכים בקובץ — כל מסמך יישמר כהוצאה נפרדת
+              <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
+                <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#1A3D2B" }}>
+                  זיהינו {multiDocs.length} מסמכים — נעבור עליהם ביחד
+                </div>
+                <span style={{ flex: 1 }} />
+                <div style={{ fontSize: "12px", fontWeight: 700, color: allApproved ? "#2D6644" : "#92400E" }}>
+                  אושרו {approvedCount} מתוך {included.length}
+                </div>
               </div>
               <div style={{ fontSize: "12px", color: "#6B6560", marginTop: "3px" }}>
-                בדקו שהפרטים נכונים — אפשר לתקן כל שדה לפני השמירה
+                כל מסמך יישמר כהוצאה נפרדת — בדקו את הפרטים ולחצו ״הפרטים נכונים״ בכל כרטיס
               </div>
             </div>
-            {multiDocs.map((d, i) => (
+            {multiDocs.map((d, i) => {
+              const state = !d.include ? "cancelled" : d.approved ? "approved" : d.needsReview ? "review" : "pending";
+              const barColor = state === "approved" ? "#2D6644" : state === "review" ? "#FCA5A5" : state === "pending" ? "#F5C842" : "#E8E2D9";
+              return (
               <div key={i} style={{
                 padding: "10px 12px", borderRadius: "10px",
-                background: d.needsReview ? "#FFFBEB" : "#F7FBF9",
-                border: `1.5px solid ${d.needsReview ? "#F5C842" : "#A8D9BC"}`,
+                background: state === "approved" ? "#F0FAF5" : state === "review" ? "#FEF2F2" : state === "pending" ? "#FFFDF6" : "#F7F4EF",
+                border: `1px solid ${state === "approved" ? "#A8D9BC" : state === "review" ? "#FCA5A5" : state === "pending" ? "#F0E6C8" : "#EAE5DE"}`,
+                borderRight: `3px solid ${barColor}`,
                 opacity: d.include ? 1 : 0.55,
               }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "11px", fontWeight: 700, color: "#6B6560" }}>מסמך {i + 1}</span>
-                  {d.needsReview && (
-                    <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#92400E", background: "#FEF9C3", border: "1px solid #F5C842", borderRadius: "20px", padding: "1px 8px" }}>
-                      דורש בדיקה ידנית{d.issues.length ? `: ${d.issues.map(issueLabel).join(" · ")}` : ""}
+                  {state === "pending" && (
+                    <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#92400E", background: "#FEF9C3", border: "1px solid #F5C842", borderRadius: "20px", padding: "1px 8px" }}>ממתין לבדיקה</span>
+                  )}
+                  {state === "approved" && (
+                    <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#1A3D2B", background: "#D4EDE0", border: "1px solid #A8D9BC", borderRadius: "20px", padding: "1px 8px" }}>✓ אושר</span>
+                  )}
+                  {state === "review" && (
+                    <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#B91C1C", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "20px", padding: "1px 8px" }}>
+                      דורש בדיקה{d.issues.length ? `: ${d.issues.map(issueLabel).join(" · ")}` : ""}
                     </span>
                   )}
                   <span style={{ flex: 1 }} />
                   <button type="button"
-                    onClick={() => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, include: !x.include } : x))}
+                    onClick={() => setMultiDocs((prev) => prev!.map((x, j) => (j === i ? { ...x, include: !x.include } : x)))}
                     style={{ background: "none", border: "none", cursor: "pointer", fontSize: "11px", color: d.include ? "#AAA099" : "#2D6644", fontFamily: "var(--font-sans)", padding: 0 }}>
                     {d.include ? "בטל מסמך זה" : "החזר לשמירה"}
                   </button>
@@ -487,41 +527,65 @@ function ExpenseForm({
                   <div>
                     <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>ספק</div>
                     <input type="text" value={d.supplier} placeholder="שם הספק" disabled={!d.include}
-                      onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, supplier: e.target.value } : x))}
+                      onChange={(e) => edit(i, { supplier: e.target.value })}
                       style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px" }} />
                   </div>
                   <div>
                     <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>סכום (₪)</div>
                     <input type="number" value={d.amount} placeholder="0" min="0" step="0.01" disabled={!d.include}
-                      onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))}
+                      onChange={(e) => edit(i, { amount: e.target.value })}
                       style={{ ...inputStyle, direction: "ltr", textAlign: "right", padding: "7px 10px", fontSize: "13px" }} />
+                    {state === "pending" || state === "review" ? (
+                      <div style={{ fontSize: "10px", color: "#B45309", marginTop: "3px" }}>נא לוודא את הסכום</div>
+                    ) : null}
                   </div>
                   <div>
                     <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>תאריך</div>
-                    <DateInput value={d.date} onChange={(v) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, date: v } : x))}
-                      style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px" }} />
+                    <DateInput value={d.date} onChange={(v) => edit(i, { date: v })}
+                      style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px", ...(d.multipleDates ? { background: "#FEF9C3", border: "1px solid #F5C842" } : {}) }} />
+                    {d.multipleDates && (
+                      <div style={{ fontSize: "10px", color: "#92400E", fontWeight: 600, marginTop: "3px", lineHeight: 1.4 }}>
+                        נמצאו כמה תאריכים במסמך — ודאו שזה תאריך המסמך
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>קטגוריה</div>
                     <select value={d.budget_category_id} disabled={!d.include}
-                      onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, budget_category_id: e.target.value } : x))}
+                      onChange={(e) => edit(i, { budget_category_id: e.target.value })}
                       style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px", cursor: "pointer" }}>
                       <option value="">ללא קטגוריה</option>
                       {(categories ?? []).map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
                     </select>
+                    {state === "pending" || state === "review" ? (
+                      <div style={{ fontSize: "10px", color: d.budget_category_id ? "#6B6560" : "#B45309", marginTop: "3px" }}>
+                        {d.budget_category_id ? "בדקו את הקטגוריה" : "בחרו קטגוריה"}
+                      </div>
+                    ) : null}
                   </div>
                   <div style={{ gridColumn: "span 2" }}>
                     <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>תיאור</div>
                     <input type="text" value={d.description} placeholder="פרטים נוספים" disabled={!d.include}
-                      onChange={(e) => setMultiDocs((prev) => prev!.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
+                      onChange={(e) => edit(i, { description: e.target.value })}
                       style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px" }} />
                   </div>
                 </div>
+                {d.include && !d.approved && (
+                  <button type="button"
+                    onClick={() => setMultiDocs((prev) => prev!.map((x, j) => (j === i ? { ...x, approved: true } : x)))}
+                    style={{
+                      marginTop: "10px", width: "100%", padding: "9px 0", borderRadius: "8px", border: "none",
+                      background: "#2D6644", color: "#fff", fontSize: "13px", fontWeight: 600,
+                      cursor: "pointer", fontFamily: "var(--font-sans)",
+                    }}>
+                    הפרטים נכונים ✓
+                  </button>
+                )}
               </div>
-            ))}
-            <button type="button" disabled={savingMulti || multiDocs.every((d) => !d.include)}
+              );
+            })}
+            <button type="button" disabled={savingMulti || !allApproved}
               onClick={async () => {
-                const included = multiDocs.filter((d) => d.include);
                 if (included.length === 0) { toast.error("לא נבחרו מסמכים לשמירה"); return; }
                 for (const d of included) {
                   if (!d.amount || Number(d.amount) <= 0) { toast.error("יש מסמך עם סכום חסר או לא תקין"); return; }
@@ -532,14 +596,17 @@ function ExpenseForm({
               }}
               style={{
                 padding: "11px 0", border: "none", borderRadius: "8px",
-                background: savingMulti ? "#888" : "#1A3D2B", color: "#fff",
-                fontSize: "14px", fontWeight: 500, cursor: savingMulti ? "not-allowed" : "pointer",
+                background: savingMulti || !allApproved ? "#B8B2AA" : "#1A3D2B", color: "#fff",
+                fontSize: "14px", fontWeight: 500, cursor: savingMulti || !allApproved ? "not-allowed" : "pointer",
                 fontFamily: "var(--font-sans)",
               }}>
-              {savingMulti ? "שומר..." : `שמור ${multiDocs.filter((d) => d.include).length} הוצאות`}
+              {savingMulti ? "שומר..."
+                : allApproved ? `שמור ${included.length} הוצאות מאושרות`
+                : `אשרו את כל המסמכים כדי לשמור (${approvedCount}/${included.length})`}
             </button>
           </div>
-        )}
+          );
+        })()}
 
         {receiptFile && (
           <button type="button" onClick={() => { setReceiptFile(null); setAutofilled(false); setParsedResult(null); setMultiDocs(null); }} style={{
@@ -895,6 +962,7 @@ type ImportItem = {
   categoryId?: string;        // per-item: AI-suggested or manually chosen
   duplicate?: Expense;        // existing DB expense with same amount+date+supplier
   batchDuplicateOf?: string;  // ID of another item in the same import batch
+  approved?: boolean;         // משוב יונתן: אישור "הפרטים נכונים" פר-כרטיס
 };
 
 function findDuplicate(parsed: ParsedReceipt, expenses: Expense[]): Expense | undefined {
@@ -946,7 +1014,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
 
   // 2.3.0 (משוב יונתן): עריכת שדות המפתח של מסמך ישירות בכרטיס
   const setItemParsed = (id: string, patch: Partial<ParsedDocument>) =>
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, parsed: { ...(it.parsed ?? {}), ...patch } } : it)));
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, approved: false, parsed: { ...(it.parsed ?? {}), ...patch } } : it)));
 
   const processAll = async () => {
     const queued = items.filter((it) => it.status === "queued" || it.status === "error");
@@ -974,6 +1042,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
           file: x.file,
           status: (doc.confidence === "needs_review" ? "needs_review" : "ready") as ImportStatus,
           parsed: doc,
+          approved: false,
           error: undefined,
           categoryId: resolveCategoryId(doc.suggested_category),
           duplicate: findDuplicate(doc, allExpenses ?? []),
@@ -1047,7 +1116,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
   };
 
   const importAll = async () => {
-    const ready = items.filter((it) => it.status === "ready");
+    const ready = items.filter((it) => it.status === "ready" && it.approved);
     if (!ready.length) return;
     setImporting(true);
     let saved = 0;
@@ -1082,18 +1151,21 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
     if (saved > 0) toast.success(`${saved} הוצאות נשמרו בהצלחה`);
   };
 
-  const statusIcon = (status: ImportStatus) => {
+  const statusIcon = (status: ImportStatus, approved?: boolean) => {
     if (status === "parsing" || status === "saving")
       return <div style={{ width: "14px", height: "14px", border: "2px solid #2D6644", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />;
-    if (status === "ready") return <Check size={14} color="#2D6644" />;
+    if (status === "ready") return approved
+      ? <Check size={14} color="#2D6644" />
+      : <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#F5C842", margin: "0 3px" }} />;
     if (status === "saved") return <Check size={14} color="#2D6644" />;
     if (status === "error") return <AlertTriangle size={14} color="#DC2626" />;
+    if (status === "needs_review") return <AlertTriangle size={14} color="#B91C1C" />;
     return <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#E8E2D9", margin: "0 3px" }} />;
   };
 
-  const readyCount = items.filter((it) => it.status === "ready").length;
   const savedCount = items.filter((it) => it.status === "saved").length;
-  const needsReviewCount = items.filter((it) => it.status === "needs_review").length;
+  const approvedCount = items.filter((it) => it.status === "ready" && it.approved).length;
+  const awaitingCount = items.filter((it) => (it.status === "ready" && !it.approved) || it.status === "needs_review").length;
   const pendingCount = items.filter((it) => it.status === "queued" || it.status === "error").length;
   const duplicateCount = items.filter((it) => it.status === "ready" && (!!it.duplicate || !!it.batchDuplicateOf)).length;
 
@@ -1207,29 +1279,52 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
           {/* File list */}
           {items.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {items.some((it) => it.status === "ready" || it.status === "needs_review") && (
-                <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#1A3D2B", padding: "2px 2px 2px" }}>
-                  בדקו שהפרטים נכונים — אפשר לתקן כל שדה לפני הייבוא
-                </div>
-              )}
+              {(() => {
+                const reviewable = items.filter((it) => it.status === "ready" || it.status === "needs_review");
+                if (!reviewable.length) return null;
+                const app = reviewable.filter((it) => it.status === "ready" && it.approved).length;
+                return (
+                  <div style={{ padding: "2px 2px 2px" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 700, color: "#1A3D2B" }}>
+                        זיהינו {reviewable.length} מסמכים — נעבור עליהם ביחד
+                      </div>
+                      <span style={{ flex: 1 }} />
+                      <div style={{ fontSize: "12px", fontWeight: 700, color: app === reviewable.length ? "#2D6644" : "#92400E" }}>
+                        אושרו {app} מתוך {reviewable.length}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: "11.5px", color: "#6B6560", marginTop: "2px" }}>
+                      בדקו את הפרטים בכל כרטיס ולחצו ״הפרטים נכונים״
+                    </div>
+                  </div>
+                );
+              })()}
               {items.map((it) => {
                 const isDuplicate = !!it.duplicate || !!it.batchDuplicateOf;
+                const isApproved = it.status === "ready" && !!it.approved;
                 const borderColor = it.status === "saved" ? "#D4EDE0"
                   : it.status === "error" ? "#FECACA"
-                  : it.status === "needs_review" ? "#F5C842"
-                  : isDuplicate ? "#F5C842"
+                  : it.status === "needs_review" ? "#FCA5A5"
+                  : isApproved ? "#A8D9BC"
+                  : it.status === "ready" ? "#F0E6C8"
                   : "#EAE5DE";
                 const bgColor = it.status === "saved" ? "#F0FAF5"
                   : it.status === "error" ? "#FEF2F2"
-                  : it.status === "needs_review" ? "#FFFBEB"
-                  : isDuplicate ? "#FFFBEB"
+                  : it.status === "needs_review" ? "#FEF2F2"
+                  : isApproved ? "#F0FAF5"
+                  : it.status === "ready" ? "#FFFDF6"
                   : "#F7F4EF";
+                const barColor = it.status === "saved" || isApproved ? "#2D6644"
+                  : it.status === "error" || it.status === "needs_review" ? "#FCA5A5"
+                  : it.status === "ready" ? "#F5C842"
+                  : "#E8E2D9";
                 return (
-                  <div key={it.id} style={{ padding: "10px 12px", borderRadius: "10px", background: bgColor, border: `1px solid ${borderColor}` }}>
+                  <div key={it.id} style={{ padding: "10px 12px", borderRadius: "10px", background: bgColor, border: `1px solid ${borderColor}`, borderRight: `3px solid ${barColor}` }}>
                     {/* Top row: icon + name + status label */}
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                       <div style={{ flexShrink: 0, width: "20px", display: "flex", justifyContent: "center" }}>
-                        {statusIcon(it.status)}
+                        {statusIcon(it.status, isApproved)}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -1257,12 +1352,17 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                         {it.status === "saved" && "✓ נשמר"}
                         {it.status === "error" && "שגיאה"}
                         {it.status === "needs_review" && (
-                          <span style={{ color: "#D97706", fontWeight: "600" }}>דורש בדיקה ידנית</span>
+                          <span style={{ color: "#B91C1C", fontWeight: "600" }}>דורש בדיקה</span>
                         )}
-                        {it.status === "ready" && isDuplicate && (
+                        {isApproved && (
+                          <span style={{ color: "#2D6644", fontWeight: "600" }}>✓ אושר</span>
+                        )}
+                        {it.status === "ready" && !isApproved && isDuplicate && (
                           <span style={{ color: "#D97706", fontWeight: "600" }}>⚠ כפילות</span>
                         )}
-                        {it.status === "ready" && !isDuplicate && "מוכן"}
+                        {it.status === "ready" && !isApproved && !isDuplicate && (
+                          <span style={{ color: "#92400E", fontWeight: "600" }}>ממתין לבדיקה</span>
+                        )}
                       </div>
                     </div>
 
@@ -1270,28 +1370,13 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                     {it.status === "needs_review" && (
                       <div style={{
                         marginTop: "8px", padding: "8px 10px",
-                        background: "#FEF9C3", border: "1px solid #F5C842",
-                        borderRadius: "8px", fontSize: "11px", color: "#92400E", lineHeight: 1.5,
+                        background: "#FEE2E2", border: "1px solid #FCA5A5",
+                        borderRadius: "8px", fontSize: "11px", color: "#B91C1C", lineHeight: 1.5,
                       }}>
-                        <div style={{ fontWeight: "600", marginBottom: "2px" }}>
-                          ⚠ הזיהוי לא ודאי: {(it.parsed?.issues ?? []).map(issueLabel).join(" · ") || "נתונים חלקיים"}
+                        <div style={{ fontWeight: "600" }}>
+                          ⚠ הזיהוי לא ודאי: {hardIssues(it.parsed?.issues).map(issueLabel).join(" · ") || "נתונים חלקיים"}
                         </div>
-                        <div>
-                          {[
-                            it.parsed?.supplier,
-                            it.parsed?.amount != null ? fmt(it.parsed.amount) : null,
-                            it.parsed?.date,
-                          ].filter(Boolean).join(" · ") || "לא זוהו פרטים"}
-                        </div>
-                        <button type="button"
-                          onClick={() => setItemStatus(it.id, { status: "ready" })}
-                          style={{
-                            marginTop: "6px", padding: "5px 10px", borderRadius: "7px",
-                            border: "1px solid #D97706", background: "#fff", color: "#92400E",
-                            fontSize: "11px", fontWeight: "600", cursor: "pointer", fontFamily: "var(--font-sans)",
-                          }}>
-                          בדקתי — אשר לייבוא
-                        </button>
+                        <div style={{ marginTop: "2px" }}>תקנו את השדות למטה ולחצו ״הפרטים נכונים״</div>
                       </div>
                     )}
 
@@ -1355,11 +1440,19 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                           <input type="number" value={it.parsed?.amount ?? ""} placeholder="0" min="0" step="0.01"
                             onChange={(e) => setItemParsed(it.id, { amount: e.target.value === "" ? null : Number(e.target.value) })}
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #E8E2D9", borderRadius: "7px", fontSize: "13px", background: "#fff", color: "#1A1A1A", outline: "none", fontFamily: "var(--font-sans)", direction: "ltr", textAlign: "right" }} />
+                          {!isApproved && (
+                            <div style={{ fontSize: "10px", color: "#B45309", marginTop: "3px" }}>נא לוודא את הסכום</div>
+                          )}
                         </div>
                         <div>
                           <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>תאריך</div>
                           <DateInput value={it.parsed?.date ?? today()} onChange={(v) => setItemParsed(it.id, { date: v })}
-                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #E8E2D9", borderRadius: "7px", fontSize: "13px", background: "#fff", color: "#1A1A1A", outline: "none", fontFamily: "var(--font-sans)" }} />
+                            style={{ width: "100%", padding: "7px 10px", borderRadius: "7px", fontSize: "13px", color: "#1A1A1A", outline: "none", fontFamily: "var(--font-sans)", ...(hasMultipleDates(it.parsed) ? { background: "#FEF9C3", border: "1px solid #F5C842" } : { background: "#fff", border: "1px solid #E8E2D9" }) }} />
+                          {hasMultipleDates(it.parsed) && (
+                            <div style={{ fontSize: "10px", color: "#92400E", fontWeight: 600, marginTop: "3px", lineHeight: 1.4 }}>
+                              נמצאו כמה תאריכים במסמך — ודאו שזה תאריך המסמך
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1369,7 +1462,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                       <div style={{ marginTop: "8px" }}>
                         <select
                           value={it.categoryId ?? ""}
-                          onChange={(e) => setItemStatus(it.id, { categoryId: e.target.value })}
+                          onChange={(e) => setItemStatus(it.id, { categoryId: e.target.value, approved: false })}
                           style={{
                             width: "100%", padding: isMobile ? "8px 10px" : "6px 10px",
                             border: `1.5px solid ${it.categoryId ? activeSourceColor : "#E8E2D9"}`,
@@ -1385,6 +1478,35 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                             <option key={c.id} value={c.id}>{c.name}</option>
                           ))}
                         </select>
+                        {!isApproved && (
+                          <div style={{ fontSize: "10px", color: it.categoryId ? "#6B6560" : "#B45309", marginTop: "3px" }}>
+                            {it.categoryId ? "בדקו את הקטגוריה" : "בחרו קטגוריה"}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* משוב יונתן: אישור אחד לכל כרטיס — הופך לירוק ומקדם את המונה */}
+                    {((it.status === "ready" && !it.approved) || it.status === "needs_review") && (
+                      <div style={{ marginTop: "10px", display: "flex", gap: "8px" }}>
+                        <button type="button"
+                          onClick={() => setItemStatus(it.id, { status: "ready", approved: true })}
+                          style={{
+                            flex: 1, padding: "9px 0", borderRadius: "8px", border: "none",
+                            background: "#2D6644", color: "#fff", fontSize: "13px", fontWeight: 600,
+                            cursor: "pointer", fontFamily: "var(--font-sans)",
+                          }}>
+                          הפרטים נכונים ✓
+                        </button>
+                        <button type="button"
+                          onClick={() => setItems((prev) => prev.filter((x) => x.id !== it.id))}
+                          style={{
+                            padding: "9px 14px", borderRadius: "8px", border: "1px solid #E8E2D9",
+                            background: "#fff", color: "#AAA099", fontSize: "12px",
+                            cursor: "pointer", fontFamily: "var(--font-sans)",
+                          }}>
+                          בטל מסמך
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1406,8 +1528,8 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
             {/* Status summary */}
             <div style={{ flex: 1, fontSize: "11px", color: "#AAA099", display: "flex", flexWrap: "wrap", gap: "6px" }}>
               {savedCount > 0 && <span style={{ color: "#2D6644", fontWeight: "600" }}>✓ {savedCount} נשמרו</span>}
-              {readyCount > 0 && <span>{readyCount} מוכנים</span>}
-              {needsReviewCount > 0 && <span style={{ color: "#D97706", fontWeight: "600" }}>{needsReviewCount} דורשים בדיקה</span>}
+              {approvedCount > 0 && <span style={{ color: "#2D6644", fontWeight: "600" }}>{approvedCount} אושרו</span>}
+              {awaitingCount > 0 && <span style={{ color: "#92400E", fontWeight: "600" }}>{awaitingCount} ממתינים לבדיקה</span>}
               {duplicateCount > 0 && <span style={{ color: "#D97706", fontWeight: "600" }}>⚠ {duplicateCount} כפילויות</span>}
               {pendingCount > 0 && <span>{pendingCount} ממתינים</span>}
             </div>
@@ -1429,20 +1551,22 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                   {processing ? "מעבד..." : "עבד קבצים"}
                 </button>
               )}
-              {readyCount > 0 && (
+              {(approvedCount > 0 || awaitingCount > 0) && (
                 <button
                   onClick={() => void importAll()}
-                  disabled={importing}
+                  disabled={importing || approvedCount === 0 || awaitingCount > 0}
                   style={{
                     flex: isMobile ? 1 : "none",
                     padding: isMobile ? "12px 0" : "9px 18px",
                     border: "none", borderRadius: "8px",
-                    background: importing ? "#888" : "linear-gradient(135deg, #2D6644, #1A3D2B)",
+                    background: importing || approvedCount === 0 || awaitingCount > 0 ? "#B8B2AA" : "linear-gradient(135deg, #2D6644, #1A3D2B)",
                     color: "#fff", fontSize: "14px", fontWeight: "500",
-                    cursor: importing ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
+                    cursor: importing || approvedCount === 0 || awaitingCount > 0 ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
                   }}
                 >
-                  {importing ? "מייבא..." : `ייבא ${readyCount} הוצאות`}
+                  {importing ? "מייבא..."
+                    : awaitingCount > 0 ? `אשרו את כל המסמכים (${approvedCount}/${approvedCount + awaitingCount})`
+                    : `ייבא ${approvedCount} הוצאות מאושרות`}
                 </button>
               )}
             </div>
