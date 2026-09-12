@@ -608,7 +608,7 @@ function ExpenseForm({
                       {(categories ?? []).map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
                     </select>
                     {state === "pending" || state === "review" ? (
-                      <div style={{ fontSize: "11.5px", color: d.budget_category_id ? "#6B6560" : "#B45309", marginTop: "3px" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: d.budget_category_id ? "#6B6560" : "#B45309", marginTop: "3px" }}>
                         {d.budget_category_id ? "בדקו את הקטגוריה" : "בחרו קטגוריה"}
                       </div>
                     ) : null}
@@ -1027,7 +1027,7 @@ function findDuplicate(parsed: ParsedReceipt, expenses: Expense[]): Expense | un
   );
 }
 
-function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defaultSource: string }) {
+function BulkImportModal({ onClose }: { onClose: () => void }) {
   const isMobile = useIsMobile();
   const addExpense = useAddExpense();
   const { data: allExpenses } = useExpenses("all"); // all sources, active year
@@ -1038,7 +1038,8 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Bulk defaults ──────────────────────────────────────────────────────────
-  const [bulkSource, setBulkSource] = useState<string>(defaultSource);
+  // משוב יונתן 4: אין ברירת מחדל — בחירת מקור היא צעד 1 מודע וחובה
+  const [bulkSource, setBulkSource] = useState<string>("");
   const { data: bulkCategories } = useBudgetCategories(bulkSource);
   const { data: orgSources } = useOrgBudgetSources();
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
@@ -1263,58 +1264,35 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
 
         {/* Body */}
         <div style={{ overflowY: "auto", flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: "12px" } as React.CSSProperties}>
-          {/* Drop zone */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
-            onClick={() => fileInputRef.current?.click()}
-            style={{
-              border: `2px dashed ${dragging ? "#2D6644" : "#E8E2D9"}`,
-              borderRadius: "12px",
-              padding: isMobile ? "18px 16px" : "28px 20px",
-              textAlign: "center",
-              cursor: "pointer",
-              background: dragging ? "#F0FAF5" : "#FAFAF8",
-              transition: "all 0.15s",
-            }}
-          >
-            <Upload size={26} color={dragging ? "#2D6644" : "#C5BFB8"} style={{ marginBottom: "8px" }} />
-            <div style={{ fontSize: "14px", fontWeight: "500", color: dragging ? "#2D6644" : "#6B6560" }}>
-              גרור קבצים לכאן
-            </div>
-            <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "4px" }}>
-              או לחץ לבחירה · PDF, JPG, PNG
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,application/pdf"
-              style={{ display: "none" }}
-              onChange={(e) => { addFiles(e.target.files ?? new FileList()); e.target.value = ""; }}
-            />
-          </div>
-
-          {/* ── Bulk defaults: source only ──────────────────────────────────── */}
+          {/* ── משוב יונתן 4: תהליך דו-שלבי מונחה — קודם מקור, אחר-כך קבצים ── */}
+          {/* צעד 1: בחירת מקור — בלי ברירת מחדל, בחירה מודעת בלבד */}
           <div style={{
-            background: "#F7F4EF", borderRadius: "10px",
-            padding: "12px 14px", display: "flex", flexDirection: "column", gap: "8px",
+            background: "#F7F4EF", borderRadius: "12px",
+            padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px",
           }}>
-            <div style={{ fontSize: "12px", fontWeight: "600", color: "#6B6560" }}>מקור תקציב לכל הקבצים</div>
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+              <span style={{
+                width: "22px", height: "22px", borderRadius: "50%", background: "#1A3D2B", color: "#fff",
+                fontSize: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center",
+                justifyContent: "center", flexShrink: 0,
+              }}>1</span>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "#1A1A1A" }}>
+                לאיזה מקור תקציב שייכות ההוצאות?
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               {sources.map((src) => {
                 const active = bulkSource === src.slug;
                 return (
                   <button key={src.slug} type="button"
                     onClick={() => setBulkSource(src.slug)}
                     style={{
-                      flex: "1 1 auto", minWidth: "72px", padding: "7px 10px", borderRadius: "8px",
-                      border: `1.5px solid ${active ? src.color : "#E8E2D9"}`,
+                      flex: "1 1 auto", minWidth: "96px", padding: "12px 14px", borderRadius: "10px",
+                      border: `2px solid ${active ? src.color : "#E8E2D9"}`,
                       background: active ? src.bg_color : "#fff",
-                      color: active ? src.color : "#888079",
-                      fontSize: "12px", fontWeight: active ? "600" : "400",
-                      cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
+                      color: active ? src.color : "#6B6560",
+                      fontSize: "14px", fontWeight: active ? 700 : 500,
+                      cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.15s",
                     }}>
                     {src.label}
                   </button>
@@ -1323,6 +1301,73 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
             </div>
             <div style={{ fontSize: "11px", color: "#AAA099" }}>
               הקטגוריה תוצע אוטומטית לכל קובץ ותוכל לשנות לפני הייבוא
+            </div>
+          </div>
+
+          {/* צעד 2: העלאת קבצים — נעול עד שנבחר מקור */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "9px", marginBottom: "8px", flexWrap: "wrap" }}>
+              <span style={{
+                width: "22px", height: "22px", borderRadius: "50%",
+                background: bulkSource ? "#1A3D2B" : "#C5BFB8", color: "#fff",
+                fontSize: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center",
+                justifyContent: "center", flexShrink: 0, transition: "background 0.25s",
+              }}>2</span>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: bulkSource ? "#1A1A1A" : "#AAA099", transition: "color 0.25s" }}>
+                העלו את הקבצים
+              </span>
+              {bulkSource && (() => {
+                const src = sources.find((x) => x.slug === bulkSource);
+                return src ? (
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", padding: "3px 11px", borderRadius: "20px",
+                    border: `1.5px solid ${src.color}`, background: src.bg_color, color: src.color,
+                    fontSize: "12px", fontWeight: 700,
+                  }}>
+                    ההוצאות ישויכו ל: {src.label}
+                  </span>
+                ) : null;
+              })()}
+            </div>
+            <div
+              onDragOver={(e) => { e.preventDefault(); if (bulkSource) setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); if (bulkSource) addFiles(e.dataTransfer.files); }}
+              onClick={() => { if (bulkSource) fileInputRef.current?.click(); }}
+              style={{
+                border: `2px dashed ${dragging ? "#2D6644" : "#E8E2D9"}`,
+                borderRadius: "12px",
+                padding: isMobile ? "18px 16px" : "28px 20px",
+                textAlign: "center",
+                cursor: bulkSource ? "pointer" : "not-allowed",
+                background: dragging ? "#F0FAF5" : "#FAFAF8",
+                opacity: bulkSource ? 1 : 0.55,
+                transition: "all 0.25s",
+              }}
+            >
+              <Upload size={26} color={dragging ? "#2D6644" : "#C5BFB8"} style={{ marginBottom: "8px" }} />
+              {bulkSource ? (
+                <>
+                  <div style={{ fontSize: "14px", fontWeight: "500", color: dragging ? "#2D6644" : "#6B6560" }}>
+                    גרור קבצים לכאן
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "4px" }}>
+                    או לחץ לבחירה · PDF, JPG, PNG
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: "14px", fontWeight: "500", color: "#AAA099" }}>
+                  בחרו קודם מקור תקציב למעלה
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,application/pdf"
+                style={{ display: "none" }}
+                onChange={(e) => { addFiles(e.target.files ?? new FileList()); e.target.value = ""; }}
+              />
             </div>
           </div>
 
@@ -1528,7 +1573,7 @@ function BulkImportModal({ onClose, defaultSource }: { onClose: () => void; defa
                           ))}
                         </select>
                         {!isApproved && (
-                          <div style={{ fontSize: "11.5px", color: it.categoryId ? "#6B6560" : "#B45309", marginTop: "3px" }}>
+                          <div style={{ fontSize: "13px", fontWeight: 600, color: it.categoryId ? "#6B6560" : "#B45309", marginTop: "3px" }}>
                             {it.categoryId ? "בדקו את הקטגוריה" : "בחרו קטגוריה"}
                           </div>
                         )}
@@ -1677,7 +1722,7 @@ export default function ExpensesPage() {
   return (
     <>
       {showAdd && <AddExpenseModal defaultSource={defaultSource} onClose={() => setShowAdd(false)} />}
-      {showBulkImport && <BulkImportModal defaultSource={defaultSource} onClose={() => setShowBulkImport(false)} />}
+      {showBulkImport && <BulkImportModal onClose={() => setShowBulkImport(false)} />}
       {editingExpense && <EditExpenseModal expense={editingExpense} onClose={() => setEditingExpense(null)} />}
       {deletingExpense && <DeleteConfirm expense={deletingExpense} onClose={() => setDeletingExpense(null)} />}
 
