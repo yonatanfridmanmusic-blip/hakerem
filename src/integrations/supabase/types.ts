@@ -345,6 +345,7 @@ export type Database = {
           name: string
           notes: string | null
           order_index: number
+          origin: string | null
           planned_amount: number
           school_year_id: string
           source: string
@@ -357,6 +358,7 @@ export type Database = {
           name: string
           notes?: string | null
           order_index?: number
+          origin?: string | null
           planned_amount?: number
           school_year_id: string
           source: string
@@ -369,6 +371,7 @@ export type Database = {
           name?: string
           notes?: string | null
           order_index?: number
+          origin?: string | null
           planned_amount?: number
           school_year_id?: string
           source?: string

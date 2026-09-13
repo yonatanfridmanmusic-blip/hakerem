@@ -492,24 +492,31 @@ export function KesafimImportModal({
           supabase.from("grade_section_amounts")
             .select("grade_id, parent_section_id, amount_per_student").eq("school_year_id", yearId),
           supabase.from("budget_categories")
-            .select("name, order_index").eq("school_year_id", yearId).eq("source", "horim"),
+            .select("name, order_index, origin").eq("school_year_id", yearId).eq("source", "horim"),
         ]);
         if (allGsaR.error) throw new Error(`קריאת יעדים לסנכרון נכשלה: ${allGsaR.error.message}`);
         if (catR.error) throw new Error(`קריאת קטגוריות נכשלה: ${catR.error.message}`);
         const gradeStudents: Record<string, number> = Object.fromEntries(grades.map((g) => [g.id, Number(g.student_count)]));
+        // 2.4.0 (נושא 3.ב): קטגוריות הורים ידניות (origin='manual') מוגנות —
+        // לא נדרסות בסנכרון הדוח. מדלגים על שורה ששמה תואם קטגוריה ידנית קיימת.
+        const manualNames = new Set((catR.data ?? []).filter((c) => c.origin === "manual").map((c) => c.name));
         let nextCatOrder = Math.max(0, ...(catR.data ?? []).map((c) => c.order_index)) + 1;
-        const catRows = involvedSecIds.map((secId) => {
-          const planned = (allGsaR.data ?? [])
-            .filter((g) => g.parent_section_id === secId)
-            .reduce((s, g) => s + Number(g.amount_per_student) * (gradeStudents[g.grade_id] ?? 0), 0);
-          return {
-            school_year_id: yearId, name: sectionName(secId), source: "horim",
-            planned_amount: planned, order_index: nextCatOrder++,
-          };
-        });
-        const { error } = await supabase.from("budget_categories")
-          .upsert(catRows, { onConflict: "school_year_id,source,name", ignoreDuplicates: false });
-        if (error) throw new Error(`סנכרון התקציב נכשל: ${error.message}`);
+        const catRows = involvedSecIds
+          .filter((secId) => !manualNames.has(sectionName(secId)))
+          .map((secId) => {
+            const planned = (allGsaR.data ?? [])
+              .filter((g) => g.parent_section_id === secId)
+              .reduce((s, g) => s + Number(g.amount_per_student) * (gradeStudents[g.grade_id] ?? 0), 0);
+            return {
+              school_year_id: yearId, name: sectionName(secId), source: "horim",
+              planned_amount: planned, order_index: nextCatOrder++,
+            };
+          });
+        if (catRows.length > 0) {
+          const { error } = await supabase.from("budget_categories")
+            .upsert(catRows, { onConflict: "school_year_id,source,name", ignoreDuplicates: false });
+          if (error) throw new Error(`סנכרון התקציב נכשל: ${error.message}`);
+        }
       }
 
       // 5. רישום הגבייה — insert אחד

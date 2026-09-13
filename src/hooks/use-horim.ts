@@ -221,6 +221,18 @@ export async function syncHorimBudgetCategory(
     return sum + Number(gsa.amount_per_student) * (gradeMap[gsa.grade_id] ?? 0);
   }, 0);
 
+  // 2.4.0 (נושא 3.ב): קטגוריה ידנית (origin='manual') ששמה מתנגש עם שם סעיף —
+  // לא דורסים את planned שלה. מדלגים לגמרי (הסעיף נשאר כפי שהמשתמש הגדיר).
+  const { data: clashManual } = await supabase
+    .from("budget_categories")
+    .select("id")
+    .eq("school_year_id", yearId)
+    .eq("source", "horim")
+    .eq("name", sectionName)
+    .eq("origin", "manual")
+    .maybeSingle();
+  if (clashManual) return;
+
   // True upsert — relies on UNIQUE (school_year_id, source, name) constraint
   // We need order_index for new rows; on conflict we only update planned_amount.
   const { data: maxOrder } = await supabase

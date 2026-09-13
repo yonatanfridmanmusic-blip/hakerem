@@ -19,6 +19,7 @@ import {
   type Expense,
 } from "@/hooks/use-expenses";
 import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
+import { useAddBudgetCategory } from "@/hooks/use-budget-plan";
 
 export const Route = createFileRoute("/_authenticated/expenses/")({
   component: ExpensesPage,
@@ -193,6 +194,48 @@ const labelStyle: React.CSSProperties = {
   fontSize: "12px", fontWeight: "500",
   color: "#6B6560", display: "block", marginBottom: "6px",
 };
+
+// 2.4.0 (נושא 3.א): הוספת קטגוריה חדשה inline מתוך מסך ההעלאה — כל מקור כולל
+// הורים. נוצרת עם planned=0 ו-origin='manual' (מוגנת מדריסת סנכרון/כספים2000).
+function NewCategoryRow({ source, targetYearId, onCreated, onCancel }: {
+  source: BudgetSource;
+  targetYearId?: string | null;
+  onCreated: (id: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const addCategory = useAddBudgetCategory();
+  const submit = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) { toast.error("יש להזין שם קטגוריה"); return; }
+    try {
+      const res = await addCategory.mutateAsync({ name: trimmed, source, plannedAmount: 0, targetYearId, origin: "manual" });
+      toast.success("הקטגוריה נוספה");
+      onCreated(res.id);
+    } catch {
+      toast.error("שגיאה בהוספת הקטגוריה");
+    }
+  };
+  return (
+    <div style={{ display: "flex", gap: "6px", marginTop: "6px", alignItems: "center" }}>
+      <input autoFocus type="text" value={name} placeholder="שם הקטגוריה החדשה"
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); void submit(); }
+          if (e.key === "Escape") onCancel();
+        }}
+        style={{ ...inputStyle, padding: "8px 10px", fontSize: "13px", flex: 1 }} />
+      <button type="button" disabled={addCategory.isPending} onClick={() => void submit()}
+        style={{ padding: "8px 12px", borderRadius: "7px", border: "none", background: addCategory.isPending ? "#888" : "#2D6644", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: addCategory.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}>
+        {addCategory.isPending ? "מוסיף..." : "הוסף"}
+      </button>
+      <button type="button" onClick={onCancel}
+        style={{ padding: "8px 8px", borderRadius: "7px", border: "1px solid #E8E2D9", background: "#fff", color: "#AAA099", fontSize: "12px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+        ביטול
+      </button>
+    </div>
+  );
+}
 
 // משוב יונתן 3 (הנגשה): שדה סכום — רק ספרות ונקודה נכנסות פיזית
 // (inputmode="decimal" + סינון תווים), סימן ₪ קבוע בתוך השדה, פונט גדול
@@ -407,7 +450,13 @@ function ExpenseForm({
           onChange={(id) => set("budget_category_id", id)}
           categories={categories ?? []}
           sourceColor={activeSourceColor}
+          allowAddNew
         />
+        {form.budget_category_id === "__new__" && (
+          <NewCategoryRow source={form.source}
+            onCreated={(id) => set("budget_category_id", id)}
+            onCancel={() => set("budget_category_id", "")} />
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
@@ -606,7 +655,13 @@ function ExpenseForm({
                       style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px", cursor: "pointer" }}>
                       <option value="">ללא קטגוריה</option>
                       {(categories ?? []).map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                      <option value="__new__">+ קטגוריה חדשה…</option>
                     </select>
+                    {d.budget_category_id === "__new__" && (
+                      <NewCategoryRow source={form.source}
+                        onCreated={(id) => edit(i, { budget_category_id: id })}
+                        onCancel={() => edit(i, { budget_category_id: "" })} />
+                    )}
                     {state === "pending" || state === "review" ? (
                       <div style={{ fontSize: "13px", fontWeight: 600, color: d.budget_category_id ? "#6B6560" : "#B45309", marginTop: "3px" }}>
                         {d.budget_category_id ? "בדקו את הקטגוריה" : "בחרו קטגוריה"}
@@ -1571,7 +1626,13 @@ function BulkImportModal({ onClose }: { onClose: () => void }) {
                           {(bulkCategories ?? []).map((c) => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                           ))}
+                          <option value="__new__">+ קטגוריה חדשה…</option>
                         </select>
+                        {it.categoryId === "__new__" && (
+                          <NewCategoryRow source={bulkSource as BudgetSource}
+                            onCreated={(id) => setItemStatus(it.id, { categoryId: id, approved: false })}
+                            onCancel={() => setItemStatus(it.id, { categoryId: "", approved: false })} />
+                        )}
                         {!isApproved && (
                           <div style={{ fontSize: "13px", fontWeight: 600, color: it.categoryId ? "#6B6560" : "#B45309", marginTop: "3px" }}>
                             {it.categoryId ? "בדקו את הקטגוריה" : "בחרו קטגוריה"}
