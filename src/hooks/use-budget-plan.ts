@@ -11,6 +11,7 @@ export interface BudgetCategory {
   source: BudgetSource;
   planned_amount: number;
   order_index: number;
+  is_flow_through: boolean; // 2.4.0 נושא 2: סעיף צבוע (הכנסה+הוצאה עוברות דרך ביה"ס)
   used: number; // calculated from expenses (categorized only)
 }
 
@@ -36,7 +37,7 @@ export function useBudgetPlan(source: BudgetSource, targetYearId?: string | null
       // Fetch categories for this source
       const { data: cats, error: catErr } = await supabase
         .from("budget_categories")
-        .select("id, name, source, planned_amount, order_index")
+        .select("id, name, source, planned_amount, order_index, is_flow_through")
         .eq("school_year_id", yid)
         .eq("source", source)
         .order("order_index");
@@ -79,6 +80,7 @@ export function useBudgetPlan(source: BudgetSource, targetYearId?: string | null
       const categories = (cats ?? []).map((c) => ({
         ...c,
         planned_amount: Number(c.planned_amount),
+        is_flow_through: Boolean((c as { is_flow_through?: boolean }).is_flow_through),
         used: usedMap[c.id] ?? 0,
       }));
 
@@ -163,6 +165,65 @@ export function useAddBudgetCategory() {
       queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
       queryClient.invalidateQueries({ queryKey: ["budget-categories"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+// 2.4.0 נושא 2.ג: סימון/ביטול "תקציב צבוע" לסעיף (תג ויזואלי בלבד — אין שינוי בנוסחאות)
+export function useSetCategoryFlowThrough() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ categoryId, isFlowThrough }: { categoryId: string; isFlowThrough: boolean }) => {
+      const { error } = await supabase
+        .from("budget_categories")
+        .update({ is_flow_through: isFlowThrough })
+        .eq("id", categoryId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+// 2.4.0 נושא 2.ב: זוג צבוע אטומי — קריאה יחידה ל-RPC שמבצעת income+expense
+// מקושרים בטרנזקציה אחת (בדיקת הרשאה owner/admin בתוך הפונקציה).
+export function useCreateFlowThroughPair() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      source: BudgetSource;
+      amount: number;
+      date: string;
+      bankAccount: "school" | "parents";
+      budgetCategoryId?: string | null;
+      supplier?: string | null;
+      payer?: string | null;
+      description?: string | null;
+      targetYearId?: string | null;
+    }) => {
+      const yid = args.targetYearId ?? (await getActiveYearId());
+      if (!yid) throw new Error("אין שנת לימודים פעילה");
+      const { data, error } = await supabase.rpc("create_flow_through_pair", {
+        p_year_id: yid,
+        p_source: args.source,
+        p_amount: args.amount,
+        p_date: args.date,
+        p_bank_account: args.bankAccount,
+        p_budget_category_id: args.budgetCategoryId ?? undefined,
+        p_supplier: args.supplier ?? undefined,
+        p_payer: args.payer ?? undefined,
+        p_description: args.description ?? undefined,
+      });
+      if (error) throw error;
+      return data as { income_id: string; expense_id: string };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["income"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-plan"] });
     },
   });
 }

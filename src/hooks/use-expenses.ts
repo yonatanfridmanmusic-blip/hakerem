@@ -17,6 +17,7 @@ export interface Expense {
   description: string | null;
   bank_account: "school" | "parents" | null;
   receipt_url: string | null;
+  linked_income_id: string | null; // 2.4.0 נושא 2: זוג צבוע
   created_by: string | null;
   created_at: string | null;
   budget_categories?: { name: string } | null;
@@ -49,7 +50,7 @@ export function useExpenses(sourceFilter?: BudgetSource | "all") {
 
       let query = supabase
         .from("expenses")
-        .select("id, expense_date, amount, source, budget_category_id, activity_name, supplier, description, bank_account, receipt_url, created_by, created_at, budget_categories(name), creator:profiles!expenses_created_by_fkey(full_name, email)")
+        .select("id, expense_date, amount, source, budget_category_id, activity_name, supplier, description, bank_account, receipt_url, linked_income_id, created_by, created_at, budget_categories(name), creator:profiles!expenses_created_by_fkey(full_name, email)")
         .eq("school_year_id", yearId)
         .order("expense_date", { ascending: false });
 
@@ -128,7 +129,7 @@ export function useBudgetCategories(source?: BudgetSource) {
       if (!yearId) return [];
       let query = supabase
         .from("budget_categories")
-        .select("id, name, source")
+        .select("id, name, source, is_flow_through")
         .eq("school_year_id", yearId)
         .order("order_index");
       if (source) query = query.eq("source", source);

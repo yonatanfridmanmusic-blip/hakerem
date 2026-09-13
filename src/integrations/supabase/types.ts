@@ -271,6 +271,59 @@ export type Database = {
           },
         ]
       }
+      audit_log: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          is_undone: boolean
+          new_data: Json | null
+          old_data: Json | null
+          org_id: string
+          record_id: string
+          table_name: string
+          undone_at: string | null
+          undone_by: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          is_undone?: boolean
+          new_data?: Json | null
+          old_data?: Json | null
+          org_id: string
+          record_id: string
+          table_name: string
+          undone_at?: string | null
+          undone_by?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          is_undone?: boolean
+          new_data?: Json | null
+          old_data?: Json | null
+          org_id?: string
+          record_id?: string
+          table_name?: string
+          undone_at?: string | null
+          undone_by?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budget_activities: {
         Row: {
           budget_category_id: string
@@ -342,6 +395,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_flow_through: boolean
           name: string
           notes: string | null
           order_index: number
@@ -355,6 +409,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_flow_through?: boolean
           name: string
           notes?: string | null
           order_index?: number
@@ -368,6 +423,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_flow_through?: boolean
           name?: string
           notes?: string | null
           order_index?: number
@@ -388,6 +444,24 @@ export type Database = {
           },
         ]
       }
+      edge_assets: {
+        Row: {
+          chunk_index: number
+          data: string
+          key: string
+        }
+        Insert: {
+          chunk_index: number
+          data: string
+          key: string
+        }
+        Update: {
+          chunk_index?: number
+          data?: string
+          key?: string
+        }
+        Relationships: []
+      }
       expenses: {
         Row: {
           activity_name: string | null
@@ -403,6 +477,7 @@ export type Database = {
           grade_id: string | null
           id: string
           invoice_number: string | null
+          linked_income_id: string | null
           notes: string | null
           parent_section_id: string | null
           payment_method: string | null
@@ -427,6 +502,7 @@ export type Database = {
           grade_id?: string | null
           id?: string
           invoice_number?: string | null
+          linked_income_id?: string | null
           notes?: string | null
           parent_section_id?: string | null
           payment_method?: string | null
@@ -451,6 +527,7 @@ export type Database = {
           grade_id?: string | null
           id?: string
           invoice_number?: string | null
+          linked_income_id?: string | null
           notes?: string | null
           parent_section_id?: string | null
           payment_method?: string | null
@@ -488,6 +565,13 @@ export type Database = {
             columns: ["grade_id"]
             isOneToOne: false
             referencedRelation: "grades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_linked_income_id_fkey"
+            columns: ["linked_income_id"]
+            isOneToOne: false
+            referencedRelation: "income"
             referencedColumns: ["id"]
           },
           {
@@ -825,7 +909,7 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "fk_org"
+            foreignKeyName: "org_ai_settings_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: true
             referencedRelation: "organizations"
@@ -1040,17 +1124,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "parent_collections_import_id_fkey"
-            columns: ["import_id"]
-            isOneToOne: false
-            referencedRelation: "kesafim_imports"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "parent_collections_grade_id_fkey"
             columns: ["grade_id"]
             isOneToOne: false
             referencedRelation: "grades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parent_collections_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "kesafim_imports"
             referencedColumns: ["id"]
           },
           {
@@ -1110,6 +1194,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "parent_refunds_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "parent_refunds_grade_id_fkey"
             columns: ["grade_id"]
@@ -1323,13 +1414,32 @@ export type Database = {
     }
     Functions: {
       admin_delete_org: { Args: { p_org_id: string }; Returns: undefined }
+      admin_set_org_expiry: {
+        Args: { p_expires_at: string; p_org_id: string }
+        Returns: undefined
+      }
       auth_is_super_admin: { Args: never; Returns: boolean }
       auth_org_role_for_year: {
         Args: { p_roles: string[]; p_year_id: string }
         Returns: boolean
       }
       auth_user_org_ids: { Args: never; Returns: string[] }
+      auth_user_owned_org_ids: { Args: never; Returns: string[] }
       check_my_org_expired: { Args: never; Returns: boolean }
+      create_flow_through_pair: {
+        Args: {
+          p_amount: number
+          p_bank_account: Database["public"]["Enums"]["bank_account"]
+          p_budget_category_id?: string
+          p_date: string
+          p_description?: string
+          p_payer?: string
+          p_source: string
+          p_supplier?: string
+          p_year_id: string
+        }
+        Returns: Json
+      }
       create_organization: {
         Args: { p_city?: string; p_name: string }
         Returns: Json
@@ -1342,6 +1452,21 @@ export type Database = {
         }
         Returns: Json
       }
+      get_audit_log: {
+        Args: { p_limit?: number }
+        Returns: {
+          action: string
+          created_at: string
+          id: string
+          is_undone: boolean
+          new_data: Json
+          old_data: Json
+          record_id: string
+          table_name: string
+          user_id: string
+          user_name: string
+        }[]
+      }
       list_public_organizations: {
         Args: never
         Returns: {
@@ -1351,6 +1476,7 @@ export type Database = {
         }[]
       }
       redeem_license_code: { Args: { p_code: string }; Returns: Json }
+      undo_audit_entry: { Args: { p_entry_id: string }; Returns: Json }
     }
     Enums: {
       ai_action_status: "draft" | "executed" | "cancelled" | "failed"
@@ -1372,12 +1498,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1401,11 +1527,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1426,11 +1552,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1451,11 +1577,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1468,11 +1594,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

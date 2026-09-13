@@ -11,6 +11,7 @@ import {
   useAddBudgetCategory,
   useDeleteBudgetCategory,
   useCopyBudgetCategories,
+  useSetCategoryFlowThrough,
   type BudgetSource,
   type BudgetCategory,
 } from "@/hooks/use-budget-plan";
@@ -674,6 +675,7 @@ function SourceTab({
   const isMobile = useIsMobile();
   const canWrite = useCanWrite();
   const { data, isLoading } = useBudgetPlan(srcCfg.key, targetYearId);
+  const setFlowThrough = useSetCategoryFlowThrough(); // 2.4.0 נושא 2: תקציב צבוע
   // 2.2.2: צפי ההכנסות הגלובלי (source_budget_plans, השנה הפעילה) — לשורת הגישור בלבד
   const { data: incomePlans } = useSourceBudgetPlans();
   const categories = data?.categories ?? [];
@@ -984,9 +986,36 @@ function SourceTab({
                   (e.currentTarget.style.background = "transparent")
                 }
               >
-                <span style={{ fontSize: "14px", color: "#1A1A1A" }}>
-                  {cat.name}
-                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "14px", color: "#1A1A1A" }}>{cat.name}</span>
+                    {cat.is_flow_through && (
+                      <span title="תקציב צבוע — הכנסה והוצאה עוברות דרך בית הספר" style={{
+                        fontSize: "10.5px", fontWeight: 700, color: "#5B4B8A",
+                        background: "#EEEAF7", border: "1px solid #CFC3EC",
+                        borderRadius: "20px", padding: "1px 8px", whiteSpace: "nowrap",
+                      }}>צבוע ⇄</span>
+                    )}
+                    {canWrite && (
+                      <button type="button"
+                        onClick={() => { void setFlowThrough.mutateAsync({ categoryId: cat.id, isFlowThrough: !cat.is_flow_through })
+                          .then(() => toast.success(cat.is_flow_through ? "בוטל סימון תקציב צבוע" : "סומן כתקציב צבוע"))
+                          .catch(() => toast.error("שגיאה בעדכון")); }}
+                        style={{
+                          fontSize: "10.5px", color: cat.is_flow_through ? "#AAA099" : "#8A7FB0",
+                          background: "none", border: "none", cursor: "pointer",
+                          fontFamily: "var(--font-sans)", padding: 0, textDecoration: "underline",
+                        }}>
+                        {cat.is_flow_through ? "בטל צבוע" : "סמן צבוע ⇄"}
+                      </button>
+                    )}
+                  </div>
+                  {cat.is_flow_through && isCurrentYear && (
+                    <div style={{ fontSize: "11px", color: "#8A7FB0", marginTop: "2px" }}>
+                      מאוזן — עובר דרך בית הספר
+                    </div>
+                  )}
+                </div>
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
                   <AmountCell category={cat} color={srcCfg.color} />
                 </div>

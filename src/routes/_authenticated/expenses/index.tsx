@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, X, AlertTriangle, Pencil, Trash2, Search, Paperclip, Check, Upload } from "lucide-react";
 import { useCanWrite } from "@/hooks/use-organization";
@@ -19,7 +19,7 @@ import {
   type Expense,
 } from "@/hooks/use-expenses";
 import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
-import { useAddBudgetCategory } from "@/hooks/use-budget-plan";
+import { useAddBudgetCategory, useCreateFlowThroughPair } from "@/hooks/use-budget-plan";
 
 export const Route = createFileRoute("/_authenticated/expenses/")({
   component: ExpensesPage,
@@ -338,6 +338,7 @@ function ExpenseForm({
   initial,
   onSubmit,
   onSubmitMulti,
+  onSubmitPair,
   onClose,
   isPending,
   submitLabel,
@@ -346,6 +347,8 @@ function ExpenseForm({
   onSubmit: (form: ExpenseFormState, receiptFile: File | null) => Promise<void>;
   // 2.3.0: שמירת כמה מסמכים מקובץ אחד (רק במסך ההוספה; בעריכה נופלים למסמך הראשון)
   onSubmitMulti?: (source: string, docs: EditableDoc[], receiptFile: File | null) => Promise<void>;
+  // 2.4.0 נושא 2.ב: רישום זוג צבוע (הכנסה+הוצאה אטומי) — רק במסך ההוספה
+  onSubmitPair?: (form: ExpenseFormState, receiptFile: File | null) => Promise<void>;
   onClose: () => void;
   isPending: boolean;
   submitLabel: string;
@@ -357,10 +360,19 @@ function ExpenseForm({
   const [parsedResult, setParsedResult] = useState<ParsedDocument | null>(null);
   const [multiDocs, setMultiDocs] = useState<EditableDoc[] | null>(null);
   const [savingMulti, setSavingMulti] = useState(false);
+  const [alsoIncome, setAlsoIncome] = useState(false); // 2.4.0 נושא 2.ב: רישום זוג צבוע
   const { data: categories } = useBudgetCategories(form.source);
   const { data: orgSources } = useOrgBudgetSources();
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  // 2.4.0 נושא 2.ב: כשנבחר סעיף צבוע — מציעים אוטומטית רישום זוג (הכנסה+הוצאה).
+  const selectedCat = (categories ?? []).find((c) => c.id === form.budget_category_id) as { is_flow_through?: boolean } | undefined;
+  const selectedFlowThrough = Boolean(selectedCat?.is_flow_through);
+  useEffect(() => {
+    setAlsoIncome(selectedFlowThrough);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.budget_category_id]);
 
   const toEditableDoc = (d: ParsedDocument): EditableDoc => ({
     amount: d.amount != null ? String(d.amount) : "",
@@ -429,6 +441,7 @@ function ExpenseForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.amount || Number(form.amount) <= 0) { toast.error("יש להזין סכום תקין"); return; }
+    if (alsoIncome && onSubmitPair) { await onSubmitPair(form, receiptFile); return; }
     await onSubmit(form, receiptFile);
   };
 
@@ -485,6 +498,24 @@ function ExpenseForm({
             onCancel={() => set("budget_category_id", "")} />
         )}
       </div>
+
+      {/* 2.4.0 נושא 2.ב: רישום זוג צבוע — הכנסה והוצאה תואמות בפעולה אחת */}
+      {onSubmitPair && !multiDocs && (
+        <label style={{
+          display: "flex", alignItems: "flex-start", gap: "9px", cursor: "pointer",
+          padding: "10px 12px", borderRadius: "10px",
+          border: `1px solid ${alsoIncome ? "#CFC3EC" : "#E8E2D9"}`,
+          background: alsoIncome ? "#F4F1FB" : "#FAFAF8",
+        }}>
+          <input type="checkbox" checked={alsoIncome} onChange={(e) => setAlsoIncome(e.target.checked)}
+            style={{ marginTop: "2px", width: "16px", height: "16px", accentColor: "#5B4B8A", cursor: "pointer" }} />
+          <span style={{ fontSize: "12.5px", color: "#4A4A4A", lineHeight: 1.5 }}>
+            <span style={{ fontWeight: 700, color: "#5B4B8A" }}>תקציב צבוע ⇄</span>
+            {" — "}רשום במקביל גם הכנסה תואמת באותו סכום. הכסף נכנס ויוצא דרך בית הספר, והזוג נשמר יחד.
+            {selectedFlowThrough && <span style={{ color: "#8A7FB0" }}> (הסעיף שנבחר מסומן כצבוע)</span>}
+          </span>
+        </label>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
         <div>
@@ -784,7 +815,7 @@ function ExpenseForm({
           color: "#fff", fontSize: "14px", fontWeight: "500",
           cursor: isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
         }}>
-          {isPending ? "שומר..." : submitLabel}
+          {isPending ? "שומר..." : (alsoIncome && onSubmitPair ? "רשום כהכנסה והוצאה" : submitLabel)}
         </button>}
       </div>
     </form>
@@ -847,6 +878,7 @@ function Modal({ title, subtitle, onClose, children }: {
 
 function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defaultSource: string }) {
   const addExpense = useAddExpense();
+  const createPair = useCreateFlowThroughPair();
   const initial: ExpenseFormState = {
     expense_date: today(), amount: "", source: defaultSource,
     budget_category_id: "", supplier: "", description: "", bank_account: "school",
@@ -886,10 +918,33 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
       onClose();
     } catch { toast.error("שגיאה בשמירת ההוצאות — בדקו מה כבר נשמר ברשימה"); }
   };
+  // 2.4.0 נושא 2.ב: זוג צבוע אטומי דרך RPC. אם צורפה קבלה — מצורפת להוצאה best-effort.
+  const handleSubmitPair = async (form: ExpenseFormState, receiptFile: File | null) => {
+    try {
+      const res = await createPair.mutateAsync({
+        source: form.source,
+        amount: Math.round(Number(form.amount) * 100) / 100,
+        date: form.expense_date,
+        bankAccount: form.bank_account,
+        budgetCategoryId: form.budget_category_id || null,
+        supplier: form.supplier || null,
+        payer: form.supplier || null,
+        description: form.description || null,
+      });
+      if (receiptFile && res?.expense_id) {
+        try {
+          const url = await uploadReceipt(receiptFile);
+          await supabase.from("expenses").update({ receipt_url: url }).eq("id", res.expense_id);
+        } catch { toast.warning("הזוג נשמר, אך צירוף הקבלה נכשל — ניתן לצרף בעריכת ההוצאה"); }
+      }
+      toast.success("נרשמו הכנסה והוצאה תואמות (תקציב צבוע)");
+      onClose();
+    } catch { toast.error("שגיאה ברישום הזוג הצבוע"); }
+  };
   return (
     <Modal title="הוספת הוצאה" subtitle="הזן את פרטי ההוצאה" onClose={onClose}>
-      <ExpenseForm initial={initial} onSubmit={handleSubmit} onSubmitMulti={handleSubmitMulti} onClose={onClose}
-        isPending={addExpense.isPending} submitLabel="הוסף הוצאה" />
+      <ExpenseForm initial={initial} onSubmit={handleSubmit} onSubmitMulti={handleSubmitMulti} onSubmitPair={handleSubmitPair} onClose={onClose}
+        isPending={addExpense.isPending || createPair.isPending} submitLabel="הוסף הוצאה" />
     </Modal>
   );
 }
@@ -1054,6 +1109,12 @@ function ExpenseMobileCard({
           }}>{label}</span>
           {e.budget_categories?.name && (
             <span style={{ fontSize: "11px", color: "#AAA099" }}>· {e.budget_categories.name}</span>
+          )}
+          {e.linked_income_id && (
+            <span title="תקציב צבוע — מקושר להכנסה תואמת" style={{
+              padding: "2px 8px", borderRadius: "99px", fontSize: "10px", fontWeight: 700,
+              background: "#EEEAF7", color: "#5B4B8A", border: "1px solid #CFC3EC",
+            }}>צבוע ⇄</span>
           )}
           {e.creator && (
             <span style={{
