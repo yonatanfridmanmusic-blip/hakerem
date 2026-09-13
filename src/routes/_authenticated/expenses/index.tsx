@@ -2132,8 +2132,14 @@ export default function ExpensesPage() {
                     }}>
                       {label}
                     </span>
-                    <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {e.budget_categories?.name ?? "—"}
+                    <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.budget_categories?.name ?? "—"}</span>
+                      {e.linked_income_id && (
+                        <span title="תקציב צבוע — מקושר להכנסה תואמת" style={{
+                          flexShrink: 0, padding: "1px 7px", borderRadius: "99px", fontSize: "10px", fontWeight: 700,
+                          background: "#EEEAF7", color: "#5B4B8A", border: "1px solid #CFC3EC",
+                        }}>צבוע ⇄</span>
+                      )}
                     </span>
                     <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {e.supplier ?? e.description ?? "—"}
