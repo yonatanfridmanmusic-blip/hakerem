@@ -9,8 +9,8 @@
 // issues. לעולם לא success שקט על ערך חשוד.
 //
 // תשובה: { success, documents: [{amount, supplier, date, description,
-//          invoice_number, suggested_category, pages, confidence, issues}],
-//          validation: {attempts, all_valid} }
+//          invoice_number, suggested_category, pages, confidence, issues,
+//          date_candidates}], validation: {attempts, all_valid} }
 //
 // הפונקציה הישנה parse-receipt נשארת ללא שינוי לצידה עד החלפת הפרונט.
 
@@ -27,6 +27,7 @@ interface ParsedDoc {
   supplier?: string | null;
   date?: string | null;
   multiple_dates?: boolean | null;
+  date_candidates?: { date?: string | null; label?: string | null }[] | null;
   description?: string | null;
   invoice_number?: string | null;
   suggested_category?: string | null;
@@ -104,6 +105,7 @@ async function extractOnce(
 - amount: תמיד "סה"כ לתשלום" (או "סה"כ כולל מע"מ") של המסמך כולו. לא שורה פנימית, לא סכום ביניים, לא תעודת משלוח.
 - date: התאריך הנכון הוא השדה "תאריך מסמך" או "תאריך ערך" של המסמך — הוא בלבד. לעולם לא "לתשלום עד", לא תאריך פירעון, לא מועד אחרון לתשלום, לא "מועד הדפסה"/"הודפס בתאריך" (תאריך הדפסה שמודפס בדרך כלל בתחתית הדף), ולא תאריכים של תעודות משלוח פנימיות בתוך חשבונית ריכוז. תאריכים במסמכים ישראליים כתובים יום/חודש/שנה (DD/MM/YY או DD/MM/YYYY) — למשל 3/09/26 הוא 3 בספטמבר 2026. שנה דו-ספרתית פירושה 20YY (26 = 2026; לעולם לא 2003 ולא 1926).
 - multiple_dates: שדה חובה לכל מסמך. סמן true אם מודפסים במסמך יותר מתאריך מועמד אחד (למשל גם תאריך מסמך וגם מועד הדפסה, "לתשלום עד" או תאריכי תעודות משלוח) — גם אם אתה בטוח שבחרת נכון. false רק כשיש תאריך יחיד ולא ניתן להתבלבל.
+- date_candidates: כש-multiple_dates=true — החזר מערך של עד 4 מועמדים, אחד לכל תאריך שמודפס במסמך: { date: התאריך בפורמט YYYY-MM-DD, label: אחת מהתוויות בעברית בלבד — "תאריך מסמך" / "מועד הדפסה" / "לתשלום עד" / "תעודת משלוח" (בחר את המדויקת ביותר לפי מה שכתוב ליד התאריך במסמך) }. כלול תמיד את התאריך שבחרת בשדה date כאחד המועמדים. כשmultiple_dates=false — החזר מערך ריק או השמט את השדה.
 - supplier: שם העסק **שהוציא** את המסמך (המוכר/נותן השירות) — מהכותרת הרשמית, הלוגו או פרטי העוסק המורשה. לעולם לא הלקוח המחויב: שם שמופיע אחרי "לכבוד" או כנמען (למשל בית ספר או גן) הוא הלקוח, לא הספק. העתק את שם הספק במדויק, אות-באות, כפי שמודפס — אל תנחש ואל תשלים אותיות. התעלם לחלוטין מפרסומות, סלוגנים, כתובות אתרים ומלל שיווקי המודפסים על הדף.
 - description: תיאור קצר בעברית של מה שנרכש בפועל, מתוך שורות החיוב בלבד — לא מתוך פרסומות, לא מתוך כותרות גרפיות. אם השורה היא שכירות/מנוי/שירות חודשי — כתוב זאת.
 - ${catRule}`,
@@ -125,6 +127,7 @@ async function extractOnce(
                   supplier:           { type: "string", description: "שם הספק מהכותרת הרשמית. null אם לא קיים." },
                   date:               { type: "string", description: "תאריך המסמך/תאריך ערך YYYY-MM-DD (לא 'לתשלום עד', לא מועד הדפסה; DD/MM/YY ישראלי, YY=20YY). null אם לא קיים." },
                   multiple_dates:     { type: "boolean", description: "חובה. true אם מודפסים במסמך יותר מתאריך מועמד אחד (תאריך מסמך, מועד הדפסה, לתשלום עד, תאריכי תעודות משלוח); false רק כשיש תאריך יחיד." },
+                  date_candidates:    { type: "array", description: "כש-multiple_dates=true: עד 4 תאריכים מועמדים שמודפסים במסמך, כולל זה שנבחר. ריק אחרת.", items: { type: "object", properties: { date: { type: "string", description: "YYYY-MM-DD" }, label: { type: "string", description: "תאריך מסמך / מועד הדפסה / לתשלום עד / תעודת משלוח" } } } },
                   description:        { type: "string", description: "תיאור קצר בעברית של הרכישה. null אם לא קיים." },
                   invoice_number:     { type: "string", description: "מספר חשבונית/קבלה. null אם לא קיים." },
                   suggested_category: { type: "string", description: "קטגוריה מהרשימה או null." },

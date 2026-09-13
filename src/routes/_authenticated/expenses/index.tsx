@@ -117,7 +117,32 @@ type ParsedDocument = ParsedReceipt & {
   confidence?: "ok" | "needs_review";
   issues?: string[];
   multiple_dates?: boolean | null;   // v6: דגל רך — נמצאו כמה תאריכים מועמדים במסמך
+  date_candidates?: { date?: string | null; label?: string | null }[] | null;   // v7: מועמדי תאריך (צ'יפים)
 };
+
+// v7 (בקשת יונתן 12.9): מועמדי תאריך מנורמלים לצ'יפים — סינון ריקים, ייחוד.
+type DateChip = { date: string; label: string };
+function dateChips(d?: ParsedDocument | null): DateChip[] {
+  const raw = d?.date_candidates ?? [];
+  const seen = new Set<string>();
+  const out: DateChip[] = [];
+  for (const c of raw) {
+    const date = (c?.date ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const label = (c?.label ?? "").trim();
+    const key = date + "|" + label;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ date, label: label || "תאריך" });
+  }
+  return out.slice(0, 4);
+}
+
+// צ'יפ לתצוגה: dd/MM ליום/חודש קצר
+function chipDateShort(iso: string): string {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}` : iso;
+}
 
 // תרגום קודי issues של המנוע לעברית ידידותית
 function issueLabel(code: string): string {
@@ -305,6 +330,7 @@ type EditableDoc = {
   amount: string; supplier: string; date: string; description: string;
   budget_category_id: string; include: boolean; needsReview: boolean; issues: string[];
   multipleDates: boolean;   // v6: אזהרת ריבוי תאריכים על שדה התאריך
+  dateCandidates: DateChip[];   // v7: מועמדי תאריך לצ'יפים
   approved: boolean;        // משוב יונתן: אישור "הפרטים נכונים" פר-כרטיס
 };
 
@@ -346,6 +372,7 @@ function ExpenseForm({
     needsReview: d.confidence === "needs_review",
     issues: hardIssues(d.issues),
     multipleDates: hasMultipleDates(d),
+    dateCandidates: dateChips(d),
     approved: false,
   });
 
@@ -645,6 +672,26 @@ function ExpenseForm({
                     {d.multipleDates && (
                       <div style={{ fontSize: "11.5px", color: "#92400E", fontWeight: 600, marginTop: "3px", lineHeight: 1.4 }}>
                         נמצאו כמה תאריכים במסמך — ודאו שזה תאריך המסמך
+                      </div>
+                    )}
+                    {d.dateCandidates.length > 1 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "5px" }}>
+                        {d.dateCandidates.map((c, ci) => {
+                          const sel = c.date === d.date;
+                          return (
+                            <button key={ci} type="button" disabled={!d.include}
+                              onClick={() => edit(i, { date: c.date })}
+                              style={{
+                                padding: "3px 8px", borderRadius: "20px", fontSize: "10.5px", fontWeight: 600,
+                                cursor: d.include ? "pointer" : "default", fontFamily: "var(--font-sans)",
+                                border: `1px solid ${sel ? "#2D6644" : "#E8C766"}`,
+                                background: sel ? "#E7F3EC" : "#FFFDF6",
+                                color: sel ? "#1A3D2B" : "#92400E",
+                              }}>
+                              {c.label} · {chipDateShort(c.date)}{sel ? " ✓" : ""}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1600,6 +1647,26 @@ function BulkImportModal({ onClose }: { onClose: () => void }) {
                           {hasMultipleDates(it.parsed) && (
                             <div style={{ fontSize: "11.5px", color: "#92400E", fontWeight: 600, marginTop: "3px", lineHeight: 1.4 }}>
                               נמצאו כמה תאריכים במסמך — ודאו שזה תאריך המסמך
+                            </div>
+                          )}
+                          {dateChips(it.parsed).length > 1 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "5px" }}>
+                              {dateChips(it.parsed).map((c, ci) => {
+                                const sel = c.date === it.parsed?.date;
+                                return (
+                                  <button key={ci} type="button"
+                                    onClick={() => setItemParsed(it.id, { date: c.date })}
+                                    style={{
+                                      padding: "3px 8px", borderRadius: "20px", fontSize: "10.5px", fontWeight: 600,
+                                      cursor: "pointer", fontFamily: "var(--font-sans)",
+                                      border: `1px solid ${sel ? "#2D6644" : "#E8C766"}`,
+                                      background: sel ? "#E7F3EC" : "#FFFDF6",
+                                      color: sel ? "#1A3D2B" : "#92400E",
+                                    }}>
+                                    {c.label} · {chipDateShort(c.date)}{sel ? " ✓" : ""}
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
