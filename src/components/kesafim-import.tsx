@@ -110,6 +110,8 @@ interface LogRow {
   id: string; report_date: string | null; created_at: string | null; committed_at: string | null;
   status: string; created_by: string | null; approver: string; total: number; rows: number;
 }
+// 2.5.0 (נושא 3.ג): קטגוריית הורים ידנית + סכומי ההוצאות/הכנסות שלה
+interface ManualCat { id: string; name: string; expCount: number; expSum: number; incCount: number; incSum: number }
 
 // ─── סגנונות משותפים ──────────────────────────────────────────────────────────
 
@@ -155,7 +157,9 @@ export function KesafimImportModal({
   const [perStudentOverride, setPerStudentOverride] = useState<Record<string, string>>({});
   const [rowSkip, setRowSkip] = useState<Record<string, boolean>>({});
   const [targetChoice, setTargetChoice] = useState<Record<string, "keep" | "update">>({});
-  const [doneSummary, setDoneSummary] = useState<{ rows: number; total: number; newSections: number; seconds: number } | null>(null);
+  const [manualCats, setManualCats] = useState<ManualCat[]>([]); // 2.5.0 (3.ג): קטגוריות הורים ידניות בשנה
+  const [manualMerge, setManualMerge] = useState<Record<string, string>>({}); // catId → norm יעד ("" = השאר נפרדת)
+  const [doneSummary, setDoneSummary] = useState<{ rows: number; total: number; newSections: number; seconds: number; merges: { from: string; to: string; movedExp: number; movedInc: number }[] } | null>(null);
   const [logRows, setLogRows] = useState<LogRow[] | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -189,6 +193,29 @@ export function KesafimImportModal({
       });
       setCellSums(cells);
       setManualBySection(manual);
+
+      // 2.5.0 (3.ג): קטגוריות הורים ידניות בשנה + סכומי הוצאות/הכנסות שלהן,
+      // להצעת שיוך לסעיפי הדוח במסך האישור. קריאה בלבד עד אישור מפורש.
+      const { data: mcats } = await supabase.from("budget_categories")
+        .select("id, name").eq("school_year_id", yearId).eq("source", "horim").eq("origin", "manual");
+      const mcIds = (mcats ?? []).map((c) => c.id);
+      let mExp: { budget_category_id: string | null; amount: number }[] = [];
+      let mInc: { budget_category_id: string | null; amount: number }[] = [];
+      if (mcIds.length > 0) {
+        const [eR, iR] = await Promise.all([
+          supabase.from("expenses").select("budget_category_id, amount").eq("school_year_id", yearId).in("budget_category_id", mcIds),
+          supabase.from("income").select("budget_category_id, amount").eq("school_year_id", yearId).in("budget_category_id", mcIds),
+        ]);
+        mExp = (eR.data ?? []) as typeof mExp;
+        mInc = (iR.data ?? []) as typeof mInc;
+      }
+      setManualCats((mcats ?? []).map((c) => ({
+        id: c.id, name: c.name,
+        expCount: mExp.filter((e) => e.budget_category_id === c.id).length,
+        expSum: mExp.filter((e) => e.budget_category_id === c.id).reduce((sm, e) => sm + Number(e.amount), 0),
+        incCount: mInc.filter((e) => e.budget_category_id === c.id).length,
+        incSum: mInc.filter((e) => e.budget_category_id === c.id).reduce((sm, e) => sm + Number(e.amount), 0),
+      })));
     })();
   }, [orgId]);
 
@@ -319,10 +346,32 @@ export function KesafimImportModal({
     setTargetChoice(choices);
     setRowSkip({});
     setPerStudentOverride({});
+    setManualMerge({});
   }
 
   // ─── נגזרות ─────────────────────────────────────────────────────────────────
   const studentCount = useMemo(() => Object.fromEntries(grades.map((g) => [g.id, g.student_count])), [grades]);
+
+  // 2.5.0 (3.ג): שמות הסעיפים המנורמלים מהדוח (יעדי שיוך אפשריים), ולכל קטגוריה
+  // ידנית — הסעיף הדומה ביותר (סף SUGGEST_THRESHOLD) כהצעה. ברירת המחדל תמיד
+  // "השאר נפרדת" — manualMerge לא נקבע אוטומטית, שום דבר לא נמחק בשקט.
+  const reportNorms = useMemo(
+    () => [...new Set(viewGrades.flatMap((g) => g.rows.map((r) => r.norm)))],
+    [viewGrades],
+  );
+  const manualSuggest = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const mc of manualCats) {
+      const mn = normalizeReportName(mc.name);
+      let best: { norm: string; score: number } | null = null;
+      for (const norm of reportNorms) {
+        const score = nameSimilarity(mn, norm);
+        if (score >= SUGGEST_THRESHOLD && (!best || score > best.score)) best = { norm, score };
+      }
+      if (best) out[mc.id] = best.norm;
+    }
+    return out;
+  }, [manualCats, reportNorms]);
 
   function defaultPerStudent(row: ViewRow, gradeLabel: string): string {
     const gid = gradeMatch[gradeLabel];
@@ -500,9 +549,13 @@ export function KesafimImportModal({
         // 2.4.0 (נושא 3.ב): קטגוריות הורים ידניות (origin='manual') מוגנות —
         // לא נדרסות בסנכרון הדוח. מדלגים על שורה ששמה תואם קטגוריה ידנית קיימת.
         const manualNames = new Set((catR.data ?? []).filter((c) => c.origin === "manual").map((c) => c.name));
+        // 2.5.0 (3.ג): קטגוריה ידנית שהמשתמש בחר למזג — לא מוגנת יותר, כדי שהסעיף
+        // המקביל מהדוח יסונכרן (ונמזג אליו בשלב 4.5). "השאר נפרדת" נשאר מוגן (3.ב).
+        const mergedManualNames = new Set(manualCats.filter((mc) => manualMerge[mc.id]).map((mc) => mc.name));
+        const protectedManualNames = new Set([...manualNames].filter((nm) => !mergedManualNames.has(nm)));
         let nextCatOrder = Math.max(0, ...(catR.data ?? []).map((c) => c.order_index)) + 1;
         const catRows = involvedSecIds
-          .filter((secId) => !manualNames.has(sectionName(secId)))
+          .filter((secId) => !protectedManualNames.has(sectionName(secId)))
           .map((secId) => {
             const planned = (allGsaR.data ?? [])
               .filter((g) => g.parent_section_id === secId)
@@ -517,6 +570,44 @@ export function KesafimImportModal({
             .upsert(catRows, { onConflict: "school_year_id,source,name", ignoreDuplicates: false });
           if (error) throw new Error(`סנכרון התקציב נכשל: ${error.message}`);
         }
+      }
+
+      // ─── 4.5 (2.5.0, נושא 3.ג): מיזוג קטגוריות ידניות שנבחרו ────────────────
+      // אחרי שסעיפי הדוח סונכרנו לקטגוריות: מעבירים הוצאות/הכנסות/פעילויות של כל
+      // קטגוריה ידנית שנבחרה למיזוג → לקטגוריית הסעיף המקביל, ומוחקים את הידנית.
+      // "השאר נפרדת" (ברירת מחדל) לא נוגע בכלום. הכול await מפורש, שגיאה עוצרת.
+      const mergeSummary: { from: string; to: string; movedExp: number; movedInc: number }[] = [];
+      for (const mc of manualCats) {
+        const targetNorm = manualMerge[mc.id];
+        if (!targetNorm) continue; // השאר נפרדת
+        const secId = sectionIdByNorm[targetNorm];
+        if (!secId) continue; // הסעיף לא יובא בפועל — נשאר נפרד
+        const targetName = sectionName(secId);
+        const { data: tcat, error: tErr } = await supabase.from("budget_categories")
+          .select("id").eq("school_year_id", yearId).eq("source", "horim").eq("name", targetName).maybeSingle();
+        if (tErr) throw new Error(`איתור קטגוריית היעד למיזוג נכשל: ${tErr.message}`);
+        if (!tcat) continue;
+        if (tcat.id === mc.id) {
+          // מיזוג באותו שם — הקטגוריה הידנית היא-היא קטגוריית הדוח (סונכרנה מחדש):
+          // מסירים את סימון "ידני" כדי שתנוהל מהדוח מכאן. אין העברה/מחיקה.
+          const { error } = await supabase.from("budget_categories").update({ origin: null }).eq("id", mc.id);
+          if (error) throw new Error(`עדכון קטגוריה ממוזגת נכשל: ${error.message}`);
+          mergeSummary.push({ from: mc.name, to: targetName, movedExp: 0, movedInc: 0 });
+          continue;
+        }
+        // העברת כל הרשומות המצביעות על הקטגוריה הידנית → לקטגוריית הסעיף
+        const { error: e1 } = await supabase.from("expenses")
+          .update({ budget_category_id: tcat.id }).eq("school_year_id", yearId).eq("budget_category_id", mc.id);
+        if (e1) throw new Error(`העברת הוצאות במיזוג נכשלה: ${e1.message}`);
+        const { error: e2 } = await supabase.from("income")
+          .update({ budget_category_id: tcat.id }).eq("school_year_id", yearId).eq("budget_category_id", mc.id);
+        if (e2) throw new Error(`העברת הכנסות במיזוג נכשלה: ${e2.message}`);
+        const { error: e3 } = await supabase.from("budget_activities")
+          .update({ budget_category_id: tcat.id }).eq("budget_category_id", mc.id);
+        if (e3) throw new Error(`העברת פעילויות במיזוג נכשלה: ${e3.message}`);
+        const { error: e4 } = await supabase.from("budget_categories").delete().eq("id", mc.id);
+        if (e4) throw new Error(`מחיקת הקטגוריה הידנית לאחר מיזוג נכשלה: ${e4.message}`);
+        mergeSummary.push({ from: mc.name, to: targetName, movedExp: mc.expCount, movedInc: mc.incCount });
       }
 
       // 5. רישום הגבייה — insert אחד
@@ -556,6 +647,7 @@ export function KesafimImportModal({
 
       ["parent-collections", "grade-section-amounts", "budget-categories", "budget-plan",
         "dashboard", "source-breakdown", "parent-sections", "parent-sections-all",
+        "expenses", "income",
       ].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
 
       setDoneSummary({
@@ -563,6 +655,7 @@ export function KesafimImportModal({
         total: collectionRows.reduce((s, r) => s + r.amount, 0),
         newSections: plan.newSections.length,
         seconds: Math.round((performance.now() - t0) / 100) / 10,
+        merges: mergeSummary,
       });
       setPhase("done");
       onCommitted?.();
@@ -844,6 +937,52 @@ export function KesafimImportModal({
                 </div>
               )}
 
+              {/* 2.5.0 (נושא 3.ג): קטגוריות הורים שנוספו ידנית — הצעת שיוך לסעיף מהדוח */}
+              {manualCats.length > 0 && reportNorms.length > 0 && (
+                <div style={{ border: "1px solid #E6D9EC", borderRadius: "14px", overflow: "hidden" }}>
+                  <div style={{ padding: "10px 14px", background: "#F7EEF5", borderBottom: "1px solid #E6D9EC" }}>
+                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#7A2E63" }}>קטגוריות שהוספתם ידנית</div>
+                    <div style={{ fontSize: "12px", color: "#8A6E80", marginTop: "3px", lineHeight: 1.6 }}>
+                      אלו קטגוריות הורים שיצרתם לפני הדוח. אפשר לשייך כל אחת לסעיף המתאים מהדוח — ההוצאות יעברו לסעיף והקטגוריה הידנית תוסר. ברירת המחדל: להשאיר נפרדת. כלום לא נמחק בלי שתבחרו.
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {manualCats.map((mc) => {
+                      const sug = manualSuggest[mc.id];
+                      const chosen = manualMerge[mc.id] ?? "";
+                      return (
+                        <div key={mc.id} style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", padding: "10px 14px", borderTop: "1px solid #F3EAF0" }}>
+                          <div style={{ minWidth: 0, flex: "1 1 160px" }}>
+                            <div style={{ fontSize: "13.5px", color: "#1A1A1A", fontWeight: "500" }}>{mc.name}</div>
+                            <div style={{ fontSize: "11.5px", color: "#8A8078", marginTop: "2px" }} className="num">
+                              {mc.expCount > 0 ? <>{mc.expCount} הוצאות · {fmt(mc.expSum)} ₪</> : <>ללא הוצאות</>}
+                              {mc.incCount > 0 && <> · {mc.incCount} הכנסות · {fmt(mc.incSum)} ₪</>}
+                            </div>
+                          </div>
+                          <span style={{ color: "#C9A9BF", fontSize: "13px" }}>←</span>
+                          <select
+                            value={chosen}
+                            onChange={(e) => setManualMerge({ ...manualMerge, [mc.id]: e.target.value })}
+                            style={{ ...selectStyle, borderColor: chosen ? "#B04A90" : "#E8E2D9", color: chosen ? "#7A2E63" : "#1A1A1A", minWidth: "180px" }}
+                          >
+                            <option value="">השאר נפרדת</option>
+                            {sug && <option value={sug}>שייך ל: {sug} (מומלץ)</option>}
+                            {reportNorms.filter((n) => n !== sug).map((n) => (
+                              <option key={n} value={n}>שייך ל: {n}</option>
+                            ))}
+                          </select>
+                          {chosen && (
+                            <span style={{ fontSize: "11px", color: "#8B2F6E", background: "#F7EDF4", border: "1px solid #E6D2E0", borderRadius: "99px", padding: "2px 8px", whiteSpace: "nowrap" }}>
+                              {mc.expCount + mc.incCount > 0 ? <>יעברו {mc.expCount + mc.incCount} רשומות</> : <>הקטגוריה תוסר</>}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {viewGrades.map((g, gi) => {
                 const gid = gradeMatch[g.label];
                 const zeroCells = mode === "update"
@@ -1047,6 +1186,14 @@ export function KesafimImportModal({
                   <>נרשמו <b className="num">{doneSummary.rows}</b> שורות בסך <b className="num">{fmt(doneSummary.total)} ₪</b>
                     {doneSummary.newSections > 0 && <> · נוצרו <b className="num">{doneSummary.newSections}</b> סעיפים חדשים</>}
                     <br />היעדים והתכנון התקציבי עודכנו בהתאם.</>
+                )}
+                {doneSummary.merges.length > 0 && (
+                  <div style={{ marginTop: "10px", fontSize: "12.5px", color: "#7A2E63", background: "#F7EEF5", border: "1px solid #E6D9EC", borderRadius: "10px", padding: "8px 12px", textAlign: "right", lineHeight: 1.7 }}>
+                    <b>מיזוג קטגוריות ידניות:</b>
+                    {doneSummary.merges.map((mg, i) => (
+                      <div key={i} className="num">• {mg.from} ← {mg.to}{mg.movedExp + mg.movedInc > 0 ? <> (הועברו {mg.movedExp + mg.movedInc} רשומות)</> : <> (אוחדה)</>}</div>
+                    ))}
+                  </div>
                 )}
                 <div style={{ fontSize: "11px", color: "#AAA099", marginTop: "6px" }} className="num">({doneSummary.seconds} שניות)</div>
               </div>
