@@ -367,7 +367,8 @@ function AddIncomeModal({ onClose, defaultSource }: { onClose: () => void; defau
         date: form.income_date,
         bankAccount: form.bank_account,
         budgetCategoryId: form.budget_category_id || null,
-        supplier: form.payer || null,
+        // המשלם הוא מי ששילם לביה"ס, לא הספק (מי שמקבלים ממנו) — משאירים ספק ריק בכיוון הזה
+        supplier: null,
         payer: form.payer || null,
         description: form.description || null,
       });
@@ -464,6 +465,11 @@ function DeleteConfirm({ income, onClose }: { income: Income; onClose: () => voi
           האם למחוק הכנסה של <strong>{fmt(income.amount)}</strong>
           {income.payer ? ` מ-${income.payer}` : ""}? פעולה זו אינה הפיכה.
         </div>
+        {income.linkedExpense && (
+          <div style={{ fontSize: "12.5px", color: "#5B4B8A", background: "#F4F1FB", border: "1px solid #CFC3EC", borderRadius: "9px", padding: "9px 11px", lineHeight: 1.5, marginBottom: "20px" }}>
+            רשומה זו היא חלק מזוג צבוע ⇄ — הרשומה התואמת תישאר ותנותק מהקישור.
+          </div>
+        )}
         <div style={{ display: "flex", gap: "10px" }}>
           <button onClick={onClose} style={{
             flex: 1, padding: "12px 0", border: "1px solid #E8E2D9", borderRadius: "10px",

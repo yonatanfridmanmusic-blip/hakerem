@@ -1042,6 +1042,11 @@ function DeleteConfirm({ expense, onClose }: { expense: Expense; onClose: () => 
           האם למחוק הוצאה של <strong>{fmt(expense.amount)}</strong>
           {expense.supplier ? ` מ-${expense.supplier}` : ""}? פעולה זו אינה הפיכה.
         </div>
+        {expense.linked_income_id && (
+          <div style={{ fontSize: "12.5px", color: "#5B4B8A", background: "#F4F1FB", border: "1px solid #CFC3EC", borderRadius: "9px", padding: "9px 11px", lineHeight: 1.5, marginBottom: "24px" }}>
+            רשומה זו היא חלק מזוג צבוע ⇄ — הרשומה התואמת תישאר ותנותק מהקישור.
+          </div>
+        )}
         <div style={{ display: "flex", gap: "10px" }}>
           <button onClick={onClose} style={{
             flex: 1, padding: "12px 0", border: "1px solid #E8E2D9", borderRadius: "10px",
