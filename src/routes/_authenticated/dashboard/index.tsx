@@ -713,10 +713,21 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   // ── Wizard state ──────────────────────────────────────────────────────────
   // If we have an existing school year (user closed mid-wizard and returned),
   // start at step 1 (grades) so they don't have to re-enter the year.
-  const [step, setStep] = useState<0 | 1 | 2 | 3>(existingSchoolYear ? 1 : 0);
+  // 2.4.0 (תיקון באג חוסם): step מתחיל תמיד ב-0. שלב 0 מחליט לפי קיום שנה
+  // אם להציג כרטיס "ממשיכים עם..." או טופס יצירה. כך אין היתקעות כשה-prop
+  // של השנה הקיימת מגיע אחרי ה-mount (מרוץ הטעינה של הדשבורד בכניסה מהגדרות).
+  const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
   const [yearId, setYearId]     = useState<string>(existingSchoolYear?.id ?? "");
   const [createdYearName, setCreatedYearName] = useState(existingSchoolYear?.name ?? "");
   const [wizardError, setWizardError] = useState<string | null>(null);
+  const [forceCreate, setForceCreate] = useState(false); // "התחל שנה חדשה" מתוך מצב עם שנה קיימת
+  // אימוץ שנה קיימת שהגיעה כ-prop אחרי ה-mount — מונע את היתקעות שלב 0.
+  useEffect(() => {
+    if (existingSchoolYear) {
+      setYearId((y) => y || existingSchoolYear.id);
+      setCreatedYearName((n) => n || existingSchoolYear.name);
+    }
+  }, [existingSchoolYear]);
 
   // Step 0 — school year form
   const defs = SmartDefaults();
@@ -1299,8 +1310,49 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
         )}
 
         {/* ── STEP 0: Create school year ── */}
-        {step === 0 && (
+        {step === 0 && (() => {
+          // כשלארגון כבר יש שנה פעילה (או במצב עריכה) — לא מציעים יצירה שתיחסם
+          // בגארד השם-הכפול; מציגים כרטיס "ממשיכים עם...". יצירה נשארת רק לארגון
+          // בלי שנה, או בבחירה מפורשת של "התחל שנה חדשה".
+          const hasYear = !!existingSchoolYear || !!yearId;
+          const showContinue = (mode === "edit" || hasYear) && !forceCreate;
+          if (showContinue) {
+            const yn = createdYearName || existingSchoolYear?.name || "";
+            return (
+              <div>
+                <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>ממשיכים עם שנת הלימודים הקיימת</div>
+                <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "20px", lineHeight: 1.6 }}>
+                  כבר יש לך שנת לימודים פעילה — נמשיך לערוך אותה משם, בלי ליצור שנה חדשה.
+                </div>
+                <div style={{ padding: "16px 18px", borderRadius: "14px", background: "#F0FAF5", border: "1px solid #B6E8C4", marginBottom: "18px" }}>
+                  <div style={{ fontSize: "12px", color: "#6B8F7D", marginBottom: "4px" }}>שנת הלימודים הפעילה</div>
+                  <div style={{ fontSize: "18px", fontWeight: "600", color: "#1A3D2B" }}>{yn || "טוען..."}</div>
+                </div>
+                <button type="button" onClick={() => setStep(1)} disabled={!yearId}
+                  style={{ width: "100%", padding: "14px 0", background: yearId ? "linear-gradient(135deg,#2D6644,#1A3D2B)" : "#E8E2D9", color: yearId ? "#fff" : "#AAA099", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "500", fontFamily: "Rubik, sans-serif", cursor: yearId ? "pointer" : "not-allowed", boxShadow: yearId ? "0 4px 16px rgba(26,61,43,0.3)" : "none" }}>
+                  המשך ←
+                </button>
+                <button type="button" onClick={() => {
+                    const yy = new Date().getFullYear() + 1;
+                    const hmap: Record<number, string> = { 2025: 'תשפ"ו', 2026: 'תשפ"ז', 2027: 'תשפ"ח', 2028: 'תשפ"ט', 2029: 'תש"ף', 2030: 'תשצ"א' };
+                    setYName(`${hmap[yy] ?? yy} ${yy}-${yy + 1}`);
+                    setYStart(`${yy}-09-01`); setYEnd(`${yy + 1}-06-30`);
+                    setForceCreate(true);
+                  }}
+                  style={{ width: "100%", marginTop: "10px", padding: "10px 0", background: "none", color: "#AAA099", border: "none", fontSize: "12.5px", fontFamily: "Rubik, sans-serif", cursor: "pointer", textDecoration: "underline" }}>
+                  או: התחל שנה חדשה
+                </button>
+              </div>
+            );
+          }
+          return (
           <div>
+            {forceCreate && (
+              <button type="button" onClick={() => setForceCreate(false)}
+                style={{ background: "none", border: "none", color: "#AAA099", fontSize: "12.5px", fontFamily: "Rubik, sans-serif", cursor: "pointer", padding: 0, marginBottom: "10px", textDecoration: "underline" }}>
+                → חזרה לשנה הקיימת
+              </button>
+            )}
             <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A", marginBottom: "6px" }}>יצירת שנת הלימודים</div>
             <div style={{ fontSize: "13px", color: "#6B6560", marginBottom: "24px", lineHeight: 1.6 }}>
               נתחיל מהבסיס — מה שם שנת הלימודים שתרצה/י להגדיר?
@@ -1344,7 +1396,8 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
               {createYear.isPending ? "יוצר שנה..." : "צור שנת לימודים ←"}
             </button>
           </div>
-        )}
+          );
+        })()}
 
         {/* ── STEP 1: Add grades ── */}
         {step === 1 && (
