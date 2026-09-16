@@ -19,6 +19,7 @@ export interface Income {
   notes: string | null;
   budget_category_id: string | null;
   budget_categories?: { name: string } | null;
+  linkedExpense?: boolean; // 2.4.0 נושא 2: ההכנסה היא חלק מזוג צבוע (יש הוצאה עם linked_income_id=זה)
 }
 
 export interface NewIncome {
@@ -54,7 +55,20 @@ export function useIncome(sourceFilter?: BudgetSource | "all") {
 
       const { data, error } = await query;
       if (error) throw error;
-      return (data ?? []).map((r) => ({ ...r, amount: Number(r.amount) })) as Income[];
+      const rows = (data ?? []).map((r) => ({ ...r, amount: Number(r.amount) })) as Income[];
+
+      // 2.4.0 נושא 2: זיהוי הכנסות שהן חלק מזוג צבוע — שאילתה אחת (לא N+1):
+      // אילו expenses.linked_income_id מצביעים על ההכנסות שנטענו.
+      const ids = rows.map((r) => r.id);
+      if (ids.length > 0) {
+        const { data: links } = await supabase
+          .from("expenses")
+          .select("linked_income_id")
+          .in("linked_income_id", ids);
+        const linkedSet = new Set((links ?? []).map((l) => l.linked_income_id).filter(Boolean));
+        for (const r of rows) r.linkedExpense = linkedSet.has(r.id);
+      }
+      return rows;
     },
     staleTime: 1000 * 60,
   });

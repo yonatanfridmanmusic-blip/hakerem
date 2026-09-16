@@ -18,7 +18,7 @@ import {
   type Income,
 } from "@/hooks/use-income";
 import { useBudgetCategories } from "@/hooks/use-expenses";
-import { useAddBudgetCategory } from "@/hooks/use-budget-plan";
+import { useAddBudgetCategory, useCreateFlowThroughPair } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { useSourceBudgetPlans } from "@/hooks/use-source-budget-plans";
 import { useGrades, useGradeSectionAmounts, computeTarget, useParentCollections, useAllParentSections, useCollectionPct } from "@/hooks/use-horim";
@@ -35,6 +35,16 @@ const fmt = (n: number) =>
   new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 0 }).format(n);
 
 const today = () => new Date().toISOString().split("T")[0];
+
+// 2.4.0 נושא 2: תג "צבוע ⇄" — זהה לתג במסך ההוצאות ובמצב תקציבי.
+function FlowThroughTag() {
+  return (
+    <span title="תקציב צבוע — מקושר להוצאה תואמת" style={{
+      flexShrink: 0, padding: "1px 7px", borderRadius: "99px", fontSize: "10px", fontWeight: 700,
+      background: "#EEEAF7", color: "#5B4B8A", border: "1px solid #CFC3EC",
+    }}>צבוע ⇄</span>
+  );
+}
 
 // ─── Shared form state type ───────────────────────────────────────────────────
 
@@ -69,6 +79,7 @@ const labelStyle: React.CSSProperties = {
 function IncomeForm({
   initial,
   onSubmit,
+  onSubmitPair,
   onClose,
   isPending,
   submitLabel,
@@ -76,6 +87,8 @@ function IncomeForm({
 }: {
   initial: IncomeFormState;
   onSubmit: (form: IncomeFormState) => Promise<void>;
+  // 2.4.0 נושא 2.ב: רישום זוג צבוע מצד ההכנסה — דרך אותה פונקציית DB אטומית
+  onSubmitPair?: (form: IncomeFormState) => Promise<void>;
   onClose: () => void;
   isPending: boolean;
   submitLabel: string;
@@ -96,6 +109,14 @@ function IncomeForm({
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const isAddingNew = form.budget_category_id === "__new__";
   const activeSourceStyle = getSourceStyle(sources, form.source);
+  // 2.4.0 נושא 2.ב: סעיף צבוע → הצעה לרשום זוג (הכנסה+הוצאה) — כמו במסך ההוצאות
+  const [alsoExpense, setAlsoExpense] = useState(false);
+  const selectedCat = (categories ?? []).find((c) => c.id === form.budget_category_id) as { is_flow_through?: boolean } | undefined;
+  const selectedFlowThrough = Boolean(selectedCat?.is_flow_through);
+  useEffect(() => {
+    setAlsoExpense(selectedFlowThrough);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.budget_category_id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,7 +131,9 @@ function IncomeForm({
     }
 
     const finalPaymentMethod = isOtherPayment ? customPayment.trim() : form.payment_method;
-    await onSubmit({ ...form, payment_method: finalPaymentMethod, budget_category_id: resolvedCategoryId ?? "" });
+    const resolved: IncomeFormState = { ...form, payment_method: finalPaymentMethod, budget_category_id: resolvedCategoryId ?? "" };
+    if (alsoExpense && onSubmitPair) { await onSubmitPair(resolved); return; }
+    await onSubmit(resolved);
   };
 
   return (
@@ -167,6 +190,24 @@ function IncomeForm({
             style={{ ...inputStyle, marginTop: "8px", borderColor: activeSourceStyle.color }} />
         )}
       </div>
+
+      {/* 2.4.0 נושא 2.ב: רישום זוג צבוע — הכנסה והוצאה תואמות בפעולה אחת */}
+      {onSubmitPair && (
+        <label style={{
+          display: "flex", alignItems: "flex-start", gap: "9px", cursor: "pointer",
+          padding: "10px 12px", borderRadius: "10px",
+          border: `1px solid ${alsoExpense ? "#CFC3EC" : "#E8E2D9"}`,
+          background: alsoExpense ? "#F4F1FB" : "#FAFAF8",
+        }}>
+          <input type="checkbox" checked={alsoExpense} onChange={(e) => setAlsoExpense(e.target.checked)}
+            style={{ marginTop: "2px", width: "16px", height: "16px", accentColor: "#5B4B8A", cursor: "pointer" }} />
+          <span style={{ fontSize: "12.5px", color: "#4A4A4A", lineHeight: 1.5 }}>
+            <span style={{ fontWeight: 700, color: "#5B4B8A" }}>תקציב צבוע ⇄</span>
+            {" — "}רשום במקביל גם הוצאה תואמת באותו סכום. הכסף נכנס ויוצא דרך בית הספר, והזוג נשמר יחד.
+            {selectedFlowThrough && <span style={{ color: "#8A7FB0" }}> (הסעיף שנבחר מסומן כצבוע)</span>}
+          </span>
+        </label>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
         <div>
@@ -236,7 +277,7 @@ function IncomeForm({
           color: "#fff", fontSize: "14px", fontWeight: "500",
           cursor: isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)",
         }}>
-          {isPending ? "שומר..." : submitLabel}
+          {isPending ? "שומר..." : (alsoExpense && onSubmitPair ? "רשום כהכנסה והוצאה" : submitLabel)}
         </button>
       </div>
     </form>
@@ -299,6 +340,7 @@ function Modal({ title, subtitle, onClose, children }: {
 
 function AddIncomeModal({ onClose, defaultSource }: { onClose: () => void; defaultSource: string }) {
   const addIncome = useAddIncome();
+  const createPair = useCreateFlowThroughPair();
   const initial: IncomeFormState = {
     income_date: today(), amount: "", source: defaultSource, bank_account: "school",
     payer: "", description: "", payment_method: "", reference_number: "", budget_category_id: "", notes: "",
@@ -316,10 +358,27 @@ function AddIncomeModal({ onClose, defaultSource }: { onClose: () => void; defau
       onClose();
     } catch { toast.error("שגיאה בשמירת ההכנסה"); }
   };
+  // 2.4.0 נושא 2.ב: זוג צבוע אטומי מצד ההכנסה — אותה פונקציית DB כמו בהוצאה.
+  const handleSubmitPair = async (form: IncomeFormState) => {
+    try {
+      await createPair.mutateAsync({
+        source: form.source,
+        amount: Math.round(Number(form.amount) * 100) / 100,
+        date: form.income_date,
+        bankAccount: form.bank_account,
+        budgetCategoryId: form.budget_category_id || null,
+        supplier: form.payer || null,
+        payer: form.payer || null,
+        description: form.description || null,
+      });
+      toast.success("נרשמו הכנסה והוצאה תואמות (תקציב צבוע)");
+      onClose();
+    } catch { toast.error("שגיאה ברישום הזוג הצבוע"); }
+  };
   return (
     <Modal title="הוספת הכנסה" subtitle="הזן את פרטי ההכנסה" onClose={onClose}>
-      <IncomeForm initial={initial} onSubmit={handleSubmit} onClose={onClose}
-        isPending={addIncome.isPending} submitLabel="הוסף הכנסה" />
+      <IncomeForm initial={initial} onSubmit={handleSubmit} onSubmitPair={handleSubmitPair} onClose={onClose}
+        isPending={addIncome.isPending || createPair.isPending} submitLabel="הוסף הכנסה" />
     </Modal>
   );
 }
@@ -466,17 +525,19 @@ function InlineCategoryCell({ inc }: { inc: Income }) {
   if (!editing) {
     if (!canWrite) {
       return (
-        <span style={{ fontSize: "13px", color: inc.budget_categories?.name ? "#1A1A1A" : "#C0BAB4" }}>
-          {inc.budget_categories?.name ?? "—"}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", color: inc.budget_categories?.name ? "#1A1A1A" : "#C0BAB4" }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inc.budget_categories?.name ?? "—"}</span>
+          {inc.linkedExpense && <FlowThroughTag />}
         </span>
       );
     }
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer" }}
+      <div style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", minWidth: 0 }}
         onClick={() => { setSelectedId(inc.budget_category_id ?? ""); setEditing(true); }}>
-        <span style={{ fontSize: "13px", color: inc.budget_categories?.name ? "#1A1A1A" : "#C0BAB4" }}>
+        <span style={{ fontSize: "13px", color: inc.budget_categories?.name ? "#1A1A1A" : "#C0BAB4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {inc.budget_categories?.name ?? "—"}
         </span>
+        {inc.linkedExpense && <FlowThroughTag />}
         <Pencil size={10} style={{ color: "#C0BAB4", flexShrink: 0 }} />
       </div>
     );
@@ -556,6 +617,7 @@ function IncomeMobileCard({
           {inc.budget_categories?.name && (
             <span style={{ fontSize: "11px", color: "#AAA099" }}>· {inc.budget_categories.name}</span>
           )}
+          {inc.linkedExpense && <FlowThroughTag />}
           {inc.payment_method && (
             <span style={{ fontSize: "11px", color: "#AAA099" }}>· {inc.payment_method}</span>
           )}

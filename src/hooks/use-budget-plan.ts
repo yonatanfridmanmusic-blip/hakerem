@@ -122,6 +122,7 @@ export function useAddBudgetCategory() {
       plannedAmount,
       targetYearId,
       origin,
+      isFlowThrough,
     }: {
       name: string;
       source: BudgetSource;
@@ -130,6 +131,8 @@ export function useAddBudgetCategory() {
       // 2.4.0 (נושא 3.ב): 'manual' לקטגוריות שנוצרו ידנית תוך כדי העלאת הוצאה —
       // מוגנות מדריסת planned ע"י סנכרון ההורים וייבוא כספים 2000. ברירת מחדל NULL.
       origin?: "manual" | null;
+      // 2.4.0 (נושא 2, Fix 2): סימון "תקציב צבוע" מהוויזארד — נכתב ב-insert הקיים.
+      isFlowThrough?: boolean;
     }) => {
       const yid = targetYearId ?? (await getActiveYearId());
       if (!yid) throw new Error("אין שנת לימודים פעילה");
@@ -155,6 +158,7 @@ export function useAddBudgetCategory() {
           school_year_id: yid,
           order_index: nextOrder,
           origin: origin ?? null,
+          is_flow_through: isFlowThrough ?? false,
         })
         .select("id")
         .single();

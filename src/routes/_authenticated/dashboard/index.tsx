@@ -773,7 +773,7 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   // Effective source: use selected if valid, else first org source
   const effectiveCatSrc = catSrc && orgSources.some(s => s.slug === catSrc) ? catSrc : (orgSources[0]?.slug ?? "gefen");
   const [catCustom, setCatCustom] = useState("");
-  type AddedCat = { id: string; name: string; amount: number };
+  type AddedCat = { id: string; name: string; amount: number; flowThrough?: boolean };
   const [addedCats, setAddedCats] = useState<Record<string, AddedCat[]>>({});
   // localAmounts: tracks what the user is typing per cat id (string to allow empty while editing)
   const [localAmounts, setLocalAmounts] = useState<Record<string, string>>({});
@@ -897,6 +897,11 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
     setLocalAmounts(prev => { const next = { ...prev }; delete next[catId]; return next; });
   };
 
+  // 2.4.0 (נושא 2, Fix 2): סימון "תקציב צבוע" בטיוטה — נשמר ל-localStorage ושורד רענון.
+  const toggleCatFlowThrough = (catId: string, src: string) => {
+    setAddedCats(prev => ({ ...prev, [src]: (prev[src] ?? []).map(c => c.id === catId ? { ...c, flowThrough: !c.flowThrough } : c) }));
+  };
+
   // Commit all draft categories to DB — called by "סיים הגדרה" (and "דלג" if drafts exist)
   const [committingCats, setCommittingCats] = useState(false);
   const commitDraftCats = async (): Promise<boolean> => {
@@ -916,7 +921,7 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
           const rawVal = localAmounts[cat.id];
           const n = rawVal !== undefined ? Number(rawVal) : cat.amount;
           const amount = !isNaN(n) && n >= 0 ? n : cat.amount;
-          await addCategory.mutateAsync({ name: cat.name, source: src, plannedAmount: amount, targetYearId: yearId });
+          await addCategory.mutateAsync({ name: cat.name, source: src, plannedAmount: amount, targetYearId: yearId, isFlowThrough: cat.flowThrough });
         }
       }
       if (draftKey) localStorage.removeItem(draftKey);
@@ -2063,9 +2068,21 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                                 background: c.light, border: `1px solid ${c.color}30`,
                                 borderRadius: "9px", padding: "7px 12px",
                               }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke={c.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                   <span style={{ fontSize: "13px", color: c.color, fontWeight: "500" }}>{cat.name}</span>
+                                  <button type="button" onClick={() => toggleCatFlowThrough(cat.id, effectiveCatSrc)}
+                                    title="תקציב צבוע — כסף שנכנס ויוצא דרך בית הספר (הכנסה והוצאה תואמות)"
+                                    style={{
+                                      display: "inline-flex", alignItems: "center", gap: "3px",
+                                      fontSize: "10.5px", fontWeight: 700, cursor: "pointer",
+                                      fontFamily: "Rubik, sans-serif", borderRadius: "20px", padding: "1px 8px",
+                                      border: `1px solid ${cat.flowThrough ? "#CFC3EC" : "#E0DAD2"}`,
+                                      background: cat.flowThrough ? "#EEEAF7" : "transparent",
+                                      color: cat.flowThrough ? "#5B4B8A" : "#AAA099",
+                                    }}>
+                                    {cat.flowThrough ? "✓ צבוע ⇄" : "סמן צבוע"}
+                                  </button>
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                   {(() => {
