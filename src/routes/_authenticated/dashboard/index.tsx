@@ -9,7 +9,7 @@ import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateSchoolYear } from "@/hooks/use-school-years";
 import { useAddGrade, useDeleteGrade, useGrades } from "@/hooks/use-grades";
-import { useAddBudgetCategory, useDeleteBudgetCategory, useUpdatePlannedAmount, type BudgetSource } from "@/hooks/use-budget-plan";
+import { useAddBudgetCategory, useDeleteBudgetCategory, useUpdatePlannedAmount, useBudgetPlan, type BudgetSource } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, useAddBudgetSource, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { syncHorimBudgetCategory, useParentSections } from "@/hooks/use-horim";
 import { EditPlansModal } from "@/components/edit-plans-modal";
@@ -783,6 +783,9 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   const [catSrc, setCatSrc] = useState<string>("");
   // Effective source: use selected if valid, else first org source
   const effectiveCatSrc = catSrc && orgSources.some(s => s.slug === catSrc) ? catSrc : (orgSources[0]?.slug ?? "gefen");
+  // 2.4.0 (תצוגה בלבד): הקטגוריות הקיימות של המקור הנבחר בשנה הפעילה — לבלוק
+  // "כבר מוגדרים אצלך". קריאה-בלבד; אינו נוגע בטיוטה או במסלול השמירה.
+  const { data: existingSourcePlan } = useBudgetPlan(effectiveCatSrc, yearId || undefined);
   const [catCustom, setCatCustom] = useState("");
   type AddedCat = { id: string; name: string; amount: number; flowThrough?: boolean };
   const [addedCats, setAddedCats] = useState<Record<string, AddedCat[]>>({});
@@ -2070,6 +2073,38 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
                           )}
                         </div>
                       )}
+                    </div>
+                  );
+                })()}
+
+                {/* 2.4.0 (תצוגה בלבד): "כבר מוגדרים אצלך" — קטגוריות קיימות של המקור */}
+                {(() => {
+                  const existing = existingSourcePlan?.categories ?? [];
+                  if (existing.length === 0) return null;
+                  const activeSrc = orgSources.find(s => s.slug === effectiveCatSrc) ?? orgSources[0];
+                  const c = activeSrc ? wizardStyle(activeSrc) : { color: "#6B6560", light: "#F5F5F2" };
+                  const nf = (n: number) => new Intl.NumberFormat("he-IL").format(Math.round(n));
+                  const totalPlanned = existing.reduce((sum, e) => sum + e.planned_amount, 0);
+                  return (
+                    <div style={{ marginBottom: "16px", border: `1px solid ${c.color}30`, background: c.light, borderRadius: "12px", padding: "12px 14px" }}>
+                      <div style={{ fontSize: "12.5px", fontWeight: "600", color: c.color, marginBottom: "9px" }}>כבר מוגדרים אצלך</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {existing.map(e => (
+                          <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", fontSize: "13px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                              <span style={{ color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</span>
+                              {e.is_flow_through && (
+                                <span title="תקציב צבוע — הכנסה והוצאה עוברות דרך בית הספר" style={{ flexShrink: 0, padding: "1px 7px", borderRadius: "99px", fontSize: "10px", fontWeight: "700", background: "#EEEAF7", color: "#5B4B8A", border: "1px solid #CFC3EC" }}>צבוע ⇄</span>
+                              )}
+                            </div>
+                            <span className="num" style={{ color: "#6B6560", flexShrink: 0 }}>{e.planned_amount > 0 ? `${nf(e.planned_amount)} ₪` : "—"}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginTop: "10px", paddingTop: "9px", borderTop: `1px solid ${c.color}22` }}>
+                        <span style={{ fontSize: "11.5px", color: "#6B6560" }}>{existing.length} סעיפים · סה"כ {nf(totalPlanned)} ₪</span>
+                        <Link to="/budget" style={{ fontSize: "11.5px", color: c.color, fontFamily: "Rubik, sans-serif", textDecoration: "underline" }}>לעריכה מלאה — מצב תקציבי</Link>
+                      </div>
                     </div>
                   );
                 })()}
