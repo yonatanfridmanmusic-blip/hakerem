@@ -9,7 +9,7 @@ import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateSchoolYear } from "@/hooks/use-school-years";
 import { useAddGrade, useDeleteGrade, useGrades } from "@/hooks/use-grades";
-import { useAddBudgetCategory, useDeleteBudgetCategory, useUpdatePlannedAmount, useBudgetPlan, type BudgetSource } from "@/hooks/use-budget-plan";
+import { useAddBudgetCategory, useDeleteBudgetCategory, useUpdatePlannedAmount, useBudgetPlan, useCreateFlowThroughPair, type BudgetSource } from "@/hooks/use-budget-plan";
 import { useOrgBudgetSources, useAddBudgetSource, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { syncHorimBudgetCategory, useParentSections } from "@/hooks/use-horim";
 import { EditPlansModal } from "@/components/edit-plans-modal";
@@ -795,6 +795,7 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   // Draft-only until "סיים הגדרה" commits to source_budget_plans. horim is excluded (derived target).
   const [plannedIncome, setPlannedIncome] = useState<Record<string, string>>({});
   const addCategory = useAddBudgetCategory();
+  const createPair = useCreateFlowThroughPair(); // 2.4.0: זוג צבוע בפועל מ"סיים הגדרה"
   const deleteCategory = useDeleteBudgetCategory();
   const updatePlannedAmount = useUpdatePlannedAmount();
 
@@ -921,21 +922,54 @@ function SetupWizard({ onComplete, mode = "first", existingSchoolYear }: {
   const commitDraftCats = async (): Promise<boolean> => {
     setCommittingCats(true);
     try {
-      // Fetch existing category names for this year to avoid duplicates on re-run
+      // קטגוריות קיימות (עם id) — למניעת כפילות ולזיהוי סעיף קיים ב-resume
       const { data: existingCats } = await supabase
         .from("budget_categories")
-        .select("name, source")
+        .select("id, name, source")
         .eq("school_year_id", yearId);
-      const existingKeys = new Set((existingCats ?? []).map(c => `${c.source}::${c.name}`));
+      const existingIdByKey = new Map((existingCats ?? []).map(c => [`${c.source}::${c.name}`, c.id as string]));
+
+      // 2.4.0: אידמפוטנטיות זוגות צבועים — קטגוריות שכבר יש להן הוצאה מקושרת
+      // (שאילתה אחת, לא N+1). הרצה חוזרת של "סיים הגדרה" לא תכפיל זוגות.
+      const { data: pairedExp } = await supabase
+        .from("expenses")
+        .select("budget_category_id")
+        .eq("school_year_id", yearId)
+        .not("linked_income_id", "is", null);
+      const pairedCatIds = new Set((pairedExp ?? []).map(e => e.budget_category_id).filter(Boolean) as string[]);
+
+      const todayStr = new Date().toISOString().split("T")[0];
 
       for (const [src, cats] of Object.entries(addedCats)) {
         for (const cat of cats) {
-          if (existingKeys.has(`${src}::${cat.name}`)) continue;
+          const key = `${src}::${cat.name}`;
           // Latest typed value wins over last-saved value
           const rawVal = localAmounts[cat.id];
           const n = rawVal !== undefined ? Number(rawVal) : cat.amount;
           const amount = !isNaN(n) && n >= 0 ? n : cat.amount;
-          await addCategory.mutateAsync({ name: cat.name, source: src, plannedAmount: amount, targetYearId: yearId, isFlowThrough: cat.flowThrough });
+
+          // קטגוריה קיימת (resume) — לא יוצרים מחדש; אחרת יוצרים ומקבלים id
+          let categoryId = existingIdByKey.get(key) ?? null;
+          if (!categoryId) {
+            const created = await addCategory.mutateAsync({ name: cat.name, source: src, plannedAmount: amount, targetYearId: yearId, isFlowThrough: cat.flowThrough });
+            categoryId = (created as { id: string } | undefined)?.id ?? null;
+          }
+
+          // 2.4.0 (החלטת מוצר): סעיף צבוע עם סכום>0 → זוג בפועל (הכנסה+הוצאה)
+          // דרך הפונקציה האטומית הקיימת. אידמפוטנטי: מדלגים אם כבר יש זוג לסעיף.
+          if (cat.flowThrough && amount > 0 && categoryId && !pairedCatIds.has(categoryId)) {
+            await createPair.mutateAsync({
+              source: src,
+              amount,
+              date: todayStr,
+              bankAccount: "school",
+              budgetCategoryId: categoryId,
+              supplier: null,
+              description: "תקציב צבוע - נרשם בהקמה",
+              targetYearId: yearId,
+            });
+            pairedCatIds.add(categoryId);
+          }
         }
       }
       if (draftKey) localStorage.removeItem(draftKey);
