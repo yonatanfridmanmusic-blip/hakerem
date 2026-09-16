@@ -708,6 +708,7 @@ export type Database = {
           reference_number: string | null
           school_year_id: string
           source: string
+          split_group_id: string | null
           updated_at: string
         }
         Insert: {
@@ -725,6 +726,7 @@ export type Database = {
           reference_number?: string | null
           school_year_id: string
           source: string
+          split_group_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -742,6 +744,7 @@ export type Database = {
           reference_number?: string | null
           school_year_id?: string
           source?: string
+          split_group_id?: string | null
           updated_at?: string
         }
         Relationships: [

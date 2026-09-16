@@ -20,6 +20,7 @@ export interface Income {
   budget_category_id: string | null;
   budget_categories?: { name: string } | null;
   linkedExpense?: boolean; // 2.4.0 נושא 2: ההכנסה היא חלק מזוג צבוע (יש הוצאה עם linked_income_id=זה)
+  split_group_id: string | null; // 2.6.0 (P3): שורה מפעימה מפוצלת (אותו ערך = אותה פעימה); NULL = הכנסה רגילה
 }
 
 export interface NewIncome {
@@ -33,6 +34,7 @@ export interface NewIncome {
   reference_number?: string | null;
   budget_category_id?: string | null;
   notes?: string | null;
+  split_group_id?: string | null;
 }
 
 
@@ -45,7 +47,7 @@ export function useIncome(sourceFilter?: BudgetSource | "all") {
 
       let query = supabase
         .from("income")
-        .select("id, income_date, amount, source, bank_account, payer, description, payment_method, reference_number, notes, budget_category_id, budget_categories(name)")
+        .select("id, income_date, amount, source, bank_account, payer, description, payment_method, reference_number, notes, budget_category_id, split_group_id, budget_categories(name)")
         .eq("school_year_id", yearId)
         .order("income_date", { ascending: false });
 
@@ -107,6 +109,48 @@ export function useAddIncome() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["income"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+// 2.6.0 (P3): פיצול פעימה — יצירת N שורות הכנסה עם split_group_id משותף, ב-insert אחד.
+export function useAddIncomeSplit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ split_group_id, base, legs }: {
+      split_group_id: string;
+      base: Omit<NewIncome, "amount" | "budget_category_id" | "split_group_id">;
+      legs: { budget_category_id: string; amount: number }[];
+    }) => {
+      const yearId = await getActiveYearId();
+      if (!yearId) throw new Error("אין שנת לימודים פעילה");
+      const { data: { user } } = await supabase.auth.getUser();
+      const rows = legs.map((l) => ({
+        ...base, amount: l.amount, budget_category_id: l.budget_category_id,
+        split_group_id, school_year_id: yearId, created_by: user?.id,
+      }));
+      const { error } = await supabase.from("income").insert(rows);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["income"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+// 2.6.0 (P3): מחיקת פעימה מפוצלת כיחידה — כל השורות עם אותו split_group_id.
+export function useDeleteIncomeGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (splitGroupId: string) => {
+      const { error } = await supabase.from("income").delete().eq("split_group_id", splitGroupId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["income"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
     },
   });
 }
