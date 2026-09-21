@@ -5,7 +5,7 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { Plus, X, Check, ChevronDown, ChevronUp, Users, Settings2, Pencil, Trash2, FileUp } from "lucide-react";
 import { KesafimImportModal, normalizeReportName } from "@/components/kesafim-import";
 import { useCanWrite, useOrganization } from "@/hooks/use-organization";
-import { useExpenses } from "@/hooks/use-expenses";
+import { useExpenses, type Expense } from "@/hooks/use-expenses";
 import { supabase } from "@/integrations/supabase/client";
 import { getActiveYearId } from "@/lib/active-year";
 import { DateInput } from "@/components/ui/date-input";
@@ -1120,7 +1120,7 @@ function RefundsSummary({
 
 function GradeRow({
   grade, sections, gsaMap, collectionsMap, onAddCollection, multiplier,
-  onEditCollection, onDeleteCollection,
+  onEditCollection, onDeleteCollection, horimExpenses,
 }: {
   grade: Grade;
   sections: ParentSection[];
@@ -1130,6 +1130,7 @@ function GradeRow({
   multiplier: number;
   onEditCollection: (c: ParentCollection) => void;
   onDeleteCollection: (id: string) => void;
+  horimExpenses: Expense[];
 }) {
   const [expanded, setExpanded] = useState(false);
   const { data: allCollections } = useParentCollections();
@@ -1155,13 +1156,29 @@ function GradeRow({
   // Detailed collections for this grade (for expanded view)
   const gradeCollections = (allCollections ?? []).filter((c) => c.grade_id === grade.id);
 
+  // 2.7.0 refactor: parent expenses assigned to this grade → spend & real-cash balance
+  const gradeExpenses = horimExpenses.filter((e) => e.grade_id === grade.id);
+  const totalSpent = gradeExpenses.reduce((sm, e) => sm + e.amount, 0);
+  const cashBalance = totalCollected - totalSpent; // "נשאר בקופה" = נגבה − הוצא (כסף אמיתי)
+  // Map each expense to a section by its category name (horim categories are 1:1 with sections);
+  // an expense whose category is not a section falls into "אחר".
+  const spentBySection = new Map<string, number>();
+  let otherSpent = 0;
+  gradeExpenses.forEach((e) => {
+    const catName = e.budget_categories?.name ?? null;
+    const sec = catName ? sections.find((x) => normalizeReportName(x.name) === normalizeReportName(catName)) : undefined;
+    if (sec) spentBySection.set(sec.id, (spentBySection.get(sec.id) ?? 0) + e.amount);
+    else otherSpent += e.amount;
+  });
+
   return (
     <>
       <div
+        onClick={() => setExpanded((x) => !x)}
         style={{
           display: "grid",
-          gridTemplateColumns: `180px repeat(${sections.length}, minmax(110px, 1fr)) 120px 120px 80px 44px`,
-          padding: "12px 20px", gap: "8px", alignItems: "center",
+          gridTemplateColumns: "minmax(150px,1.5fr) 100px 100px 100px 120px minmax(110px,1fr) 40px",
+          padding: "13px 20px", gap: "8px", alignItems: "center",
           borderBottom: "1px solid #F3EEE8",
           transition: "background 0.1s",
           cursor: "pointer",
@@ -1177,52 +1194,42 @@ function GradeRow({
           </span>
         </div>
 
-        {/* Section cells */}
-        {sections.map((s) => {
-          const key = `${grade.id}:${s.id}`;
-          const gsa = gsaMap.get(key);
-          return (
-            <div key={s.id} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-              <AmountPerStudentCell
-                gradeId={grade.id}
-                sectionId={s.id}
-                sectionName={s.name}
-                current={gsa?.amount_per_student ?? 0}
-                existingId={gsa?.existing_id}
-              />
-            </div>
-          );
-        })}
-
-        {/* Target */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+        {/* יעד */}
+        <div>
           {totalTarget > 0 ? (
-            <>
-              <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A" }}>{fmt(totalTarget)}</span>
-              <span style={{ fontSize: "10px", color: "#AAA099" }}>יעד ({Math.round(multiplier * 100)}%)</span>
-            </>
+            <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A" }}>{fmt(totalTarget)}</span>
           ) : (
             <span style={{ fontSize: "12px", color: "#C0BAB4", fontStyle: "italic" }}>לא הוגדר</span>
           )}
         </div>
 
-        {/* Collected + bar */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#8B2F6E" }}>{fmt(totalCollected)}</span>
-          <Bar pct={pct} />
-        </div>
+        {/* נגבה */}
+        <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#8B2F6E" }}>{fmt(totalCollected)}</span>
 
-        {/* % */}
-        <span className="num" style={{
-          fontSize: "13px", fontWeight: "600",
-          color: totalTarget === 0 ? "#AAA099" : pct >= 85 ? "#2D6644" : pct >= 60 ? "#B5472A" : "#8B2F6E",
-        }}>
-          {totalTarget === 0 ? "—" : `${pct}%`}
+        {/* הוצא */}
+        <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: totalSpent > 0 ? "#B5472A" : "#C0BAB4" }}>
+          {totalSpent > 0 ? fmt(totalSpent) : "—"}
         </span>
+
+        {/* נשאר בקופה = נגבה − הוצא */}
+        <span className="num" style={{ fontSize: "13px", fontWeight: "600", color: cashBalance < 0 ? "#B5472A" : "#2D6644" }}>
+          {fmt(cashBalance)}
+        </span>
+
+        {/* התקדמות (נגבה מתוך יעד) */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div style={{ flex: 1, minWidth: 0 }}><Bar pct={pct} /></div>
+          <span className="num" style={{
+            fontSize: "12px", fontWeight: "600", flexShrink: 0,
+            color: totalTarget === 0 ? "#AAA099" : pct >= 85 ? "#2D6644" : pct >= 60 ? "#B5472A" : "#8B2F6E",
+          }}>
+            {totalTarget === 0 ? "—" : `${pct}%`}
+          </span>
+        </div>
 
         {/* Expand toggle */}
         <button
-          onClick={() => setExpanded((x) => !x)}
+          onClick={(e) => { e.stopPropagation(); setExpanded((x) => !x); }}
           style={{ background: "none", border: "none", cursor: "pointer", color: "#AAA099", padding: "4px", display: "flex", alignItems: "center", justifyContent: "center" }}
         >
           {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -1235,61 +1242,68 @@ function GradeRow({
           <div style={{ paddingTop: "14px", display: "flex", flexDirection: "column", gap: "16px" }}>
 
             {/* Per-section table */}
-            {sections.some((s) => {
-              const gsa = gsaMap.get(`${grade.id}:${s.id}`);
-              return gsa && gsa.amount_per_student > 0;
-            }) && (
-              <div>
-                <div style={{ fontSize: "11px", fontWeight: "600", color: "#8B2F6E", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "8px" }}>
-                  פירוט לפי סעיף — {grade.name}
-                </div>
-                <div style={{ border: "1px solid #E8DEED", borderRadius: "10px", overflow: "hidden" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
-                    <thead>
-                      <tr style={{ background: "#F4EBF2" }}>
-                        <th style={{ padding: "7px 12px", textAlign: "right", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>סעיף</th>
-                        <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>יעד ({Math.round(multiplier * 100)}%)</th>
-                        <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>נגבה</th>
-                        <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>נותר</th>
-                        <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>%</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sections.map((s) => {
-                        const key = `${grade.id}:${s.id}`;
-                        const gsa = gsaMap.get(key);
-                        if (!gsa || gsa.amount_per_student === 0) return null;
-                        const planned = gsa.amount_per_student * grade.student_count * multiplier;
-                        const collected = collectionsMap.get(key) ?? 0;
-                        const remaining = planned - collected;
-                        const pct = planned > 0 ? Math.round((collected / planned) * 100) : 0;
-                        const done = remaining <= 0;
-                        return (
-                          <tr key={s.id} style={{ borderTop: "1px solid #EAE5DE" }}>
-                            <td style={{ padding: "8px 12px", fontWeight: "500", color: "#1A1A1A" }}>{s.name}</td>
-                            <td style={{ padding: "8px 12px", textAlign: "left", color: "#555", fontVariantNumeric: "tabular-nums" }}>{fmt(planned)}</td>
-                            <td style={{ padding: "8px 12px", textAlign: "left", color: "#2D6644", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{fmt(collected)}</td>
-                            <td style={{ padding: "8px 12px", textAlign: "left", fontWeight: "600", color: done ? "#2D6644" : "#B5472A", fontVariantNumeric: "tabular-nums" }}>
-                              {done ? <span style={{ background: "#EDFBF3", color: "#2D6644", borderRadius: "5px", padding: "1px 7px", fontSize: "11px" }}>✓</span> : fmt(remaining)}
-                            </td>
-                            <td style={{ padding: "8px 12px", textAlign: "left", fontWeight: "600", color: pct >= 85 ? "#2D6644" : pct >= 60 ? "#B5472A" : "#8B2F6E" }}>{pct}%</td>
-                          </tr>
-                        );
-                      })}
-                      {unassignedCollected > 0 && (
-                        <tr style={{ borderTop: "1px solid #EAE5DE", background: "#FDFAF3" }}>
-                          <td style={{ padding: "8px 12px", fontWeight: "500", color: "#92400E" }}>לא משויך לסעיף</td>
-                          <td style={{ padding: "8px 12px", textAlign: "left", color: "#C0BAB4" }}>—</td>
-                          <td style={{ padding: "8px 12px", textAlign: "left", color: "#92400E", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{fmt(unassignedCollected)}</td>
-                          <td style={{ padding: "8px 12px", textAlign: "left", color: "#C0BAB4" }}>—</td>
-                          <td style={{ padding: "8px 12px", textAlign: "left", color: "#C0BAB4" }}>—</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+            {/* Per-section table — full picture for this grade */}
+            <div>
+              <div style={{ fontSize: "11px", fontWeight: "600", color: "#8B2F6E", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "8px" }}>
+                פירוט לפי סעיף — {grade.name}
               </div>
-            )}
+              <div style={{ border: "1px solid #E8DEED", borderRadius: "10px", overflow: "hidden", overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px", minWidth: "640px" }}>
+                  <thead>
+                    <tr style={{ background: "#F4EBF2" }}>
+                      <th style={{ padding: "7px 12px", textAlign: "right", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>סעיף</th>
+                      <th style={{ padding: "7px 12px", textAlign: "right", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>לתלמיד</th>
+                      <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>יעד ({Math.round(multiplier * 100)}%)</th>
+                      <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>נגבה</th>
+                      <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>הוצא</th>
+                      <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>נשאר</th>
+                      <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: "600", color: "#6B2356", fontSize: "11px" }}>%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sections.map((s) => {
+                      const key = `${grade.id}:${s.id}`;
+                      const gsa = gsaMap.get(key);
+                      const planned = (gsa?.amount_per_student ?? 0) * grade.student_count * multiplier;
+                      const collected = collectionsMap.get(key) ?? 0;
+                      const spent = spentBySection.get(s.id) ?? 0;
+                      const secBalance = collected - spent;
+                      const secPct = planned > 0 ? Math.round((collected / planned) * 100) : 0;
+                      return (
+                        <tr key={s.id} style={{ borderTop: "1px solid #EAE5DE" }}>
+                          <td style={{ padding: "8px 12px", fontWeight: "500", color: "#1A1A1A" }}>{s.name}</td>
+                          <td style={{ padding: "6px 12px" }}>
+                            <AmountPerStudentCell
+                              gradeId={grade.id}
+                              sectionId={s.id}
+                              sectionName={s.name}
+                              current={gsa?.amount_per_student ?? 0}
+                              existingId={gsa?.existing_id}
+                            />
+                          </td>
+                          <td className="num" style={{ padding: "8px 12px", textAlign: "left", color: "#555", fontVariantNumeric: "tabular-nums" }}>{planned > 0 ? fmt(planned) : "—"}</td>
+                          <td className="num" style={{ padding: "8px 12px", textAlign: "left", color: collected > 0 ? "#2D6644" : "#C0BAB4", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{fmt(collected)}</td>
+                          <td className="num" style={{ padding: "8px 12px", textAlign: "left", color: spent > 0 ? "#B5472A" : "#C0BAB4", fontVariantNumeric: "tabular-nums" }}>{spent > 0 ? fmt(spent) : "—"}</td>
+                          <td className="num" style={{ padding: "8px 12px", textAlign: "left", fontWeight: "600", color: secBalance < 0 ? "#B5472A" : "#2D6644", fontVariantNumeric: "tabular-nums" }}>{(collected > 0 || spent > 0) ? fmt(secBalance) : "—"}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "left", fontWeight: "600", color: planned === 0 ? "#C0BAB4" : secPct >= 85 ? "#2D6644" : secPct >= 60 ? "#B5472A" : "#8B2F6E" }}>{planned === 0 ? "—" : `${secPct}%`}</td>
+                        </tr>
+                      );
+                    })}
+                    {(otherSpent > 0 || unassignedCollected > 0) && (
+                      <tr style={{ borderTop: "1px solid #EAE5DE", background: "#FDFAF3" }}>
+                        <td style={{ padding: "8px 12px", fontWeight: "500", color: "#92400E" }}>אחר / לא משויך</td>
+                        <td style={{ padding: "8px 12px", color: "#C0BAB4" }}>—</td>
+                        <td style={{ padding: "8px 12px", textAlign: "left", color: "#C0BAB4" }}>—</td>
+                        <td className="num" style={{ padding: "8px 12px", textAlign: "left", color: unassignedCollected > 0 ? "#92400E" : "#C0BAB4", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{unassignedCollected > 0 ? fmt(unassignedCollected) : "—"}</td>
+                        <td className="num" style={{ padding: "8px 12px", textAlign: "left", color: otherSpent > 0 ? "#B5472A" : "#C0BAB4", fontVariantNumeric: "tabular-nums" }}>{otherSpent > 0 ? fmt(otherSpent) : "—"}</td>
+                        <td className="num" style={{ padding: "8px 12px", textAlign: "left", fontWeight: "600", color: (unassignedCollected - otherSpent) < 0 ? "#B5472A" : "#2D6644", fontVariantNumeric: "tabular-nums" }}>{fmt(unassignedCollected - otherSpent)}</td>
+                        <td style={{ padding: "8px 12px", textAlign: "left", color: "#C0BAB4" }}>—</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
@@ -1392,7 +1406,7 @@ export default function HorimPage() {
   const { data: gsaList = [] } = useGradeSectionAmounts();
   const { data: collections = [] } = useParentCollections();
   const { data: refunds = [] } = useParentRefunds();
-  const { data: horimExpenses = [] } = useExpenses("horim"); // 2.7.0: הוצאות הורים למאזן פר שכבה
+  const { data: horimExpenses = [] } = useExpenses("horim"); // 2.7.0: הוצאות הורים — הוצא/נשאר בקופה בטבלה ובהירו
 
   const isLoading = gradesLoading || sectionsLoading;
 
@@ -1436,6 +1450,11 @@ export default function HorimPage() {
   const animCollected = useCountUp(grandCollected);
   const animTarget    = useCountUp(grandTarget);
   const animPct       = useAnimatedPct(hasTarget ? Math.min(grandPct, 100) : 0);
+  // 2.7.0 refactor: all-parents spend + real-cash balance for the hero
+  const grandSpent = horimExpenses.reduce((sm, e) => sm + e.amount, 0);
+  const grandCash  = grandCollected - grandSpent;
+  const animSpent  = useCountUp(grandSpent);
+  const animCash   = useCountUp(grandCash);
 
   // Auto-sync horim amounts → budget_categories once per mount
   // (ensures budget planning reflects current planned amounts even for pre-existing data)
@@ -1722,6 +1741,19 @@ export default function HorimPage() {
                 </span>
               </div>
             )}
+            {grandSpent > 0 && (
+              <div style={{ display: "flex", gap: "16px", marginTop: "16px", flexWrap: "wrap", position: "relative" }}>
+                <div>
+                  <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.6)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "3px" }}>הוצא</div>
+                  <div className="num" style={{ fontSize: "19px", fontWeight: "400", color: "#F0C0E0" }}>{fmt(animSpent)}</div>
+                </div>
+                <div style={{ width: "1px", alignSelf: "stretch", background: "rgba(220,150,200,0.22)" }} />
+                <div>
+                  <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.6)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "3px" }}>נשאר בקופה</div>
+                  <div className="num" style={{ fontSize: "19px", fontWeight: "400", color: grandCash < 0 ? "#FFB0A8" : "#fff" }}>{fmt(animCash)}</div>
+                </div>
+              </div>
+            )}
           </div>
           <div style={{ textAlign: isMobile ? "right" : "left", position: "relative", width: isMobile ? "100%" : "auto" }}>
             {hasTarget ? (
@@ -1757,24 +1789,21 @@ export default function HorimPage() {
           <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
             {/* Horizontal scroll wrapper */}
             <div style={{ overflowX: "auto" }}>
-              <div style={{ minWidth: `${180 + sections.length * 120 + 120 + 120 + 80 + 44}px` }}>
+              <div style={{ minWidth: "700px" }}>
                 {/* Table header */}
                 <div style={{
                   display: "grid",
-                  gridTemplateColumns: `180px repeat(${sections.length}, minmax(110px, 1fr)) 120px 120px 80px 44px`,
+                  gridTemplateColumns: "minmax(150px,1.5fr) 100px 100px 100px 120px minmax(110px,1fr) 40px",
                   padding: "10px 20px", borderBottom: "1px solid #EAE5DE",
                   fontSize: "11px", fontWeight: "600", color: "#AAA099",
                   letterSpacing: "0.04em", gap: "8px", background: "#FAFAF8",
                 }}>
                   <span>שכבה</span>
-                  {sections.map((s) => (
-                    <span key={s.id} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.name}>
-                      {s.name}
-                    </span>
-                  ))}
                   <span>יעד ({basis}%)</span>
                   <span>נגבה</span>
-                  <span>%</span>
+                  <span>הוצא</span>
+                  <span>נשאר בקופה</span>
+                  <span>התקדמות</span>
                   <span />
                 </div>
 
@@ -1789,6 +1818,7 @@ export default function HorimPage() {
                       sections={sections}
                       gsaMap={gsaMap}
                       collectionsMap={collectionsMap}
+                      horimExpenses={horimExpenses}
                       onAddCollection={openAddCollection}
                       multiplier={multiplier}
                       onEditCollection={setEditingCollection}
@@ -1801,164 +1831,20 @@ export default function HorimPage() {
           </div>
         )}
 
-        {/* Per-section, per-grade breakdown */}
-        {!isLoading && sections.length > 0 && grades.length > 0 && (() => {
-          const sectionsWithData = sections.filter((sec) =>
-            grades.some((g) => (gsaMap.get(`${g.id}:${sec.id}`)?.amount_per_student ?? 0) > 0)
-          );
-          if (sectionsWithData.length === 0) return null;
+        {/* 2.7.0 refactor: parent expenses not yet tied to a grade — a call to action, not a bucket */}
+        {!isLoading && (() => {
+          const unassignedSpend = horimExpenses.filter((e) => !e.grade_id).reduce((sm, e) => sm + e.amount, 0);
+          if (unassignedSpend <= 0) return null;
           return (
-            <div>
-              <div style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "12px" }}>
-                פירוט גבייה לפי שכבה וסעיף
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {sectionsWithData.map((sec) => {
-                  const gradeRows = grades.map((g) => {
-                    const gsa = gsaMap.get(`${g.id}:${sec.id}`);
-                    if (!gsa || gsa.amount_per_student === 0) return null;
-                    const target100 = gsa.amount_per_student * g.student_count;
-                    const target85  = target100 * (yearPct / 100);
-                    const collected = collectionsMap.get(`${g.id}:${sec.id}`) ?? 0;
-                    const remaining = Math.max(0, target85 - collected);
-                    const pct       = target85 > 0 ? Math.round((collected / target85) * 100) : 0;
-                    return { grade: g, target100, target85, collected, remaining, pct };
-                  }).filter((r): r is NonNullable<typeof r> => r !== null);
-
-                  const ttl100 = gradeRows.reduce((s, r) => s + r.target100, 0);
-                  const ttl85  = gradeRows.reduce((s, r) => s + r.target85, 0);
-                  const ttlColl = gradeRows.reduce((s, r) => s + r.collected, 0);
-                  const ttlRem  = Math.max(0, ttl85 - ttlColl);
-                  const ttlPct  = ttl85 > 0 ? Math.round((ttlColl / ttl85) * 100) : 0;
-
-                  return (
-                    <div key={sec.id} style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden" }}>
-                      {/* Section header */}
-                      <div style={{
-                        padding: "12px 16px",
-                        background: "linear-gradient(135deg, #FAF0F7 0%, #F5E8F2 100%)",
-                        borderBottom: "1px solid #EAE5DE",
-                        display: "flex", justifyContent: "space-between", alignItems: "center",
-                      }}>
-                        <div style={{ fontSize: "13px", fontWeight: "600", color: "#8B2F6E" }}>{sec.name}</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <span className="num" style={{ fontSize: "12px", color: "#888079" }}>
-                            נגבה {fmt(ttlColl)} מתוך {fmt(ttl85)} ({yearPct}%)
-                          </span>
-                          <span style={{
-                            fontSize: "12px", fontWeight: "700",
-                            color: ttlPct >= 85 ? "#2D6644" : "#8B2F6E",
-                            padding: "2px 8px", borderRadius: "6px",
-                            background: ttlPct >= 85 ? "rgba(45,102,68,0.1)" : "rgba(139,47,110,0.1)",
-                          }}>{ttlPct}%</span>
-                        </div>
-                      </div>
-                      {/* Grade rows table */}
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
-                          <thead>
-                            <tr style={{ background: "#FAFAF9" }}>
-                              {["שכבה", "תלמידים", "יעד 100%", `יעד ${yearPct}%`, "נגבה", "נותר", "התקדמות"].map((h) => (
-                                <th key={h} style={{ padding: "8px 12px", fontWeight: "600", color: "#6B6560", fontSize: "11px", borderBottom: "1px solid #F0EBE4", whiteSpace: "nowrap", textAlign: h === "שכבה" ? "right" : "left" }}>{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {gradeRows.map((r, idx) => (
-                              <tr key={r.grade.id} style={{ background: idx % 2 === 0 ? "#fff" : "#FAFAF9" }}>
-                                <td style={{ padding: "9px 12px", fontWeight: "500", color: "#1A1A1A", textAlign: "right" }}>{r.grade.name}</td>
-                                <td style={{ padding: "9px 12px", color: "#888079", textAlign: "left" }}>{r.grade.student_count}</td>
-                                <td className="num" style={{ padding: "9px 12px", color: "#888079", textAlign: "left" }}>{fmt(r.target100)}</td>
-                                <td className="num" style={{ padding: "9px 12px", color: "#8B2F6E", fontWeight: "500", textAlign: "left" }}>{fmt(r.target85)}</td>
-                                <td className="num" style={{ padding: "9px 12px", color: r.collected > 0 ? "#2D6644" : "#C0BAB4", fontWeight: r.collected > 0 ? 600 : 400, textAlign: "left" }}>{fmt(r.collected)}</td>
-                                <td className="num" style={{ padding: "9px 12px", color: r.remaining <= 0 ? "#2D6644" : "#B5472A", fontWeight: "500", textAlign: "left" }}>
-                                  {r.remaining <= 0 ? "✓ שולם" : fmt(r.remaining)}
-                                </td>
-                                <td style={{ padding: "9px 12px" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                    <div style={{ width: "52px", height: "4px", background: "#F0EBE4", borderRadius: "2px", overflow: "hidden" }}>
-                                      <div style={{ height: "100%", width: `${Math.min(r.pct, 100)}%`, background: r.pct >= 85 ? "#2D6644" : "#8B2F6E", borderRadius: "2px" }} />
-                                    </div>
-                                    <span style={{ fontSize: "11px", color: r.pct >= 85 ? "#2D6644" : "#8B2F6E", fontWeight: "600", minWidth: "30px" }}>{r.pct}%</span>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          {gradeRows.length > 1 && (
-                            <tfoot>
-                              <tr style={{ background: "linear-gradient(135deg, #F0E8EE 0%, #EBE0EA 100%)", fontWeight: "700" }}>
-                                <td style={{ padding: "9px 12px", color: "#1A1A1A", textAlign: "right" }}>סה"כ</td>
-                                <td style={{ padding: "9px 12px" }} />
-                                <td className="num" style={{ padding: "9px 12px", color: "#888079", textAlign: "left" }}>{fmt(ttl100)}</td>
-                                <td className="num" style={{ padding: "9px 12px", color: "#8B2F6E", textAlign: "left" }}>{fmt(ttl85)}</td>
-                                <td className="num" style={{ padding: "9px 12px", color: ttlColl > 0 ? "#2D6644" : "#C0BAB4", textAlign: "left" }}>{fmt(ttlColl)}</td>
-                                <td className="num" style={{ padding: "9px 12px", color: ttlRem <= 0 ? "#2D6644" : "#B5472A", textAlign: "left" }}>
-                                  {ttlRem <= 0 ? "✓ שולם" : fmt(ttlRem)}
-                                </td>
-                                <td style={{ padding: "9px 12px" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                    <div style={{ width: "52px", height: "4px", background: "rgba(139,47,110,0.2)", borderRadius: "2px", overflow: "hidden" }}>
-                                      <div style={{ height: "100%", width: `${Math.min(ttlPct, 100)}%`, background: ttlPct >= 85 ? "#2D6644" : "#8B2F6E", borderRadius: "2px" }} />
-                                    </div>
-                                    <span style={{ fontSize: "11px", color: ttlPct >= 85 ? "#2D6644" : "#8B2F6E", fontWeight: "700", minWidth: "30px" }}>{ttlPct}%</span>
-                                  </div>
-                                </td>
-                              </tr>
-                            </tfoot>
-                          )}
-                        </table>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* 2.7.0: מאזן פר שכבה — נגבה פחות הוצא (הוצאות הורים משויכות-שכבה) */}
-        {!isLoading && grades.length > 0 && (() => {
-          const rows = grades.map((g) => {
-            const collected = collections.filter((c) => c.grade_id === g.id).reduce((sm, c) => sm + c.amount, 0);
-            const spent = horimExpenses.filter((e) => e.grade_id === g.id).reduce((sm, e) => sm + e.amount, 0);
-            return { g, collected, spent, remaining: collected - spent };
-          }).filter((r) => r.collected > 0 || r.spent > 0);
-          const schoolWide = horimExpenses.filter((e) => !e.grade_id).reduce((sm, e) => sm + e.amount, 0);
-          if (rows.length === 0 && schoolWide <= 0) return null;
-          return (
-            <div>
-              <div style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "12px" }}>
-                מאזן פר שכבה — נגבה פחות הוצא
-              </div>
-              <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", background: "#FAFAF9", borderBottom: "1px solid #F0EBE4", fontSize: "11px", fontWeight: 600, color: "#6B6560" }}>
-                  <span style={{ padding: "9px 14px", textAlign: "right" }}>שכבה</span>
-                  <span style={{ padding: "9px 14px", textAlign: "left" }}>נגבה</span>
-                  <span style={{ padding: "9px 14px", textAlign: "left" }}>הוצא</span>
-                  <span style={{ padding: "9px 14px", textAlign: "left" }}>נשאר</span>
-                </div>
-                {rows.map((r, idx) => (
-                  <div key={r.g.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", background: idx % 2 === 0 ? "#fff" : "#FAFAF9", borderTop: idx === 0 ? "none" : "1px solid #F5F1EB", alignItems: "center" }}>
-                    <span style={{ padding: "9px 14px", fontSize: "12.5px", fontWeight: 500, color: "#1A1A1A", textAlign: "right" }}>{r.g.name}</span>
-                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", color: "#2D6644", textAlign: "left" }}>{fmt(r.collected)}</span>
-                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", color: "#B5472A", textAlign: "left" }}>{fmt(r.spent)}</span>
-                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", fontWeight: 600, color: r.remaining >= 0 ? "#2D6644" : "#B5472A", textAlign: "left" }}>{fmt(r.remaining)}</span>
-                  </div>
-                ))}
-                {schoolWide > 0 && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", background: "#FBF7EF", borderTop: "1px solid #F0E6D4", alignItems: "center" }}>
-                    <span style={{ padding: "9px 14px", fontSize: "12.5px", fontWeight: 500, color: "#8A6E2F", textAlign: "right" }}>כלל בית ספרי</span>
-                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", color: "#C0BAB4", textAlign: "left" }}>—</span>
-                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", color: "#B5472A", textAlign: "left" }}>{fmt(schoolWide)}</span>
-                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", color: "#C0BAB4", textAlign: "left" }}>—</span>
-                  </div>
-                )}
-              </div>
-              <div style={{ fontSize: "11px", color: "#AAA099", marginTop: "6px", lineHeight: 1.5 }}>
-                "נגבה" מגביית ההורים של השכבה · "הוצא" מהוצאות הורים המשויכות לשכבה · הוצאות ללא שכבה נספרות ב"כלל בית ספרי" ואינן מחולקות.
-              </div>
-            </div>
+            <a
+              href="/expenses?source=horim&unassignedGrade=1"
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", background: "#FBF7EF", border: "1px solid #F0E6D4", borderRadius: "10px", padding: "11px 16px", textDecoration: "none" }}
+            >
+              <span style={{ fontSize: "12.5px", color: "#8A6E2F" }}>
+                הוצאות שעוד לא שויכו לשכבה: <span className="num" style={{ fontWeight: 700 }}>{fmt(unassignedSpend)}</span>
+              </span>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "#8A6E2F", flexShrink: 0 }}>לחצו לשיוך ←</span>
+            </a>
           );
         })()}
 
@@ -1991,7 +1877,7 @@ export default function HorimPage() {
         {/* Help text */}
         {!isLoading && grades.length > 0 && (
           <p style={{ margin: 0, fontSize: "12px", color: "#7A7470", textAlign: "center" }}>
-            לחץ/י על סכום/תלמיד לעריכה · לחץ/י על ▾ לפתיחת היסטוריית גבייה לשכבה
+            לחצו על שכבה לפתיחת פירוט הסעיפים, עריכת הסכום לתלמיד והיסטוריית הגבייה
           </p>
         )}
       </div>
