@@ -88,22 +88,22 @@ const DIM = "#C9C2CC"; // one muted color for every empty "—"
 // ─── Mini progress bar ────────────────────────────────────────────────────────
 
 function Bar({ pct }: { pct: number }) {
-  const over = pct > 100;
   const [animW, setAnimW] = useState(0);
   useEffect(() => {
     setAnimW(0);
     const id = setTimeout(() => setAnimW(pct), 80);
     return () => clearTimeout(id);
   }, [pct]);
+  // Colour by state: <50% neutral · 50–99% brand plum · 100%+ green. (Fill transition lives in CSS,
+  // so prefers-reduced-motion can switch it off.)
+  const fill = pct >= 100
+    ? "linear-gradient(90deg, #4A8C62, #2D6644)"
+    : pct >= 50
+    ? "linear-gradient(90deg, #B04A90, #8B2F6E)"
+    : "linear-gradient(90deg, #CFC3CB, #B7A6B2)";
   return (
-    <div style={{ height: "4px", background: "#EAE5DE", borderRadius: "99px", overflow: "hidden" }}>
-      <div style={{
-        height: "100%", width: `${Math.min(100, animW)}%`,
-        background: over
-          ? "linear-gradient(90deg, #D46A42, #B5472A)"
-          : "linear-gradient(90deg, #B04A90, #8B2F6E)",
-        borderRadius: "99px", transition: "width 0.7s ease",
-      }} />
+    <div className="horim-bar">
+      <div className="horim-bar__fill" style={{ width: `${Math.min(100, animW)}%`, background: fill }} />
     </div>
   );
 }
@@ -1230,16 +1230,15 @@ function GradeRow({
     <>
       <div
         onClick={() => setExpanded((x) => !x)}
+        className="horim-row"
+        data-open={expanded ? "true" : "false"}
         style={{
           display: "grid",
           gridTemplateColumns: HORIM_GRID,
           padding: "12px 20px", gap: "10px", alignItems: "center",
           borderBottom: "1px solid #F3EEE8",
-          transition: "background 0.1s",
           cursor: "pointer",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFAF8")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
       >
         {/* Grade name + student count */}
         <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
@@ -1286,24 +1285,25 @@ function GradeRow({
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span className="num" style={{
             fontSize: "12px", fontWeight: "600", flexShrink: 0, minWidth: "34px",
-            color: totalTarget === 0 ? "#AAA099" : pct >= 85 ? "#2D6644" : pct >= 60 ? "#B5472A" : "#8B2F6E",
+            color: totalTarget === 0 ? "#AAA099" : pct >= 100 ? "#2D6644" : pct >= 50 ? "#8B2F6E" : "#A98FA4",
           }}>
             {totalTarget === 0 ? "—" : `${pct}%`}
           </span>
           <div style={{ flex: 1, minWidth: 0 }}><Bar pct={pct} /></div>
         </div>
 
-        {/* Expand toggle */}
+        {/* Expand toggle — chevron rotates 180° when open (CSS) */}
         <button
           onClick={(e) => { e.stopPropagation(); setExpanded((x) => !x); }}
           style={{ background: expanded ? "#F0E0ED" : "none", border: "none", cursor: "pointer", color: "#9B6A90", padding: "4px", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}
         >
-          {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          <ChevronDown className="horim-chevron" size={16} />
         </button>
       </div>
 
-      {/* Expanded: per-section breakdown + collection history */}
-      {expanded && (
+      {/* Expanded drill-down — animated open/close (respects reduced-motion) */}
+      <div className="horim-drill" data-open={expanded ? "true" : "false"}>
+        <div className="horim-drill__inner">
         <div style={{ background: "#FBF6FA", borderBottom: "1px solid #EAE5DE", boxShadow: "inset 0 3px 6px -4px rgba(107,35,86,0.25)", padding: "0 20px 18px" }}>
           <div style={{ paddingTop: "14px", display: "flex", flexDirection: "column", gap: "16px" }}>
 
@@ -1423,7 +1423,8 @@ function GradeRow({
           </div>
           </div>{/* closes gap:16px flex */}
         </div>
-      )}
+        </div>
+      </div>
     </>
   );
 }
@@ -1433,6 +1434,16 @@ function GradeRow({
 export default function HorimPage() {
   const isMobile = useIsMobile();
   const canWrite = useCanWrite();
+  // Honour prefers-reduced-motion: when set, the hero shows final numbers instead of counting up.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const on = () => setReduceMotion(mq.matches);
+    on();
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, []);
   const [showModal, setShowModal] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [showSectionsModal, setShowSectionsModal] = useState(false);
@@ -1531,15 +1542,25 @@ export default function HorimPage() {
     }
   });
 
-  // Animations for hero
-  const animCollected = useCountUp(grandCollected);
-  const animTarget    = useCountUp(grandTarget);
-  const animPct       = useAnimatedPct(hasTarget ? Math.min(grandPct, 100) : 0);
   // 2.7.0 refactor: all-parents spend + real-cash balance for the hero
   const grandSpent = horimExpenses.reduce((sm, e) => sm + e.amount, 0);
   const grandCash  = grandCollected - grandSpent;
-  const animSpent  = useCountUp(grandSpent);
-  const animCash   = useCountUp(grandCash);
+  // Hero count-up (≤800ms, ease-out). One pass when the numbers arrive — the hook re-runs only when
+  // its target changes, never on every render.
+  const animCollected = useCountUp(grandCollected, 800);
+  const animTarget    = useCountUp(grandTarget, 800);
+  const animSpent     = useCountUp(grandSpent, 800);
+  const animCash      = useCountUp(grandCash, 800);
+  const animPct       = useAnimatedPct(hasTarget ? Math.min(grandPct, 100) : 0);
+  // Reduced-motion: skip the count-up and show the final values.
+  const showCollected = reduceMotion ? grandCollected : animCollected;
+  const showTarget    = reduceMotion ? grandTarget : animTarget;
+  const showSpent     = reduceMotion ? grandSpent : animSpent;
+  const showCash      = reduceMotion ? grandCash : animCash;
+  const showPct       = reduceMotion ? (hasTarget ? Math.min(grandPct, 100) : 0) : animPct;
+  // "נשאר בקופה" is the hero's star: state colour (green positive · amber negative · grey zero),
+  // tuned to read on the dark plum hero.
+  const cashColor = grandCash > 0 ? "#8FE3B0" : grandCash < 0 ? "#F5C56B" : "#C9C2CC";
 
   // Auto-sync horim amounts → budget_categories once per mount
   // (ensures budget planning reflects current planned amounts even for pre-existing data)
@@ -1806,28 +1827,30 @@ export default function HorimPage() {
           position: "relative", overflow: "hidden",
         }}>
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse 70% 60% at 20% 10%, rgba(176,74,144,0.25) 0%, transparent 70%)" }} />
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse 55% 45% at 92% 108%, rgba(240,160,216,0.16) 0%, transparent 70%)" }} />
           <div style={{ position: "relative" }}>
             <div style={{ fontSize: "11px", color: "rgba(220,150,200,0.8)", fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px" }}>
               סה״כ גבייה — כל השכבות
             </div>
             <div className="num" style={{ fontSize: isMobile ? "36px" : "48px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
-              {fmt(animCollected)}
+              {fmt(showCollected)}
             </div>
             {hasTarget ? (
-              <div style={{ display: "flex", gap: isMobile ? "22px" : "34px", marginTop: "16px", flexWrap: "wrap", alignItems: "flex-end", position: "relative" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                  <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.65)", textTransform: "uppercase", letterSpacing: "0.05em" }}>מתוך יעד ({basis}%)</div>
-                  <div className="num" style={{ fontSize: isMobile ? "18px" : "21px", fontWeight: "400", color: "rgba(255,255,255,0.92)", lineHeight: 1 }}>{fmt(animTarget)}</div>
+              <>
+                <div style={{ marginTop: "9px", fontSize: "12px", color: "rgba(220,150,200,0.7)" }}>
+                  מתוך יעד <span className="num">{fmt(showTarget)}</span> ({basis}%)
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                  <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.65)", textTransform: "uppercase", letterSpacing: "0.05em" }}>יצא</div>
-                  <div className="num" style={{ fontSize: isMobile ? "18px" : "21px", fontWeight: "400", color: "#F0C0E0", lineHeight: 1 }}>{fmt(animSpent)}</div>
+                <div style={{ display: "flex", gap: isMobile ? "24px" : "40px", marginTop: "18px", flexWrap: "wrap", alignItems: "flex-end", position: "relative" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                    <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.6)", textTransform: "uppercase", letterSpacing: "0.06em" }}>יצא</div>
+                    <div className="num" style={{ fontSize: isMobile ? "18px" : "20px", fontWeight: "400", color: "#EEB8DE", lineHeight: 1 }}>{fmt(showSpent)}</div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                    <div style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.85)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>נשאר בקופה</div>
+                    <div className="num" style={{ fontSize: isMobile ? "30px" : "38px", fontWeight: "300", color: cashColor, lineHeight: 0.95, letterSpacing: "-1px", textShadow: "0 2px 18px rgba(0,0,0,0.20)" }}>{fmt(showCash)}</div>
+                  </div>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                  <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.65)", textTransform: "uppercase", letterSpacing: "0.05em" }}>נשאר בקופה</div>
-                  <div className="num" style={{ fontSize: isMobile ? "18px" : "21px", fontWeight: "400", color: grandCash < 0 ? "#FFB0A8" : "#fff", lineHeight: 1 }}>{fmt(animCash)}</div>
-                </div>
-              </div>
+              </>
             ) : (
               <div style={{ marginTop: "12px", fontSize: "12px", color: "rgba(220,150,200,0.55)", display: "flex", alignItems: "center", gap: "6px" }}>
                 <span style={{ padding: "2px 8px", borderRadius: "6px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(220,150,200,0.25)" }}>
@@ -1845,7 +1868,7 @@ export default function HorimPage() {
                   WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
                   letterSpacing: "-3px", lineHeight: 1,
                 }}>
-                  {animPct}%
+                  {showPct}%
                 </div>
                 <div style={{ fontSize: "11px", color: "rgba(220,150,200,0.6)", marginTop: "4px", textAlign: isMobile ? "right" : "center" }}>מהיעד נגבה</div>
               </>
@@ -1869,12 +1892,12 @@ export default function HorimPage() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
             {grades.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "#A99FB0", fontSize: "11.5px", paddingRight: "2px" }}>
-                <ChevronDown size={12} />
-                <span>לחצו על שכבה לפירוט לפי סעיפים</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#9B7FA0", fontSize: "11.5px", paddingRight: "2px" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "18px", height: "18px", borderRadius: "50%", background: "#F2E8F0", color: "#8B2F6E" }}><ChevronDown size={11} /></span>
+                <span>לחצו על שכבה לפירוט לפי סעיפים, יעדים והיסטוריית גבייה</span>
               </div>
             )}
-          <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+          <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden", boxShadow: "0 6px 24px -10px rgba(86,26,67,0.18), 0 1px 3px rgba(0,0,0,0.04)" }}>
             {/* Horizontal scroll wrapper */}
             <div style={{ overflowX: "auto" }}>
               <div style={{ minWidth: "700px" }}>

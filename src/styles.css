@@ -209,3 +209,26 @@ body { margin: 0; }
     font-size: 12px !important;
   }
 }
+
+
+/* ─── Horim screen — motion & polish (2.7.0) ─── */
+/* Horim screen — motion & polish (2.7.0) */
+.horim-row { transition: background 0.14s ease, box-shadow 0.18s ease; }
+.horim-row:hover { background: #FAF6FA; }
+.horim-row[data-open="true"] { background: #FBF3F8; box-shadow: inset -3px 0 0 0 var(--hk-plum); }
+
+.horim-chevron { transition: transform 0.25s ease; }
+.horim-row[data-open="true"] .horim-chevron { transform: rotate(180deg); }
+
+/* drill-down open/close via grid-rows (animates height without a fixed max) */
+.horim-drill { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.25s ease; }
+.horim-drill[data-open="true"] { grid-template-rows: 1fr; }
+.horim-drill__inner { overflow: hidden; min-height: 0; }
+
+/* progress bar — empty state keeps a soft inset border instead of a dead fill */
+.horim-bar { height: 5px; border-radius: 99px; background: #EFE7EF; box-shadow: inset 0 0 0 1px rgba(139,47,110,0.08); overflow: hidden; }
+.horim-bar__fill { height: 100%; border-radius: 99px; transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .horim-row, .horim-chevron, .horim-drill, .horim-bar__fill { transition: none !important; }
+}
