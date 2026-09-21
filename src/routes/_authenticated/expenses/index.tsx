@@ -24,11 +24,6 @@ import { useGrades } from "@/hooks/use-horim";
 
 export const Route = createFileRoute("/_authenticated/expenses/")({
   component: ExpensesPage,
-  // 2.7.0: deep-link from the parent screen — filter to parent expenses with no grade yet
-  validateSearch: (sp: Record<string, unknown>): { source?: string; unassignedGrade?: boolean } => ({
-    source: typeof sp.source === "string" && sp.source ? sp.source : undefined,
-    unassignedGrade: sp.unassignedGrade === true || sp.unassignedGrade === "1" || sp.unassignedGrade === "true" ? true : undefined,
-  }),
 });
 
 // ─── Receipt helpers ──────────────────────────────────────────────────────────
@@ -1910,10 +1905,7 @@ function BulkImportModal({ onClose }: { onClose: () => void }) {
 export default function ExpensesPage() {
   const isMobile = useIsMobile();
   const canWrite = useCanWrite();
-  const urlSearch = Route.useSearch();
-  const [filter, setFilter] = useState<BudgetSource | "all">(
-    typeof urlSearch.source === "string" && urlSearch.source ? (urlSearch.source as BudgetSource) : "all"
-  );
+  const [filter, setFilter] = useState<BudgetSource | "all">("all");
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(() => {
@@ -1936,21 +1928,16 @@ export default function ExpensesPage() {
     ? (allExpenses ?? [])
     : (allExpenses ?? []).filter((e) => e.source === filter);
 
-  // 2.7.0: parent CTA deep-link — only parent expenses with no grade assigned yet
-  const filteredByGrade = urlSearch.unassignedGrade
-    ? filteredBySource.filter((e) => e.source === "horim" && !e.grade_id)
-    : filteredBySource;
-
   const q = search.trim().toLowerCase();
   const visibleExpenses = q
-    ? filteredByGrade.filter((e) =>
+    ? filteredBySource.filter((e) =>
         [e.supplier, e.description, e.budget_categories?.name]
           .some((f) => f?.toLowerCase().includes(q))
       )
-    : filteredByGrade;
+    : filteredBySource;
 
-  // For display: "N הוצאות" counts against the filtered list (before text search)
-  const expenses = filteredByGrade;
+  // For display: "N הוצאות" counts against the source-filtered list (before text search)
+  const expenses = filteredBySource;
   const total = visibleExpenses.reduce((sum, e) => sum + e.amount, 0);
 
   // Dynamic source totals (always from all data)
@@ -1969,14 +1956,6 @@ export default function ExpensesPage() {
       {deletingExpense && <DeleteConfirm expense={deletingExpense} onClose={() => setDeletingExpense(null)} />}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-
-        {/* 2.7.0: context banner when deep-linked from the parent screen */}
-        {urlSearch.unassignedGrade && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", background: "#FBF7EF", border: "1px solid #F0E6D4", borderRadius: "10px", padding: "10px 16px" }}>
-            <span style={{ fontSize: "12.5px", color: "#8A6E2F" }}>מציג הוצאות הורים שעדיין לא שויכו לשכבה — פתחו כל הוצאה ובחרו שכבה.</span>
-            <a href="/expenses" style={{ fontSize: "12px", fontWeight: 600, color: "#8A6E2F", textDecoration: "none", flexShrink: 0 }}>הצג הכל ✕</a>
-          </div>
-        )}
 
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: isMobile ? "wrap" : "nowrap" }}>
