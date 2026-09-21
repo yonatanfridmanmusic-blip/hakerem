@@ -233,18 +233,18 @@ function AmountPerStudentCell({
       style={{
         display: "inline-flex", alignItems: "center", gap: "4px",
         padding: "3px 7px", borderRadius: "6px", cursor: "pointer",
-        background: hover ? "#F3E6F0" : "transparent",
-        border: hover ? "1px solid #E0C8DA" : "1px solid transparent",
+        background: hover ? "#FBF1E3" : "transparent",
+        border: hover ? "1px solid #EAD6BC" : "1px solid transparent",
         transition: "background 0.12s, border-color 0.12s",
       }}
     >
       {current > 0 ? (
         <>
-          <span className="num" style={{ fontSize: "12.5px", color: "#6B2356" }}>{fmt(current)}</span>
-          <Pencil size={9} color="#C4A0BC" style={{ opacity: hover ? 0.9 : 0, transition: "opacity 0.12s", flexShrink: 0 }} />
+          <span className="num" style={{ fontSize: "12.5px", color: "#B45309" }}>{fmt(current)}</span>
+          <Pencil size={9} color="#D6A96A" style={{ opacity: hover ? 0.9 : 0, transition: "opacity 0.12s", flexShrink: 0 }} />
         </>
       ) : (
-        <span style={{ fontSize: "12px", color: "#A87FA0", textDecoration: "underline", textUnderlineOffset: "2px" }}>הגדר</span>
+        <span style={{ fontSize: "12px", color: "#B45309", textDecoration: "underline", textUnderlineOffset: "2px" }}>הגדר</span>
       )}
     </span>
   );
@@ -1286,13 +1286,13 @@ function GradeRow({
       <div style={{ textAlign: "right" }}>
         <AmountPerStudentCell gradeId={grade.id} sectionId={r.s.id} sectionName={r.s.name} current={r.aps} existingId={r.gsa?.existing_id} />
       </div>
-      <div style={{ textAlign: "right" }}>{r.planned > 0 ? <span className="num" style={{ color: "#555" }}>{fmt(r.planned)}</span> : dash()}</div>
+      <div style={{ textAlign: "right" }}>{r.planned > 0 ? <span className="num" style={{ color: "#B45309" }}>{fmt(r.planned)}</span> : dash()}</div>
       <div style={{ textAlign: "right" }}>{r.collected > 0 ? <span className="num" style={{ color: "#2B2B2B", fontWeight: 600 }}>{fmt(r.collected)}</span> : dash()}</div>
       <div style={{ display: "flex", alignItems: "center", gap: "3px", minWidth: 0 }}>
-        {r.spent > 0 ? <span className="num" style={{ color: "#6B6560" }}>{fmt(r.spent)}</span> : dash()}
+        {r.spent > 0 ? <span className="num" style={{ color: "#C0392B" }}>{fmt(r.spent)}</span> : dash()}
         {r.secProrated && <span title="כולל חלק יחסי מהוצאות כל השכבות" style={{ display: "inline-flex", color: "#C08A6A", cursor: "help", flexShrink: 0 }}><Layers size={9} /></span>}
       </div>
-      <div style={{ textAlign: "right" }}>{(r.collected > 0 || r.spent > 0) ? <span className="num" style={{ fontWeight: 600, color: (r.collected - r.spent) < 0 ? "#B0791E" : "#2D6644" }}>{fmt(r.collected - r.spent)}</span> : dash()}</div>
+      <div style={{ textAlign: "right" }}>{(r.collected > 0 || r.spent > 0) ? <span className="num" style={{ fontWeight: 600, color: (r.collected - r.spent) < 0 ? "#C0392B" : "#2D6644" }}>{fmt(r.collected - r.spent)}</span> : dash()}</div>
       <div style={{ textAlign: "right" }}>{r.planned === 0 ? dash() : <span className="num" style={{ fontWeight: 600, color: r.secPct >= 100 ? "#2D6644" : r.secPct >= 50 ? "#8B2F6E" : "#A98FA4" }}>{r.secPct}%</span>}</div>
     </div>
   );
@@ -1323,7 +1323,7 @@ function GradeRow({
         {/* יעד */}
         <div style={{ textAlign: "right" }}>
           {totalTarget > 0 ? (
-            <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A" }}>{fmt(totalTarget)}</span>
+            <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#B45309" }}>{fmt(totalTarget)}</span>
           ) : (
             <span style={{ fontSize: "12px", color: "#C0BAB4", fontStyle: "italic" }}>לא הוגדר</span>
           )}
@@ -1336,7 +1336,7 @@ function GradeRow({
 
         {/* יצא — המספר בקצה הימני, אייקון החלק היחסי משמאלו במקום קבוע */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "3px", minWidth: 0 }}>
-          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: totalSpent > 0 ? "#6B6560" : "#C9C2CC" }}>
+          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: totalSpent > 0 ? "#C0392B" : "#C9C2CC" }}>
             {totalSpent > 0 ? fmt(totalSpent) : "—"}
           </span>
           {hasProrated && (
@@ -1348,7 +1348,7 @@ function GradeRow({
 
         {/* נשאר בקופה = נגבה − יצא */}
         <div style={{ textAlign: "right" }}>
-          <span className="num" style={{ fontSize: "13px", fontWeight: "600", color: cashBalance < 0 ? "#B0791E" : "#2D6644" }}>
+          <span className="num" style={{ fontSize: "13px", fontWeight: "600", color: cashBalance < 0 ? "#C0392B" : "#2D6644", background: cashBalance < 0 ? "rgba(192,57,43,0.08)" : "rgba(45,102,68,0.08)", borderRadius: "99px", padding: "2px 9px", display: "inline-block" }}>
             {fmt(cashBalance)}
           </span>
         </div>
@@ -1391,10 +1391,10 @@ function GradeRow({
                     <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 14px", background: "#F4EBF2", fontSize: "11px", fontWeight: 600, color: "#6B2356" }}>
                       <span style={{ textAlign: "right" }}>סעיף</span>
                       <span style={{ textAlign: "right" }}>לתלמיד</span>
-                      <span style={{ textAlign: "right" }}>יעד ({Math.round(multiplier * 100)}%)</span>
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#B45309", flexShrink: 0 }} />יעד ({Math.round(multiplier * 100)}%)</span>
                       <span style={{ textAlign: "right" }}>נגבה</span>
-                      <span style={{ textAlign: "right" }}>יצא</span>
-                      <span style={{ textAlign: "right" }}>נשאר</span>
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#C0392B", flexShrink: 0 }} />יצא</span>
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#2D6644", flexShrink: 0 }} />נשאר</span>
                       <span style={{ textAlign: "right" }}>%</span>
                     </div>
                     {activeRows.length === 0 && inactiveRows.length > 0 && (
@@ -1417,10 +1417,10 @@ function GradeRow({
                         <div style={{ textAlign: "right" }}>{dash()}</div>
                         <div style={{ textAlign: "right" }}>{unassignedCollected > 0 ? <span className="num" style={{ color: "#2B2B2B", fontWeight: 600 }}>{fmt(unassignedCollected)}</span> : dash()}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: "3px", minWidth: 0 }}>
-                          {otherSpent > 0 ? <span className="num" style={{ color: "#6B6560" }}>{fmt(otherSpent)}</span> : dash()}
+                          {otherSpent > 0 ? <span className="num" style={{ color: "#C0392B" }}>{fmt(otherSpent)}</span> : dash()}
                           {otherProrated && <span title="כולל חלק יחסי מהוצאות כל השכבות" style={{ display: "inline-flex", color: "#C08A6A", cursor: "help", flexShrink: 0 }}><Layers size={9} /></span>}
                         </div>
-                        <div style={{ textAlign: "right" }}>{(unassignedCollected > 0 || otherSpent > 0) ? <span className="num" style={{ fontWeight: 600, color: (unassignedCollected - otherSpent) < 0 ? "#B0791E" : "#2D6644" }}>{fmt(unassignedCollected - otherSpent)}</span> : dash()}</div>
+                        <div style={{ textAlign: "right" }}>{(unassignedCollected > 0 || otherSpent > 0) ? <span className="num" style={{ fontWeight: 600, color: (unassignedCollected - otherSpent) < 0 ? "#C0392B" : "#2D6644" }}>{fmt(unassignedCollected - otherSpent)}</span> : dash()}</div>
                         <div style={{ textAlign: "right" }}>{dash()}</div>
                       </div>
                     )}
@@ -1632,7 +1632,7 @@ export default function HorimPage() {
   const showPct       = reduceMotion ? (hasTarget ? Math.min(grandPct, 100) : 0) : animPct;
   // "נשאר בקופה" is the hero's star: state colour (green positive · amber negative · grey zero),
   // tuned to read on the dark plum hero.
-  const cashColor = grandCash > 0 ? "#8FE3B0" : grandCash < 0 ? "#F5C56B" : "#C9C2CC";
+  const cashColor = grandCash < 0 ? "#F4A6A0" : "#8FE3B0";
 
   // Auto-sync horim amounts → budget_categories once per mount
   // (ensures budget planning reflects current planned amounts even for pre-existing data)
@@ -1906,17 +1906,18 @@ export default function HorimPage() {
               סה״כ גבייה — כל השכבות
             </div>
             <div className="num" style={{ fontSize: isMobile ? "36px" : "48px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
-              {fmt(showCollected)}
+              {new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(showCollected)}
+              <span style={{ fontSize: "0.46em", fontWeight: 400, opacity: 0.72, marginInlineStart: "0.14em", letterSpacing: 0 }}>₪</span>
             </div>
             {hasTarget ? (
               <>
-                <div style={{ marginTop: "9px", fontSize: "12px", color: "rgba(220,150,200,0.7)" }}>
+                <div style={{ marginTop: "9px", fontSize: "12px", color: "#F2C879" }}>
                   מתוך יעד <span className="num">{fmt(showTarget)}</span> ({basis}%)
                 </div>
                 <div style={{ display: "flex", gap: isMobile ? "24px" : "40px", marginTop: "18px", flexWrap: "wrap", alignItems: "flex-end", position: "relative" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
                     <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.6)", textTransform: "uppercase", letterSpacing: "0.06em" }}>יצא</div>
-                    <div className="num" style={{ fontSize: isMobile ? "18px" : "20px", fontWeight: "400", color: "#EEB8DE", lineHeight: 1 }}>{fmt(showSpent)}</div>
+                    <div className="num" style={{ fontSize: isMobile ? "18px" : "20px", fontWeight: "400", color: "#F4A6A0", lineHeight: 1 }}>{fmt(showSpent)}</div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
                     <div style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.85)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>נשאר בקופה</div>
@@ -1962,10 +1963,10 @@ export default function HorimPage() {
                   letterSpacing: "0.04em", gap: "10px", background: "#FAFAF8",
                 }}>
                   <span style={{ textAlign: "right" }}>שכבה</span>
-                  <span style={{ textAlign: "right" }}>יעד ({basis}%)</span>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#B45309", flexShrink: 0 }} />יעד ({basis}%)</span>
                   <span style={{ textAlign: "right" }}>נגבה</span>
-                  <span style={{ textAlign: "right" }}>יצא</span>
-                  <span style={{ textAlign: "right" }}>נשאר בקופה</span>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#C0392B", flexShrink: 0 }} />יצא</span>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#2D6644", flexShrink: 0 }} />נשאר בקופה</span>
                   <span style={{ textAlign: "right" }}>התקדמות</span>
                   <span />
                 </div>
