@@ -20,6 +20,7 @@ import {
 } from "@/hooks/use-expenses";
 import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { useAddBudgetCategory, useCreateFlowThroughPair } from "@/hooks/use-budget-plan";
+import { useGrades } from "@/hooks/use-horim";
 
 export const Route = createFileRoute("/_authenticated/expenses/")({
   component: ExpensesPage,
@@ -320,6 +321,7 @@ type ExpenseFormState = {
   amount: string;
   source: BudgetSource;
   budget_category_id: string;
+  grade_id: string; // 2.7.0: שיוך שכבה (הורים בלבד; "" = כל השכבות)
   supplier: string;
   description: string;
   bank_account: "school" | "parents";
@@ -328,7 +330,7 @@ type ExpenseFormState = {
 // 2.3.0: מסמך עריך בכרטיסי ריבוי-המסמכים של ההעלאה הבודדת
 type EditableDoc = {
   amount: string; supplier: string; date: string; description: string;
-  budget_category_id: string; include: boolean; needsReview: boolean; issues: string[];
+  budget_category_id: string; grade_id: string; include: boolean; needsReview: boolean; issues: string[];
   multipleDates: boolean;   // v6: אזהרת ריבוי תאריכים על שדה התאריך
   dateCandidates: DateChip[];   // v7: מועמדי תאריך לצ'יפים
   approved: boolean;        // משוב יונתן: אישור "הפרטים נכונים" פר-כרטיס
@@ -362,6 +364,8 @@ function ExpenseForm({
   const [savingMulti, setSavingMulti] = useState(false);
   const [alsoIncome, setAlsoIncome] = useState(false); // 2.4.0 נושא 2.ב: רישום זוג צבוע
   const { data: categories } = useBudgetCategories(form.source);
+  const { data: gradesData } = useGrades(); // 2.7.0: שכבות השנה לבורר שכבה (הורים)
+  const isHorimSrc = form.source === "horim";
   const { data: orgSources } = useOrgBudgetSources();
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -380,6 +384,7 @@ function ExpenseForm({
     date: d.date ?? today(),
     description: d.description ?? "",
     budget_category_id: (categories ?? []).find((c) => c.name === d.suggested_category)?.id ?? "",
+    grade_id: "",
     include: true,
     needsReview: d.confidence === "needs_review",
     issues: hardIssues(d.issues),
@@ -467,7 +472,7 @@ function ExpenseForm({
             const active = form.source === src.slug;
             return (
               <button key={src.slug} type="button"
-                onClick={() => { set("source", src.slug); set("budget_category_id", ""); }}
+                onClick={() => { set("source", src.slug); set("budget_category_id", ""); set("grade_id", ""); }}
                 style={{
                   flex: "1 1 auto", minWidth: "80px", padding: "8px 12px", borderRadius: "8px",
                   border: `1.5px solid ${active ? src.color : "#E8E2D9"}`,
@@ -498,6 +503,17 @@ function ExpenseForm({
             onCancel={() => set("budget_category_id", "")} />
         )}
       </div>
+
+      {/* 2.7.0: שיוך שכבה — הורים בלבד, אופציונלי (ברירת מחדל: כל השכבות) */}
+      {isHorimSrc && (
+        <div>
+          <label style={labelStyle}>שכבה (אופציונלי)</label>
+          <select value={form.grade_id} onChange={(e) => set("grade_id", e.target.value)} style={inputStyle}>
+            <option value="">כל השכבות</option>
+            {(gradesData ?? []).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* 2.4.0 נושא 2.ב: רישום זוג צבוע — הכנסה והוצאה תואמות בפעולה אחת */}
       {onSubmitPair && !multiDocs && (
@@ -746,6 +762,17 @@ function ExpenseForm({
                       </div>
                     ) : null}
                   </div>
+                  {isHorimSrc && (
+                    <div>
+                      <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>שכבה</div>
+                      <select value={d.grade_id} disabled={!d.include}
+                        onChange={(e) => edit(i, { grade_id: e.target.value })}
+                        style={{ ...inputStyle, padding: "7px 10px", fontSize: "13px", cursor: "pointer" }}>
+                        <option value="">כל השכבות</option>
+                        {(gradesData ?? []).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <div style={{ gridColumn: "span 2" }}>
                     <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#6B6560", marginBottom: "3px" }}>תיאור</div>
                     <input type="text" value={d.description} placeholder="פרטים נוספים" disabled={!d.include}
@@ -881,7 +908,7 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
   const createPair = useCreateFlowThroughPair();
   const initial: ExpenseFormState = {
     expense_date: today(), amount: "", source: defaultSource,
-    budget_category_id: "", supplier: "", description: "", bank_account: "school",
+    budget_category_id: "", grade_id: "", supplier: "", description: "", bank_account: "school",
   };
   const handleSubmit = async (form: ExpenseFormState, receiptFile: File | null) => {
     try {
@@ -891,6 +918,7 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
         expense_date: form.expense_date, amount: Math.round(Number(form.amount) * 100) / 100,
         source: form.source, bank_account: form.bank_account,
         budget_category_id: form.budget_category_id || null,
+        grade_id: form.source === "horim" ? (form.grade_id || null) : null,
         supplier: form.supplier || null, description: form.description || null,
         receipt_url,
       } as NewExpense);
@@ -909,6 +937,7 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
           expense_date: d.date || today(), amount: Math.round(Number(d.amount) * 100) / 100,
           source, bank_account: "school",
           budget_category_id: d.budget_category_id || null,
+          grade_id: source === "horim" ? (d.grade_id || null) : null,
           supplier: d.supplier || null, description: d.description || null,
           receipt_url,
         } as NewExpense);
@@ -927,6 +956,7 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
         date: form.expense_date,
         bankAccount: form.bank_account,
         budgetCategoryId: form.budget_category_id || null,
+        gradeId: form.source === "horim" ? (form.grade_id || null) : null,
         supplier: form.supplier || null,
         payer: form.supplier || null,
         description: form.description || null,
@@ -958,6 +988,7 @@ function EditExpenseModal({ expense, onClose }: { expense: Expense; onClose: () 
     amount: String(expense.amount),
     source: expense.source,
     budget_category_id: expense.budget_category_id ?? "",
+    grade_id: expense.grade_id ?? "",
     supplier: expense.supplier ?? "",
     description: expense.description ?? "",
     bank_account: expense.bank_account ?? "school",
@@ -971,6 +1002,7 @@ function EditExpenseModal({ expense, onClose }: { expense: Expense; onClose: () 
         expense_date: form.expense_date, amount: Math.round(Number(form.amount) * 100) / 100,
         source: form.source, bank_account: form.bank_account,
         budget_category_id: form.budget_category_id || null,
+        grade_id: form.source === "horim" ? (form.grade_id || null) : null,
         supplier: form.supplier || null, description: form.description || null,
         receipt_url,
       });
@@ -1114,6 +1146,9 @@ function ExpenseMobileCard({
           }}>{label}</span>
           {e.budget_categories?.name && (
             <span style={{ fontSize: "11px", color: "#AAA099" }}>· {e.budget_categories.name}</span>
+          )}
+          {e.grades?.name && (
+            <span style={{ fontSize: "10px", fontWeight: 600, color: "#2D6644", background: "#EAF3EB", border: "1px solid #CDE8D3", borderRadius: "99px", padding: "1px 7px" }}>{e.grades.name}</span>
           )}
           {e.linked_income_id && (
             <span title="תקציב צבוע — מקושר להכנסה תואמת" style={{
@@ -2139,6 +2174,9 @@ export default function ExpensesPage() {
                     </span>
                     <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.budget_categories?.name ?? "—"}</span>
+                      {e.grades?.name && (
+                        <span title="שכבה" style={{ flexShrink: 0, padding: "1px 7px", borderRadius: "99px", fontSize: "10px", fontWeight: 600, background: "#EAF3EB", color: "#2D6644", border: "1px solid #CDE8D3" }}>{e.grades.name}</span>
+                      )}
                       {e.linked_income_id && (
                         <span title="תקציב צבוע — מקושר להכנסה תואמת" style={{
                           flexShrink: 0, padding: "1px 7px", borderRadius: "99px", fontSize: "10px", fontWeight: 700,

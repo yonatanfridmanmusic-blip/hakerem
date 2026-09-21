@@ -1436,6 +1436,7 @@ export type Database = {
           p_budget_category_id?: string
           p_date: string
           p_description?: string
+          p_grade_id?: string
           p_payer?: string
           p_source: string
           p_supplier?: string

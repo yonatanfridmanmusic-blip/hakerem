@@ -5,6 +5,7 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { Plus, X, Check, ChevronDown, ChevronUp, Users, Settings2, Pencil, Trash2, FileUp } from "lucide-react";
 import { KesafimImportModal, normalizeReportName } from "@/components/kesafim-import";
 import { useCanWrite, useOrganization } from "@/hooks/use-organization";
+import { useExpenses } from "@/hooks/use-expenses";
 import { supabase } from "@/integrations/supabase/client";
 import { getActiveYearId } from "@/lib/active-year";
 import { DateInput } from "@/components/ui/date-input";
@@ -1391,6 +1392,7 @@ export default function HorimPage() {
   const { data: gsaList = [] } = useGradeSectionAmounts();
   const { data: collections = [] } = useParentCollections();
   const { data: refunds = [] } = useParentRefunds();
+  const { data: horimExpenses = [] } = useExpenses("horim"); // 2.7.0: הוצאות הורים למאזן פר שכבה
 
   const isLoading = gradesLoading || sectionsLoading;
 
@@ -1910,6 +1912,51 @@ export default function HorimPage() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* 2.7.0: מאזן פר שכבה — נגבה פחות הוצא (הוצאות הורים משויכות-שכבה) */}
+        {!isLoading && grades.length > 0 && (() => {
+          const rows = grades.map((g) => {
+            const collected = collections.filter((c) => c.grade_id === g.id).reduce((sm, c) => sm + c.amount, 0);
+            const spent = horimExpenses.filter((e) => e.grade_id === g.id).reduce((sm, e) => sm + e.amount, 0);
+            return { g, collected, spent, remaining: collected - spent };
+          }).filter((r) => r.collected > 0 || r.spent > 0);
+          const schoolWide = horimExpenses.filter((e) => !e.grade_id).reduce((sm, e) => sm + e.amount, 0);
+          if (rows.length === 0 && schoolWide <= 0) return null;
+          return (
+            <div>
+              <div style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "12px" }}>
+                מאזן פר שכבה — נגבה פחות הוצא
+              </div>
+              <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", background: "#FAFAF9", borderBottom: "1px solid #F0EBE4", fontSize: "11px", fontWeight: 600, color: "#6B6560" }}>
+                  <span style={{ padding: "9px 14px", textAlign: "right" }}>שכבה</span>
+                  <span style={{ padding: "9px 14px", textAlign: "left" }}>נגבה</span>
+                  <span style={{ padding: "9px 14px", textAlign: "left" }}>הוצא</span>
+                  <span style={{ padding: "9px 14px", textAlign: "left" }}>נשאר</span>
+                </div>
+                {rows.map((r, idx) => (
+                  <div key={r.g.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", background: idx % 2 === 0 ? "#fff" : "#FAFAF9", borderTop: idx === 0 ? "none" : "1px solid #F5F1EB", alignItems: "center" }}>
+                    <span style={{ padding: "9px 14px", fontSize: "12.5px", fontWeight: 500, color: "#1A1A1A", textAlign: "right" }}>{r.g.name}</span>
+                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", color: "#2D6644", textAlign: "left" }}>{fmt(r.collected)}</span>
+                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", color: "#B5472A", textAlign: "left" }}>{fmt(r.spent)}</span>
+                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", fontWeight: 600, color: r.remaining >= 0 ? "#2D6644" : "#B5472A", textAlign: "left" }}>{fmt(r.remaining)}</span>
+                  </div>
+                ))}
+                {schoolWide > 0 && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", background: "#FBF7EF", borderTop: "1px solid #F0E6D4", alignItems: "center" }}>
+                    <span style={{ padding: "9px 14px", fontSize: "12.5px", fontWeight: 500, color: "#8A6E2F", textAlign: "right" }}>כלל בית ספרי</span>
+                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", color: "#C0BAB4", textAlign: "left" }}>—</span>
+                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", color: "#B5472A", textAlign: "left" }}>{fmt(schoolWide)}</span>
+                    <span className="num" style={{ padding: "9px 14px", fontSize: "12.5px", color: "#C0BAB4", textAlign: "left" }}>—</span>
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize: "11px", color: "#AAA099", marginTop: "6px", lineHeight: 1.5 }}>
+                "נגבה" מגביית ההורים של השכבה · "הוצא" מהוצאות הורים המשויכות לשכבה · הוצאות ללא שכבה נספרות ב"כלל בית ספרי" ואינן מחולקות.
               </div>
             </div>
           );

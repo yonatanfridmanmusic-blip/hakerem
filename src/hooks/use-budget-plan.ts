@@ -206,6 +206,7 @@ export function useCreateFlowThroughPair() {
       payer?: string | null;
       description?: string | null;
       targetYearId?: string | null;
+      gradeId?: string | null; // 2.7.0: שיוך שכבה להוצאה הצבועה
     }) => {
       const yid = args.targetYearId ?? (await getActiveYearId());
       if (!yid) throw new Error("אין שנת לימודים פעילה");
@@ -219,6 +220,7 @@ export function useCreateFlowThroughPair() {
         p_supplier: args.supplier ?? undefined,
         p_payer: args.payer ?? undefined,
         p_description: args.description ?? undefined,
+        p_grade_id: args.gradeId ?? undefined,
       });
       if (error) throw error;
       return data as { income_id: string; expense_id: string };

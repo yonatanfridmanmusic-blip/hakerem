@@ -20,7 +20,9 @@ export interface Expense {
   linked_income_id: string | null; // 2.4.0 נושא 2: זוג צבוע
   created_by: string | null;
   created_at: string | null;
+  grade_id: string | null; // 2.7.0: שיוך שכבה (הורים בלבד); null = כלל בית ספרי
   budget_categories?: { name: string } | null;
+  grades?: { name: string } | null;
   creator?: { full_name: string | null; email: string | null } | null;
 }
 
@@ -34,6 +36,7 @@ export interface NewExpense {
   description?: string | null;
   bank_account: "school" | "parents";
   receipt_url?: string | null;
+  grade_id?: string | null;
 }
 
 // ─── Active year ──────────────────────────────────────────────────────────────
@@ -50,7 +53,7 @@ export function useExpenses(sourceFilter?: BudgetSource | "all") {
 
       let query = supabase
         .from("expenses")
-        .select("id, expense_date, amount, source, budget_category_id, activity_name, supplier, description, bank_account, receipt_url, linked_income_id, created_by, created_at, budget_categories(name), creator:profiles!expenses_created_by_fkey(full_name, email)")
+        .select("id, expense_date, amount, source, budget_category_id, grade_id, activity_name, supplier, description, bank_account, receipt_url, linked_income_id, created_by, created_at, budget_categories(name), grades(name), creator:profiles!expenses_created_by_fkey(full_name, email)")
         .eq("school_year_id", yearId)
         .order("expense_date", { ascending: false });
 
