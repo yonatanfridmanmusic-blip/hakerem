@@ -94,7 +94,7 @@ function Bar({ pct }: { pct: number }) {
     const id = setTimeout(() => setAnimW(pct), 80);
     return () => clearTimeout(id);
   }, [pct]);
-  // Colour by state: <50% neutral · 50–99% brand plum · 100%+ green. (Fill transition lives in CSS,
+  // Colour by state: <50% neutral grey · 50%+ vineyard green. (Fill transition lives in CSS,
   // so prefers-reduced-motion can switch it off.)
   const fill = pct >= 50
     ? "linear-gradient(90deg, #15A57C, #0B7A5C)"
@@ -1646,7 +1646,7 @@ export default function HorimPage() {
   const showCash      = reduceMotion ? grandCash : animCash;
   const showPct       = reduceMotion ? (hasTarget ? Math.min(grandPct, 100) : 0) : animPct;
   // "נשאר בקופה" is the hero's star: state colour (green positive · amber negative · grey zero),
-  // tuned to read on the dark plum hero.
+  // tuned to read on the dark wine hero.
   const cashColor = grandCash < 0 ? "#F2A0B4" : "#8FE3C0";
 
   // Auto-sync horim amounts → budget_categories once per mount
@@ -1909,13 +1909,13 @@ export default function HorimPage() {
         {/* Summary hero */}
         {isLoading ? <HeroSkeleton isMobile={isMobile} /> : (
         <div className="hk-fade-in" style={{
-          background: "radial-gradient(120% 180% at 85% -20%, #1B4434 0%, #123126 38%, #0C231B 100%)",
+          background: "radial-gradient(120% 180% at 85% -20%, #552549 0%, #37152F 38%, #200C1C 100%)",
           borderRadius: "24px", padding: isMobile ? "24px" : "36px 40px",
           position: "relative", overflow: "hidden",
           boxShadow: "0 1px 2px rgba(12,35,27,0.2), 0 20px 48px -18px rgba(12,35,27,0.45)",
         }}>
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(52% 70% at 18% 105%, rgba(232,201,126,0.13), transparent 65%)" }} />
-          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(40% 55% at 65% -10%, rgba(143,227,192,0.08), transparent 70%)" }} />
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(40% 55% at 65% -10%, rgba(214,170,222,0.09), transparent 70%)" }} />
           <div style={{ position: "relative", display: "flex", alignItems: "center", gap: isMobile ? "24px" : "44px", flexWrap: "wrap" }}>
             {/* collected */}
             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
