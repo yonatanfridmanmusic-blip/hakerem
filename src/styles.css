@@ -255,3 +255,44 @@ body { margin: 0; }
   .hk-fade-in, .horim-row-enter { animation: none; }
   .horim-ring__arc { transition: none; }
 }
+
+
+/* ─── Horim screen — iOS precision (2.7.0 step 8) ─── */
+/* Horim screen — iOS precision (2.7.0 step 8) */
+:root { --ios-ease: cubic-bezier(0.32, 0.72, 0, 1); }
+
+/* unified easing for the motions defined in earlier rounds */
+.horim-drill { transition: grid-template-rows 0.28s var(--ios-ease); }
+.horim-ring__arc { transition: stroke-dashoffset 0.9s var(--ios-ease); }
+.horim-chevron { transition: transform 0.28s var(--ios-ease); }
+
+/* grade row: hairline hover + gentle press */
+.horim-row { transition: background 0.15s var(--ios-ease), box-shadow 0.18s var(--ios-ease), transform 0.12s var(--ios-ease); }
+.horim-row:active { transform: scale(0.995); }
+
+/* round chevron button — a clear tap target, not a floating arrow */
+.horim-chevron-btn { background: rgba(107,35,86,0.05); transition: background 0.15s var(--ios-ease), transform 0.12s var(--ios-ease); }
+.horim-chevron-btn:hover { background: rgba(107,35,86,0.10); }
+.horim-row[data-open="true"] .horim-chevron-btn { background: rgba(107,35,86,0.12); }
+
+/* every button on the screen: soft hover + physical press */
+.horim-screen button { transition: transform 0.12s var(--ios-ease), filter 0.15s var(--ios-ease), background 0.15s var(--ios-ease), box-shadow 0.15s var(--ios-ease); }
+.horim-screen button:hover { filter: brightness(0.985); }
+.horim-screen button:active { transform: scale(0.98); }
+
+/* brand focus ring for keyboard nav */
+.horim-screen button:focus-visible { outline: 2px solid rgba(139,47,110,0.55); outline-offset: 2px; border-radius: 10px; }
+
+/* sticky glass action bar (no layout shift — only bg + shadow change) */
+.horim-actionbar { position: sticky; top: 0; z-index: 20; transition: background 0.2s var(--ios-ease), box-shadow 0.2s var(--ios-ease); }
+.horim-actionbar[data-stuck="true"] {
+  background: rgba(247,244,239,0.72);
+  backdrop-filter: saturate(1.8) blur(16px);
+  -webkit-backdrop-filter: saturate(1.8) blur(16px);
+  box-shadow: 0 8px 20px -18px rgba(0,0,0,0.35), 0 1px 0 rgba(60,40,55,0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .horim-row, .horim-chevron-btn, .horim-screen button, .horim-actionbar { transition: none !important; }
+  .horim-row:active, .horim-screen button:active, .horim-chevron-btn:active { transform: none !important; }
+}

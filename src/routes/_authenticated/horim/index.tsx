@@ -103,7 +103,7 @@ function Bar({ pct }: { pct: number }) {
     : "linear-gradient(90deg, #CFC3CB, #B7A6B2)";
   return (
     <div className="horim-bar">
-      <div className="horim-bar__fill" style={{ width: `${Math.min(100, animW)}%`, background: fill }} />
+      <div className="horim-bar__fill" style={{ width: `${Math.min(100, animW)}%`, background: fill, boxShadow: pct >= 100 ? "0 0 6px 0 rgba(74,140,98,0.65)" : "none" }} />
     </div>
   );
 }
@@ -134,7 +134,7 @@ function HeroRing({ pct, hasTarget, reduceMotion, size }: { pct: number; hasTarg
         <circle className="horim-ring__arc" cx={c} cy={c} r={r} fill="none" stroke={arc} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={C} strokeDashoffset={off} />
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <div className="num" style={{ fontSize: size >= 140 ? "34px" : "27px", fontWeight: 300, color: "#fff", lineHeight: 1, letterSpacing: "-1px" }}>{hasTarget ? `${shown}%` : "—"}</div>
+        <div className="num" style={{ fontSize: size >= 140 ? "34px" : "27px", fontWeight: 300, color: "#fff", lineHeight: 1, letterSpacing: "-0.02em" }}>{hasTarget ? `${shown}%` : "—"}</div>
         <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.72)", marginTop: "6px", letterSpacing: "0.04em" }}>מהיעד השנתי</div>
       </div>
     </div>
@@ -147,7 +147,7 @@ function Shimmer({ w, h, radius = 8 }: { w: number | string; h: number | string;
 }
 function HeroSkeleton({ isMobile }: { isMobile: boolean }) {
   return (
-    <div style={{ borderRadius: "18px", padding: isMobile ? "22px 18px" : "28px 32px", background: "#F1ECE6", display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "20px", minHeight: isMobile ? "180px" : "156px" }}>
+    <div style={{ borderRadius: "16px", padding: isMobile ? "24px 16px" : "28px 32px", background: "#F1ECE6", display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "20px", minHeight: isMobile ? "180px" : "156px" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
         <Shimmer w={120} h={12} />
         <Shimmer w={isMobile ? 190 : 250} h={isMobile ? 36 : 46} radius={10} />
@@ -162,7 +162,7 @@ function HeroSkeleton({ isMobile }: { isMobile: boolean }) {
 }
 function TableSkeleton() {
   return (
-    <div style={{ background: "#fff", border: "1px solid #F1EAE3", borderRadius: "18px", overflow: "hidden", boxShadow: "0 6px 24px -10px rgba(86,26,67,0.14), 0 1px 3px rgba(0,0,0,0.04)" }}>
+    <div style={{ background: "#fff", border: "1px solid rgba(120,80,110,0.08)", borderRadius: "16px", overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 12px 32px -16px rgba(86,26,67,0.14)" }}>
       {[0, 1, 2, 3].map((i) => (
         <div key={i} style={{ display: "grid", gridTemplateColumns: HORIM_GRID, gap: "10px", padding: "17px 20px", borderBottom: i < 3 ? "1px solid #F5F0EA" : "none", alignItems: "center" }}>
           <Shimmer w="70%" h={14} />
@@ -232,7 +232,7 @@ function AmountPerStudentCell({
       onMouseLeave={() => setHover(false)}
       style={{
         display: "inline-flex", alignItems: "center", gap: "4px",
-        padding: "3px 7px", borderRadius: "6px", cursor: "pointer",
+        padding: "4px 8px", borderRadius: "8px", cursor: "pointer",
         background: hover ? "#FBF1E3" : "transparent",
         border: hover ? "1px solid #EAD6BC" : "1px solid transparent",
         transition: "background 0.12s, border-color 0.12s",
@@ -1281,7 +1281,7 @@ function GradeRow({
   const inactiveRows = secRows.filter((r) => !r.active);
   const dash = () => <span className="num" style={{ color: DIM }}>—</span>;
   const renderSecRow = (r: (typeof secRows)[number], isInactive: boolean) => (
-    <div key={r.s.id} style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "7px 14px", alignItems: "center", borderTop: "1px solid #EFE6EC", background: isInactive ? "#FBF8FB" : "transparent" }}>
+    <div key={r.s.id} style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", alignItems: "center", borderTop: "1px solid rgba(107,35,86,0.07)", background: isInactive ? "#FBF8FB" : "transparent" }}>
       <span title={r.s.name} style={{ textAlign: "right", fontWeight: 500, color: "#1A1A1A", fontSize: "12.5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.s.name}</span>
       <div style={{ textAlign: "right" }}>
         <AmountPerStudentCell gradeId={grade.id} sectionId={r.s.id} sectionName={r.s.name} current={r.aps} existingId={r.gsa?.existing_id} />
@@ -1306,15 +1306,15 @@ function GradeRow({
         style={{
           display: "grid",
           gridTemplateColumns: HORIM_GRID,
-          padding: "14px 20px", gap: "10px", alignItems: "center",
-          borderBottom: "1px solid #F5F0EA",
+          padding: "16px 20px", gap: "12px", alignItems: "center",
+          borderBottom: "1px solid rgba(60,40,55,0.06)",
           cursor: "pointer",
           animationDelay: `${Math.min(index, 12) * 40}ms`,
         }}
       >
         {/* Grade name + student count */}
         <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-          <span style={{ fontSize: "14px", fontWeight: "500", color: "#1A1A1A" }}>{grade.name}</span>
+          <span style={{ fontSize: "15px", fontWeight: "500", color: "#1A1A1A" }}>{grade.name}</span>
           <span style={{ fontSize: "11px", color: "#AAA099", display: "flex", alignItems: "center", gap: "3px" }}>
             <Users size={10} />{grade.student_count} תלמידים
           </span>
@@ -1348,7 +1348,7 @@ function GradeRow({
 
         {/* נשאר בקופה = נגבה − יצא */}
         <div style={{ textAlign: "right" }}>
-          <span className="num" style={{ fontSize: "13px", fontWeight: "600", color: cashBalance < 0 ? "#C0392B" : "#2D6644", background: cashBalance < 0 ? "rgba(192,57,43,0.08)" : "rgba(45,102,68,0.08)", borderRadius: "99px", padding: "2px 9px", display: "inline-block" }}>
+          <span className="num" style={{ fontSize: "13px", fontWeight: "600", color: cashBalance < 0 ? "#C0392B" : "#2D6644", background: cashBalance < 0 ? "rgba(192,57,43,0.08)" : "rgba(45,102,68,0.08)", borderRadius: "99px", padding: "2px 8px", display: "inline-block" }}>
             {fmt(cashBalance)}
           </span>
         </div>
@@ -1367,7 +1367,9 @@ function GradeRow({
         {/* Expand toggle — chevron rotates 180° when open (CSS) */}
         <button
           onClick={(e) => { e.stopPropagation(); setExpanded((x) => !x); }}
-          style={{ background: expanded ? "#F0E0ED" : "none", border: "none", cursor: "pointer", color: "#9B6A90", padding: "4px", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}
+          className="horim-chevron-btn"
+          aria-label={expanded ? "סגור פירוט" : "פתח פירוט"}
+          style={{ border: "none", cursor: "pointer", color: "#9B6A90", padding: "6px", borderRadius: "999px", display: "flex", alignItems: "center", justifyContent: "center" }}
         >
           <ChevronDown className="horim-chevron" size={16} />
         </button>
@@ -1376,35 +1378,35 @@ function GradeRow({
       {/* Expanded drill-down — animated open/close (respects reduced-motion) */}
       <div className="horim-drill" data-open={expanded ? "true" : "false"}>
         <div className="horim-drill__inner">
-        <div style={{ background: "#FBF6FA", borderBottom: "1px solid #EAE5DE", boxShadow: "inset 0 3px 6px -4px rgba(107,35,86,0.25)", padding: "0 20px 18px" }}>
-          <div style={{ paddingTop: "14px", display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div style={{ background: "#FBF6FA", borderBottom: "1px solid rgba(60,40,55,0.08)", boxShadow: "inset 0 3px 6px -4px rgba(107,35,86,0.22)", padding: "0 20px 16px" }}>
+          <div style={{ paddingTop: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
 
             {/* Per-section table — full picture for this grade */}
             <div>
               <div style={{ fontSize: "11px", fontWeight: "600", color: "#8B2F6E", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "8px" }}>
                 פירוט לפי סעיף — {grade.name}
               </div>
-              <div style={{ border: "1px solid #E8DEED", borderRadius: "10px", overflow: "hidden" }}>
+              <div style={{ border: "1px solid rgba(107,35,86,0.10)", borderRadius: "12px", overflow: "hidden" }}>
                 <div style={{ overflowX: "auto" }}>
                   <div style={{ minWidth: "640px" }}>
                     {/* header — shares DRILL_GRID with every detail row below */}
-                    <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 14px", background: "#F4EBF2", fontSize: "11px", fontWeight: 600, color: "#6B2356" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", background: "#F6EEF4", fontSize: "12px", fontWeight: 600, color: "#6B2356" }}>
                       <span style={{ textAlign: "right" }}>סעיף</span>
                       <span style={{ textAlign: "right" }}>לתלמיד</span>
-                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#B45309", flexShrink: 0 }} />יעד ({Math.round(multiplier * 100)}%)</span>
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#B45309", flexShrink: 0 }} />יעד ({Math.round(multiplier * 100)}%)</span>
                       <span style={{ textAlign: "right" }}>נגבה</span>
-                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#C0392B", flexShrink: 0 }} />יצא</span>
-                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#2D6644", flexShrink: 0 }} />נשאר</span>
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#C0392B", flexShrink: 0 }} />יצא</span>
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#2D6644", flexShrink: 0 }} />נשאר</span>
                       <span style={{ textAlign: "right" }}>%</span>
                     </div>
                     {activeRows.length === 0 && inactiveRows.length > 0 && (
-                      <div style={{ padding: "10px 14px", fontSize: "12px", color: "#9B8FA6", borderTop: "1px solid #EFE6EC", textAlign: "right" }}>אין עדיין יעד, גבייה או הוצאה לשכבה זו.</div>
+                      <div style={{ padding: "12px 16px", fontSize: "12px", color: "#9B8FA6", borderTop: "1px solid rgba(107,35,86,0.07)", textAlign: "right" }}>אין עדיין יעד, גבייה או הוצאה לשכבה זו.</div>
                     )}
                     {activeRows.map((r) => renderSecRow(r, false))}
                     {inactiveRows.length > 0 && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setShowInactive((x) => !x); }}
-                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px 14px", borderTop: "1px solid #EFE6EC", background: "#FAF6F9", border: "none", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "11.5px", color: "#8B6FA0" }}
+                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "8px 16px", borderTop: "1px solid rgba(107,35,86,0.07)", background: "#FAF6F9", border: "none", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "12px", color: "#8B6FA0" }}
                       >
                         {showInactive ? "הסתר סעיפים ללא פעילות" : `עוד ${inactiveRows.length} סעיפים ללא פעילות לשכבה זו`}
                         {showInactive ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
@@ -1412,7 +1414,7 @@ function GradeRow({
                     )}
                     {showInactive && inactiveRows.map((r) => renderSecRow(r, true))}
                     {(otherSpent > 0 || unassignedCollected > 0) && (
-                      <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "7px 14px", alignItems: "center", borderTop: "1px solid #EFE6EC", background: "#F7F3F6" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", alignItems: "center", borderTop: "1px solid rgba(107,35,86,0.07)", background: "#F7F3F6" }}>
                         <span style={{ gridColumn: "span 2", textAlign: "right", fontWeight: 500, color: "#7A6E85", fontSize: "12px" }}>אחר — הוצאות ללא סעיף</span>
                         <div style={{ textAlign: "right" }}>{dash()}</div>
                         <div style={{ textAlign: "right" }}>{unassignedCollected > 0 ? <span className="num" style={{ color: "#2B2B2B", fontWeight: 600 }}>{fmt(unassignedCollected)}</span> : dash()}</div>
@@ -1515,6 +1517,17 @@ export default function HorimPage() {
     on();
     mq.addEventListener?.("change", on);
     return () => mq.removeEventListener?.("change", on);
+  }, []);
+
+  // Sticky glass action bar: a 0-height sentinel above it reports when the bar is "floating".
+  const [barStuck, setBarStuck] = useState(false);
+  const barSentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = barSentinelRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setBarStuck(!e.isIntersecting), { threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
   }, []);
   const [showModal, setShowModal] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
@@ -1689,7 +1702,8 @@ export default function HorimPage() {
         />
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      <div className="horim-screen" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+        <div ref={barSentinelRef} aria-hidden="true" style={{ height: 0 }} />
 
         {/* Guard message banner (replaces alert()) */}
         {guardMsg && (
@@ -1709,7 +1723,7 @@ export default function HorimPage() {
         )}
 
         {/* Header */}
-        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: isMobile ? "flex-start" : "flex-start", gap: isMobile ? "12px" : "0" }}>
+        <div className="horim-actionbar" data-stuck={barStuck ? "true" : "false"} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: isMobile ? "flex-start" : "flex-start", gap: isMobile ? "12px" : "0", paddingBlock: "4px" }}>
           <div>
             <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>גביית הורים</h1>
             <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099" }}>
@@ -1893,7 +1907,7 @@ export default function HorimPage() {
         {isLoading ? <HeroSkeleton isMobile={isMobile} /> : (
         <div className="hk-fade-in" style={{
           background: "linear-gradient(135deg, #9B3880 0%, #7A2760 55%, #561A43 100%)",
-          borderRadius: "18px", padding: isMobile ? "22px 18px" : "28px 32px",
+          borderRadius: "16px", padding: isMobile ? "24px 16px" : "28px 32px",
           display: "flex", justifyContent: "space-between", alignItems: "flex-end",
           flexWrap: "wrap", gap: "20px",
           boxShadow: "0 16px 56px rgba(86,26,67,0.35), 0 1px 0 rgba(255,255,255,0.08) inset",
@@ -1905,23 +1919,23 @@ export default function HorimPage() {
             <div style={{ fontSize: "11px", color: "rgba(220,150,200,0.8)", fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px" }}>
               סה״כ גבייה — כל השכבות
             </div>
-            <div className="num" style={{ fontSize: isMobile ? "36px" : "48px", fontWeight: "300", color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
+            <div className="num" style={{ fontSize: isMobile ? "36px" : "48px", fontWeight: "300", color: "#fff", letterSpacing: "-0.02em", lineHeight: 1 }}>
               {new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(showCollected)}
               <span style={{ fontSize: "0.46em", fontWeight: 400, opacity: 0.72, marginInlineStart: "0.14em", letterSpacing: 0 }}>₪</span>
             </div>
             {hasTarget ? (
               <>
-                <div style={{ marginTop: "9px", fontSize: "12px", color: "#F2C879" }}>
+                <div style={{ marginTop: "8px", fontSize: "12px", color: "#F2C879" }}>
                   מתוך יעד <span className="num">{fmt(showTarget)}</span> ({basis}%)
                 </div>
-                <div style={{ display: "flex", gap: isMobile ? "24px" : "40px", marginTop: "18px", flexWrap: "wrap", alignItems: "flex-end", position: "relative" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                <div style={{ display: "flex", gap: isMobile ? "24px" : "40px", marginTop: "16px", flexWrap: "wrap", alignItems: "flex-end", position: "relative" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.6)", textTransform: "uppercase", letterSpacing: "0.06em" }}>יצא</div>
                     <div className="num" style={{ fontSize: isMobile ? "18px" : "20px", fontWeight: "400", color: "#F4A6A0", lineHeight: 1 }}>{fmt(showSpent)}</div>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <div style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.85)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>נשאר בקופה</div>
-                    <div className="num" style={{ fontSize: isMobile ? "30px" : "38px", fontWeight: "300", color: cashColor, lineHeight: 0.95, letterSpacing: "-1px", textShadow: "0 2px 18px rgba(0,0,0,0.20)" }}>{fmt(showCash)}</div>
+                    <div className="num" style={{ fontSize: isMobile ? "30px" : "38px", fontWeight: "300", color: cashColor, lineHeight: 0.95, letterSpacing: "-0.015em", textShadow: "0 2px 18px rgba(0,0,0,0.20)" }}>{fmt(showCash)}</div>
                   </div>
                 </div>
               </>
@@ -1943,14 +1957,14 @@ export default function HorimPage() {
         {isLoading ? (
           <TableSkeleton />
         ) : (
-          <div className="hk-fade-in" style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+          <div className="hk-fade-in" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {grades.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#9B7FA0", fontSize: "11.5px", paddingRight: "2px" }}>
-                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "18px", height: "18px", borderRadius: "50%", background: "#F2E8F0", color: "#8B2F6E" }}><ChevronDown size={11} /></span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#9B7FA0", fontSize: "12px", paddingRight: "4px" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "16px", height: "16px", borderRadius: "50%", background: "#F2E8F0", color: "#8B2F6E" }}><ChevronDown size={11} /></span>
                 <span>לחצו על שכבה לפירוט לפי סעיפים, יעדים והיסטוריית גבייה</span>
               </div>
             )}
-          <div style={{ background: "#fff", border: "1px solid #F1EAE3", borderRadius: "18px", overflow: "hidden", boxShadow: "0 6px 24px -10px rgba(86,26,67,0.18), 0 1px 3px rgba(0,0,0,0.04)" }}>
+          <div style={{ background: "#fff", border: "1px solid rgba(120,80,110,0.08)", borderRadius: "16px", overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 12px 32px -16px rgba(86,26,67,0.18)" }}>
             {/* Horizontal scroll wrapper */}
             <div style={{ overflowX: "auto" }}>
               <div style={{ minWidth: "700px" }}>
@@ -1958,15 +1972,15 @@ export default function HorimPage() {
                 <div style={{
                   display: "grid",
                   gridTemplateColumns: HORIM_GRID,
-                  padding: "12px 20px", borderBottom: "1px solid #EAE5DE",
-                  fontSize: "11px", fontWeight: "600", color: "#AAA099",
-                  letterSpacing: "0.04em", gap: "10px", background: "#FAFAF8",
+                  padding: "12px 20px", borderBottom: "1px solid rgba(60,40,55,0.08)",
+                  fontSize: "12px", fontWeight: "600", color: "#AAA099",
+                  letterSpacing: "0.04em", gap: "12px", background: "#FAFAF8",
                 }}>
                   <span style={{ textAlign: "right" }}>שכבה</span>
-                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#B45309", flexShrink: 0 }} />יעד ({basis}%)</span>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#B45309", flexShrink: 0 }} />יעד ({basis}%)</span>
                   <span style={{ textAlign: "right" }}>נגבה</span>
-                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#C0392B", flexShrink: 0 }} />יצא</span>
-                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "5px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#2D6644", flexShrink: 0 }} />נשאר בקופה</span>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#C0392B", flexShrink: 0 }} />יצא</span>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#2D6644", flexShrink: 0 }} />נשאר בקופה</span>
                   <span style={{ textAlign: "right" }}>התקדמות</span>
                   <span />
                 </div>
