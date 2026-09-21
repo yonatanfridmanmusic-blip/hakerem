@@ -83,7 +83,7 @@ const HORIM_GRID = "1.6fr 1fr 1fr 1.1fr 1.1fr 1.4fr 36px";
 // detail row reference it, so those columns can never drift apart either.
 // Order: סעיף · לתלמיד · יעד · נגבה · יצא · נשאר · %.
 const DRILL_GRID = "1.7fr 1.1fr 1fr 1fr 1fr 1fr 0.6fr";
-const DIM = "#C9C2CC"; // one muted color for every empty "—"
+const DIM = "#98A09A"; // one muted color for every empty "—"
 
 // ─── Mini progress bar ────────────────────────────────────────────────────────
 
@@ -96,14 +96,12 @@ function Bar({ pct }: { pct: number }) {
   }, [pct]);
   // Colour by state: <50% neutral · 50–99% brand plum · 100%+ green. (Fill transition lives in CSS,
   // so prefers-reduced-motion can switch it off.)
-  const fill = pct >= 100
-    ? "linear-gradient(90deg, #4A8C62, #2D6644)"
-    : pct >= 50
-    ? "linear-gradient(90deg, #B04A90, #8B2F6E)"
-    : "linear-gradient(90deg, #CFC3CB, #B7A6B2)";
+  const fill = pct >= 50
+    ? "linear-gradient(90deg, #15A57C, #0B7A5C)"
+    : "rgba(31,36,33,0.25)";
   return (
     <div className="horim-bar">
-      <div className="horim-bar__fill" style={{ width: `${Math.min(100, animW)}%`, background: fill, boxShadow: pct >= 100 ? "0 0 6px 0 rgba(74,140,98,0.65)" : "none" }} />
+      <div className="horim-bar__fill" style={{ width: `${Math.min(100, animW)}%`, background: fill, boxShadow: pct >= 100 ? "0 0 6px 0 rgba(21,165,124,0.6)" : "none" }} />
     </div>
   );
 }
@@ -124,18 +122,22 @@ function HeroRing({ pct, hasTarget, reduceMotion, size }: { pct: number; hasTarg
     const id = setTimeout(() => setOff(target), 60);
     return () => clearTimeout(id);
   }, [target, C, reduceMotion]);
-  // Same state scale as the progress bars, tuned to read on the dark plum hero.
-  const arc = !hasTarget ? "rgba(240,200,228,0.4)" : clamped >= 100 ? "#8FE3B0" : clamped >= 50 ? "#F0A0D8" : "#D8C4D4";
   const c = size / 2;
   return (
     <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
-        <circle cx={c} cy={c} r={r} fill="none" stroke="rgba(255,255,255,0.13)" strokeWidth={stroke} />
-        <circle className="horim-ring__arc" cx={c} cy={c} r={r} fill="none" stroke={arc} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={C} strokeDashoffset={off} />
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)", filter: "drop-shadow(0 0 6px rgba(232,201,126,0.35))" }} aria-hidden="true">
+        <defs>
+          <linearGradient id="kerem-champagne" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#F1DCA5" />
+            <stop offset="1" stopColor="#C9A34E" />
+          </linearGradient>
+        </defs>
+        <circle cx={c} cy={c} r={r} fill="none" stroke="rgba(242,239,232,0.12)" strokeWidth={stroke} />
+        <circle className="horim-ring__arc" cx={c} cy={c} r={r} fill="none" stroke="url(#kerem-champagne)" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={C} strokeDashoffset={off} />
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <div className="num" style={{ fontSize: size >= 140 ? "34px" : "27px", fontWeight: 300, color: "#fff", lineHeight: 1, letterSpacing: "-0.02em" }}>{hasTarget ? `${shown}%` : "—"}</div>
-        <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.72)", marginTop: "6px", letterSpacing: "0.04em" }}>מהיעד השנתי</div>
+        <div className="num" style={{ fontSize: size >= 140 ? "34px" : "27px", fontWeight: 400, color: "#F7F4EC", lineHeight: 1, letterSpacing: "-0.02em" }}>{hasTarget ? `${shown}%` : "—"}</div>
+        <div style={{ fontSize: "10.5px", color: "rgba(242,239,232,0.5)", marginTop: "2px", letterSpacing: "0.02em" }}>מהצפי השנתי</div>
       </div>
     </div>
   );
@@ -147,7 +149,7 @@ function Shimmer({ w, h, radius = 8 }: { w: number | string; h: number | string;
 }
 function HeroSkeleton({ isMobile }: { isMobile: boolean }) {
   return (
-    <div style={{ borderRadius: "16px", padding: isMobile ? "24px 16px" : "28px 32px", background: "#F1ECE6", display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "20px", minHeight: isMobile ? "180px" : "156px" }}>
+    <div style={{ borderRadius: "24px", padding: isMobile ? "24px" : "36px 40px", background: "#F1ECE6", display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "20px", minHeight: isMobile ? "180px" : "156px" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
         <Shimmer w={120} h={12} />
         <Shimmer w={isMobile ? 190 : 250} h={isMobile ? 36 : 46} radius={10} />
@@ -162,7 +164,7 @@ function HeroSkeleton({ isMobile }: { isMobile: boolean }) {
 }
 function TableSkeleton() {
   return (
-    <div style={{ background: "#fff", border: "1px solid rgba(120,80,110,0.08)", borderRadius: "16px", overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 12px 32px -16px rgba(86,26,67,0.14)" }}>
+    <div style={{ background: "#fff", borderRadius: "20px", overflow: "hidden", boxShadow: "0 1px 2px rgba(31,36,33,0.04), 0 12px 32px -12px rgba(31,36,33,0.10)" }}>
       {[0, 1, 2, 3].map((i) => (
         <div key={i} style={{ display: "grid", gridTemplateColumns: HORIM_GRID, gap: "10px", padding: "17px 20px", borderBottom: i < 3 ? "1px solid #F5F0EA" : "none", alignItems: "center" }}>
           <Shimmer w="70%" h={14} />
@@ -213,13 +215,13 @@ function AmountPerStudentCell({
         onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setValue(String(current)); setEditing(false); } }}
         style={{
           width: "70px", padding: "3px 6px",
-          border: "1.5px solid #8B2F6E", borderRadius: "5px",
+          border: "1.5px solid #0B7A5C", borderRadius: "5px",
           fontSize: "12px", fontFamily: "var(--font-sans)",
           direction: "ltr", textAlign: "right", outline: "none",
         }}
       />
-      <button onClick={save} style={{ background: "none", border: "none", cursor: "pointer", color: "#8B2F6E", padding: "1px" }}><Check size={12} /></button>
-      <button onClick={() => { setValue(String(current)); setEditing(false); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#AAA099", padding: "1px" }}><X size={12} /></button>
+      <button onClick={save} style={{ background: "none", border: "none", cursor: "pointer", color: "#0B7A5C", padding: "1px" }}><Check size={12} /></button>
+      <button onClick={() => { setValue(String(current)); setEditing(false); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#98A09A", padding: "1px" }}><X size={12} /></button>
     </div>
   );
 
@@ -233,18 +235,18 @@ function AmountPerStudentCell({
       style={{
         display: "inline-flex", alignItems: "center", gap: "4px",
         padding: "4px 8px", borderRadius: "8px", cursor: "pointer",
-        background: hover ? "#FBF1E3" : "transparent",
-        border: hover ? "1px solid #EAD6BC" : "1px solid transparent",
+        background: hover ? "#F6EEDD" : "transparent",
+        border: hover ? "1px solid #D8C08A" : "1px solid transparent",
         transition: "background 0.12s, border-color 0.12s",
       }}
     >
       {current > 0 ? (
         <>
-          <span className="num" style={{ fontSize: "12.5px", color: "#B45309" }}>{fmt(current)}</span>
-          <Pencil size={9} color="#D6A96A" style={{ opacity: hover ? 0.9 : 0, transition: "opacity 0.12s", flexShrink: 0 }} />
+          <span className="num" style={{ fontSize: "12.5px", color: "#997404" }}>{fmt(current)}</span>
+          <Pencil size={9} color="#997404" style={{ opacity: hover ? 0.9 : 0, transition: "opacity 0.12s", flexShrink: 0 }} />
         </>
       ) : (
-        <span style={{ fontSize: "12px", color: "#B45309", textDecoration: "underline", textUnderlineOffset: "2px" }}>הגדר</span>
+        <span style={{ fontSize: "12px", color: "#997404", textDecoration: "underline", textUnderlineOffset: "2px" }}>הגדר</span>
       )}
     </span>
   );
@@ -354,10 +356,10 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
         {/* Header */}
         <div style={{ padding: "20px 24px", borderBottom: "1px solid #EAE5DE", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>ניהול סעיפי גבייה</div>
-            <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>הוספה, השבתה ומחיקה של סעיפים</div>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1F2421" }}>ניהול סעיפי גבייה</div>
+            <div style={{ fontSize: "12px", color: "#98A09A", marginTop: "2px" }}>הוספה, השבתה ומחיקה של סעיפים</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#AAA099", display: "flex" }}><X size={18} /></button>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#98A09A", display: "flex" }}><X size={18} /></button>
         </div>
 
         {/* גוף נגלל — גובה מוגבל (תיקון 4) */}
@@ -375,18 +377,18 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", gap: "10px" }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                        <span style={{ fontSize: "14px", color: s.is_active ? "#1A1A1A" : "#AAA099" }}>{s.name}</span>
-                        <span style={{ fontSize: "10px", fontWeight: "600", color: isImported ? "#8B2F6E" : "#888079", background: isImported ? "#F7EDF4" : "#F3F0EB", borderRadius: "99px", padding: "2px 8px" }}>
+                        <span style={{ fontSize: "14px", color: s.is_active ? "#1F2421" : "#98A09A" }}>{s.name}</span>
+                        <span style={{ fontSize: "10px", fontWeight: "600", color: isImported ? "#0B7A5C" : "#5C645F", background: isImported ? "#F4F1EA" : "#F3F0EB", borderRadius: "99px", padding: "2px 8px" }}>
                           {isImported ? "ייבוא" : "ידני"}
                         </span>
                         {isDupName && ctx?.createdAt[s.id] && (
-                          <span title="קיים סעיף נוסף עם שם זהה — תג הבחנה" style={{ fontSize: "10px", color: "#8B5E0B", background: "#FDF6E3", border: "1px solid #E8CF9C", borderRadius: "99px", padding: "2px 8px" }} className="num">
+                          <span title="קיים סעיף נוסף עם שם זהה — תג הבחנה" style={{ fontSize: "10px", color: "#997404", background: "#FDF6E3", border: "1px solid #E8C97E", borderRadius: "99px", padding: "2px 8px" }} className="num">
                             נוצר {dateHe(ctx.createdAt[s.id])}
                           </span>
                         )}
                       </div>
                       {/* שורת הקשר */}
-                      <div style={{ fontSize: "11.5px", color: "#888079", marginTop: "3px" }} className="num">
+                      <div style={{ fontSize: "11.5px", color: "#5C645F", marginTop: "3px" }} className="num">
                         {ctx ? <>נגבה {fmtNum(col)} ₪ · {tgt} יעדים</> : "טוען..."}
                       </div>
                     </div>
@@ -397,7 +399,7 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
                           title="מחיקת סעיף (אין עליו גבייה)"
                           style={{
                             padding: "4px 10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer",
-                            border: "1px solid #E5B5B0", background: "#fff", color: "#C0392B",
+                            border: "1px solid #E5B5B0", background: "#fff", color: "#CE2458",
                             fontFamily: "var(--font-sans)", display: "flex", alignItems: "center", gap: "4px",
                           }}
                         >
@@ -411,9 +413,9 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
                         )}
                         style={{
                           padding: "4px 12px", borderRadius: "6px", fontSize: "12px", cursor: "pointer",
-                          border: `1px solid ${s.is_active ? "#E8E2D9" : "#8B2F6E"}`,
-                          background: s.is_active ? "#F5F3F0" : "#F4EBF2",
-                          color: s.is_active ? "#888079" : "#8B2F6E",
+                          border: `1px solid ${s.is_active ? "#E8E2D9" : "#0B7A5C"}`,
+                          background: s.is_active ? "#F5F3F0" : "#F1EEE8",
+                          color: s.is_active ? "#5C645F" : "#0B7A5C",
                           fontFamily: "var(--font-sans)",
                         }}
                       >
@@ -430,12 +432,12 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
                       </div>
                       <div style={{ display: "flex", gap: "8px" }}>
                         <button onClick={() => void handleDelete(s)} disabled={deleting} style={{
-                          padding: "5px 14px", border: "none", borderRadius: "7px", background: "#C0392B",
+                          padding: "5px 14px", border: "none", borderRadius: "7px", background: "#CE2458",
                           color: "#fff", fontSize: "12px", cursor: "pointer", fontFamily: "var(--font-sans)",
                         }}>{deleting ? "מוחק..." : "כן, מחק סעיף"}</button>
                         <button onClick={() => setDeleteConfirm(null)} style={{
                           padding: "5px 12px", border: "1px solid #E8E2D9", borderRadius: "7px", background: "#fff",
-                          color: "#6B6560", fontSize: "12px", cursor: "pointer", fontFamily: "var(--font-sans)",
+                          color: "#5C645F", fontSize: "12px", cursor: "pointer", fontFamily: "var(--font-sans)",
                         }}>ביטול</button>
                       </div>
                     </div>
@@ -461,7 +463,7 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
             />
             <button type="submit" disabled={addSection.isPending || !newName.trim()} style={{
               padding: "9px 16px", border: "none", borderRadius: "8px",
-              background: "#8B2F6E", color: "#fff", fontSize: "14px",
+              background: "#0B7A5C", color: "#fff", fontSize: "14px",
               cursor: "pointer", fontFamily: "var(--font-sans)",
               opacity: !newName.trim() ? 0.5 : 1,
               display: "flex", alignItems: "center", gap: "5px",
@@ -472,7 +474,7 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
         </div>
 
         <div style={{ padding: "16px 24px", borderTop: "1px solid #EAE5DE", flexShrink: 0 }}>
-          <button onClick={onClose} style={{ width: "100%", padding: "10px", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>סגור</button>
+          <button onClick={onClose} style={{ width: "100%", padding: "10px", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#5C645F", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>סגור</button>
         </div>
       </div>
     </div>
@@ -583,7 +585,7 @@ function AddCollectionModal({
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "9px 12px",
     border: "1px solid #E8E2D9", borderRadius: "8px",
-    fontSize: "14px", background: "#fff", color: "#1A1A1A",
+    fontSize: "14px", background: "#fff", color: "#1F2421",
     outline: "none", fontFamily: "var(--font-sans)", direction: "rtl",
   };
 
@@ -596,10 +598,10 @@ function AddCollectionModal({
         {/* Header */}
         <div style={{ padding: "20px 24px", borderBottom: "1px solid #EAE5DE", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>רישום גבייה</div>
-            <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>תשלום מהורים</div>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1F2421" }}>רישום גבייה</div>
+            <div style={{ fontSize: "12px", color: "#98A09A", marginTop: "2px" }}>תשלום מהורים</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "8px", color: "#AAA099", display: "flex" }}>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", borderRadius: "8px", color: "#98A09A", display: "flex" }}>
             <X size={18} />
           </button>
         </div>
@@ -612,7 +614,7 @@ function AddCollectionModal({
                 style={{
                   flex: 1, padding: "7px 0", borderRadius: "7px", border: "none",
                   background: mode === m ? "#fff" : "transparent",
-                  color: mode === m ? "#6B2356" : "#888079",
+                  color: mode === m ? "#0B7A5C" : "#5C645F",
                   fontSize: "13px", fontWeight: mode === m ? "600" : "400",
                   cursor: "pointer", fontFamily: "var(--font-sans)",
                   boxShadow: mode === m ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
@@ -625,8 +627,8 @@ function AddCollectionModal({
 
           {/* Multi-grade selection */}
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>
-              שכבות{gradeIds.length > 0 && <span style={{ color: "#8B2F6E", fontWeight: "600" }}> ({gradeIds.length} נבחרו)</span>}
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>
+              שכבות{gradeIds.length > 0 && <span style={{ color: "#0B7A5C", fontWeight: "600" }}> ({gradeIds.length} נבחרו)</span>}
             </label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
               {grades.map((g) => {
@@ -640,9 +642,9 @@ function AddCollectionModal({
                     )}
                     style={{
                       padding: "6px 14px", borderRadius: "99px",
-                      border: `1.5px solid ${selected ? "#8B2F6E" : "#E8E2D9"}`,
-                      background: selected ? "#F4EBF2" : "#fff",
-                      color: selected ? "#8B2F6E" : "#888079",
+                      border: `1.5px solid ${selected ? "#0B7A5C" : "#E8E2D9"}`,
+                      background: selected ? "#F1EEE8" : "#fff",
+                      color: selected ? "#0B7A5C" : "#5C645F",
                       fontSize: "13px", fontWeight: selected ? "600" : "400",
                       cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
                     }}
@@ -657,7 +659,7 @@ function AddCollectionModal({
           {mode === "payers" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {gradeIds.length === 0 && (
-                <div style={{ fontSize: "13px", color: "#7A7470", padding: "4px 0" }}>בחרו שכבה אחת לפחות</div>
+                <div style={{ fontSize: "13px", color: "#5C645F", padding: "4px 0" }}>בחרו שכבה אחת לפחות</div>
               )}
               {gradeIds.map((gId) => {
                 const g = grades.find((x) => x.id === gId);
@@ -666,14 +668,14 @@ function AddCollectionModal({
                 const computed = computedFor(gId);
                 const overridden = amountOverride[gId] !== undefined && amountOverride[gId] !== "";
                 return (
-                  <div key={gId} style={{ background: "#FAF7F9", border: "1px solid #EAD9E4", borderRadius: "10px", padding: "10px 12px" }}>
+                  <div key={gId} style={{ background: "#FBFAF7", border: "1px solid #E8E2D9", borderRadius: "10px", padding: "10px 12px" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: isMobile ? "wrap" : "nowrap" }}>
                       <div style={{ minWidth: "72px" }}>
-                        <div style={{ fontSize: "13px", fontWeight: "600", color: "#1A1A1A" }}>{g.name}</div>
-                        <div style={{ fontSize: "10.5px", color: "#AAA099" }}>₪{full.toLocaleString("he-IL")}/תלמיד</div>
+                        <div style={{ fontSize: "13px", fontWeight: "600", color: "#1F2421" }}>{g.name}</div>
+                        <div style={{ fontSize: "10.5px", color: "#98A09A" }}>₪{full.toLocaleString("he-IL")}/תלמיד</div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <label style={{ fontSize: "11.5px", color: "#6B6560", whiteSpace: "nowrap" }}>כמה שילמו?</label>
+                        <label style={{ fontSize: "11.5px", color: "#5C645F", whiteSpace: "nowrap" }}>כמה שילמו?</label>
                         <input
                           type="number" min="0"
                           value={payers[gId] ?? ""}
@@ -688,19 +690,19 @@ function AddCollectionModal({
                         />
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                        <span style={{ fontSize: "12px", color: "#8B2F6E" }}>₪</span>
+                        <span style={{ fontSize: "12px", color: "#0B7A5C" }}>₪</span>
                         <input
                           type="number" min="0" step="0.01"
                           value={amountOverride[gId] ?? (computed > 0 ? String(round2(computed)) : "")}
                           onChange={(e) => setAmountOverride((prev) => ({ ...prev, [gId]: e.target.value }))}
                           onFocus={(e) => e.target.select()}
                           placeholder="0"
-                          style={{ width: "96px", padding: "6px 9px", border: `1.5px solid ${overridden ? "#B8860B" : "#D4B8CC"}`, borderRadius: "7px", fontSize: "13.5px", fontWeight: "600", fontFamily: "var(--font-sans)", direction: "ltr", textAlign: "right", outline: "none", background: "#fff", color: "#6B2356" }}
+                          style={{ width: "96px", padding: "6px 9px", border: `1.5px solid ${overridden ? "#997404" : "#D4B8CC"}`, borderRadius: "7px", fontSize: "13.5px", fontWeight: "600", fontFamily: "var(--font-sans)", direction: "ltr", textAlign: "right", outline: "none", background: "#fff", color: "#0B7A5C" }}
                         />
                       </div>
                     </div>
                     {(Number(payers[gId]) || 0) > 0 && !overridden && (
-                      <div style={{ fontSize: "11px", color: "#8B857F", marginTop: "6px" }}>
+                      <div style={{ fontSize: "11px", color: "#5C645F", marginTop: "6px" }}>
                         {payers[gId]} × ₪{full.toLocaleString("he-IL")} — מתחלק אוטומטית בין הסעיפים · ניתן לערוך את הסכום
                       </div>
                     )}
@@ -721,13 +723,13 @@ function AddCollectionModal({
             <>
               {/* Section select */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סעיף</label>
+                <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>סעיף</label>
                 <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={inputStyle}>
                   {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סכום (₪)</label>
+                <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>סכום (₪)</label>
                 <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" min="0" step="0.01" style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
               </div>
             </>
@@ -735,20 +737,20 @@ function AddCollectionModal({
 
           {/* Date */}
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>תאריך</label>
             <DateInput value={date} onChange={setDate} required style={inputStyle} />
           </div>
 
           {/* Notes */}
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>הערה (אופציונלי)</label>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>הערה (אופציונלי)</label>
             <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="פרטים נוספים" style={inputStyle} />
           </div>
 
           {/* Actions */}
           <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
-            <button type="button" onClick={onClose} style={{ flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
-            <button type="submit" disabled={addCollection.isPending} style={{ flex: 2, padding: "10px 0", border: "none", borderRadius: "8px", background: addCollection.isPending ? "#888" : "linear-gradient(135deg, #B04A90, #8B2F6E)", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: addCollection.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#5C645F", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
+            <button type="submit" disabled={addCollection.isPending} style={{ flex: 2, padding: "10px 0", border: "none", borderRadius: "8px", background: addCollection.isPending ? "#888" : "linear-gradient(135deg, #15A57C, #0B7A5C)", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: addCollection.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
               {addCollection.isPending ? "שומר..." : "רשום גבייה"}
             </button>
           </div>
@@ -778,7 +780,7 @@ function EditCollectionModal({
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "9px 12px",
     border: "1px solid #E8E2D9", borderRadius: "8px",
-    fontSize: "14px", background: "#fff", color: "#1A1A1A",
+    fontSize: "14px", background: "#fff", color: "#1F2421",
     outline: "none", fontFamily: "var(--font-sans)", direction: "rtl",
   };
 
@@ -804,15 +806,15 @@ function EditCollectionModal({
       <div style={{ background: "#fff", borderRadius: "18px", width: "100%", maxWidth: "400px", boxShadow: "0 24px 80px rgba(0,0,0,0.2)", overflow: "hidden" }}>
         <div style={{ padding: "20px 24px", borderBottom: "1px solid #EAE5DE", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>עריכת גבייה</div>
-            {sec && <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>{sec.name}</div>}
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1F2421" }}>עריכת גבייה</div>
+            {sec && <div style={{ fontSize: "12px", color: "#98A09A", marginTop: "2px" }}>{sec.name}</div>}
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#AAA099", display: "flex" }}><X size={18} /></button>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#98A09A", display: "flex" }}><X size={18} /></button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
           {/* Section — incl. "לא משויך", enables assigning unassigned money */}
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סעיף</label>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>סעיף</label>
             <select value={editSectionId} onChange={(e) => setEditSectionId(e.target.value)} style={inputStyle}>
               <option value="">לא משויך</option>
               {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -820,21 +822,21 @@ function EditCollectionModal({
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>תאריך</label>
               <DateInput value={date} onChange={setDate} required style={inputStyle} />
             </div>
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סכום (₪)</label>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>סכום (₪)</label>
               <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" min="0" step="0.01" required autoFocus style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
             </div>
           </div>
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>הערה (אופציונלי)</label>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>הערה (אופציונלי)</label>
             <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="פרטים נוספים" style={inputStyle} />
           </div>
           <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
-            <button type="button" onClick={onClose} style={{ flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
-            <button type="submit" disabled={updateCollection.isPending} style={{ flex: 2, padding: "10px 0", border: "none", borderRadius: "8px", background: updateCollection.isPending ? "#888" : "linear-gradient(135deg, #B04A90, #8B2F6E)", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: updateCollection.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#5C645F", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
+            <button type="submit" disabled={updateCollection.isPending} style={{ flex: 2, padding: "10px 0", border: "none", borderRadius: "8px", background: updateCollection.isPending ? "#888" : "linear-gradient(135deg, #15A57C, #0B7A5C)", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: updateCollection.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
               {updateCollection.isPending ? "שומר..." : "שמור שינויים"}
             </button>
           </div>
@@ -864,12 +866,12 @@ function DeleteCollectionConfirm({ id, onClose }: { id: string; onClose: () => v
         <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: "#FEF2F2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
           <Trash2 size={20} color="#DC2626" />
         </div>
-        <div style={{ fontSize: "17px", fontWeight: "600", color: "#1A1A1A", marginBottom: "8px" }}>מחיקת גבייה</div>
-        <div style={{ fontSize: "14px", color: "#6B6560", lineHeight: 1.6, marginBottom: "24px" }}>
+        <div style={{ fontSize: "17px", fontWeight: "600", color: "#1F2421", marginBottom: "8px" }}>מחיקת גבייה</div>
+        <div style={{ fontSize: "14px", color: "#5C645F", lineHeight: 1.6, marginBottom: "24px" }}>
           האם למחוק רישום גבייה זה? פעולה זו אינה הפיכה.
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "12px 0", border: "1px solid #E8E2D9", borderRadius: "10px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
+          <button onClick={onClose} style={{ flex: 1, padding: "12px 0", border: "1px solid #E8E2D9", borderRadius: "10px", background: "#fff", color: "#5C645F", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
           <button onClick={handleDelete} disabled={deleteCollection.isPending} style={{ flex: 1, padding: "12px 0", border: "none", borderRadius: "10px", background: deleteCollection.isPending ? "#888" : "#DC2626", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: deleteCollection.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
             {deleteCollection.isPending ? "מוחק..." : "מחק"}
           </button>
@@ -898,7 +900,7 @@ function AddRefundModal({
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "9px 12px",
     border: "1px solid #E8E2D9", borderRadius: "8px",
-    fontSize: "14px", background: "#fff", color: "#1A1A1A",
+    fontSize: "14px", background: "#fff", color: "#1F2421",
     outline: "none", fontFamily: "var(--font-sans)", direction: "rtl",
   };
 
@@ -927,10 +929,10 @@ function AddRefundModal({
           background: "linear-gradient(135deg, #FEF2F2, #fff)",
         }}>
           <div>
-            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>רישום החזר להורה</div>
-            <div style={{ fontSize: "12px", color: "#B45309", marginTop: "2px" }}>כסף שיוצא → מקטין את הנטו</div>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1F2421" }}>רישום החזר להורה</div>
+            <div style={{ fontSize: "12px", color: "#997404", marginTop: "2px" }}>כסף שיוצא → מקטין את הנטו</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#AAA099", display: "flex" }}>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#98A09A", display: "flex" }}>
             <X size={18} />
           </button>
         </div>
@@ -938,7 +940,7 @@ function AddRefundModal({
         <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
           {/* Grade */}
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>שכבה</label>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>שכבה</label>
             <select value={gradeId} onChange={(e) => setGradeId(e.target.value)} style={inputStyle} required>
               {grades.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
@@ -947,8 +949,8 @@ function AddRefundModal({
           {/* Section */}
           {sections.length > 0 && (
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>
-                סעיף <span style={{ color: "#AAA099", fontWeight: "400" }}>(אופציונלי)</span>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>
+                סעיף <span style={{ color: "#98A09A", fontWeight: "400" }}>(אופציונלי)</span>
               </label>
               <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={inputStyle}>
                 <option value="">— ללא סעיף ספציפי —</option>
@@ -960,31 +962,31 @@ function AddRefundModal({
           {/* Date + Amount */}
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px" }}>
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>תאריך</label>
               <DateInput value={date} onChange={setDate} required style={inputStyle} />
             </div>
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סכום ההחזר (₪)</label>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>סכום ההחזר (₪)</label>
               <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" min="0.01" step="0.01" required autoFocus style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
             </div>
           </div>
 
           {/* Reason */}
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סיבה</label>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>סיבה</label>
             <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="לדוגמה: ביטול טיול, תשלום כפול" style={inputStyle} />
           </div>
 
           {/* Notes */}
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>הערה <span style={{ color: "#AAA099", fontWeight: "400" }}>(אופציונלי)</span></label>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>הערה <span style={{ color: "#98A09A", fontWeight: "400" }}>(אופציונלי)</span></label>
             <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="פרטים נוספים" style={inputStyle} />
           </div>
 
           {/* Actions */}
           <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
-            <button type="button" onClick={onClose} style={{ flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
-            <button type="submit" disabled={addRefund.isPending} style={{ flex: 2, padding: "10px 0", border: "none", borderRadius: "8px", background: addRefund.isPending ? "#888" : "linear-gradient(135deg, #C0392B, #922B21)", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: addRefund.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#5C645F", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
+            <button type="submit" disabled={addRefund.isPending} style={{ flex: 2, padding: "10px 0", border: "none", borderRadius: "8px", background: addRefund.isPending ? "#888" : "linear-gradient(135deg, #CE2458, #922B21)", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: addRefund.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
               {addRefund.isPending ? "שומר..." : "רשום החזר"}
             </button>
           </div>
@@ -1016,7 +1018,7 @@ function EditRefundModal({
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "9px 12px",
     border: "1px solid #E8E2D9", borderRadius: "8px",
-    fontSize: "14px", background: "#fff", color: "#1A1A1A",
+    fontSize: "14px", background: "#fff", color: "#1F2421",
     outline: "none", fontFamily: "var(--font-sans)", direction: "rtl",
   };
 
@@ -1039,35 +1041,35 @@ function EditRefundModal({
       <div style={{ background: "#fff", borderRadius: "18px", width: "100%", maxWidth: "400px", boxShadow: "0 24px 80px rgba(0,0,0,0.2)", overflow: "hidden" }}>
         <div style={{ padding: "20px 24px", borderBottom: "1px solid #EAE5DE", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1A1A1A" }}>עריכת החזר</div>
-            <div style={{ fontSize: "12px", color: "#AAA099", marginTop: "2px" }}>
+            <div style={{ fontSize: "17px", fontWeight: "500", color: "#1F2421" }}>עריכת החזר</div>
+            <div style={{ fontSize: "12px", color: "#98A09A", marginTop: "2px" }}>
               {gradeName}{sectionName ? ` · ${sectionName}` : ""}
             </div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#AAA099", display: "flex" }}><X size={18} /></button>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "#98A09A", display: "flex" }}><X size={18} /></button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>תאריך</label>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>תאריך</label>
               <DateInput value={date} onChange={setDate} required style={inputStyle} />
             </div>
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סכום (₪)</label>
+              <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>סכום (₪)</label>
               <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" min="0.01" step="0.01" required autoFocus style={{ ...inputStyle, direction: "ltr", textAlign: "right" }} />
             </div>
           </div>
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>סיבה</label>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>סיבה</label>
             <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="לדוגמה: ביטול טיול" style={inputStyle} />
           </div>
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "500", color: "#6B6560", display: "block", marginBottom: "6px" }}>הערה <span style={{ color: "#AAA099", fontWeight: "400" }}>(אופציונלי)</span></label>
+            <label style={{ fontSize: "12px", fontWeight: "500", color: "#5C645F", display: "block", marginBottom: "6px" }}>הערה <span style={{ color: "#98A09A", fontWeight: "400" }}>(אופציונלי)</span></label>
             <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="פרטים נוספים" style={inputStyle} />
           </div>
           <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
-            <button type="button" onClick={onClose} style={{ flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
-            <button type="submit" disabled={updateRefund.isPending} style={{ flex: 2, padding: "10px 0", border: "none", borderRadius: "8px", background: updateRefund.isPending ? "#888" : "linear-gradient(135deg, #C0392B, #922B21)", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: updateRefund.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: "10px 0", border: "1px solid #E8E2D9", borderRadius: "8px", background: "#fff", color: "#5C645F", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>ביטול</button>
+            <button type="submit" disabled={updateRefund.isPending} style={{ flex: 2, padding: "10px 0", border: "none", borderRadius: "8px", background: updateRefund.isPending ? "#888" : "linear-gradient(135deg, #CE2458, #922B21)", color: "#fff", fontSize: "14px", fontWeight: "500", cursor: updateRefund.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)" }}>
               {updateRefund.isPending ? "שומר..." : "שמור שינויים"}
             </button>
           </div>
@@ -1106,7 +1108,7 @@ function RefundsSummary({
 
   return (
     <div>
-      <div style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "12px" }}>
+      <div style={{ fontSize: "12px", fontWeight: "600", color: "#98A09A", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "12px" }}>
         מעקב החזרי הורים
       </div>
 
@@ -1141,10 +1143,10 @@ function RefundsSummary({
         {refunds.map((r) => (
           <div key={r.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px", borderBottom: "1px solid #F5F0EC" }}>
             <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
-              <span style={{ fontSize: "12px", color: "#AAA099", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "12px", color: "#98A09A", whiteSpace: "nowrap" }}>
                 {new Date(r.refund_date).toLocaleDateString("he-IL")}
               </span>
-              <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "99px", background: "#F5F3F0", color: "#6B6560", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "99px", background: "#F5F3F0", color: "#5C645F", whiteSpace: "nowrap" }}>
                 {gradeMap.get(r.grade_id) ?? "—"}
               </span>
               {r.parent_section_id && (
@@ -1152,10 +1154,10 @@ function RefundsSummary({
                   {sectionMap.get(r.parent_section_id) ?? "—"}
                 </span>
               )}
-              {r.reason && <span style={{ fontSize: "12px", color: "#6B6560" }}>{r.reason}</span>}
-              {r.notes && <span style={{ fontSize: "11px", color: "#AAA099", fontStyle: "italic" }}>{r.notes}</span>}
+              {r.reason && <span style={{ fontSize: "12px", color: "#5C645F" }}>{r.reason}</span>}
+              {r.notes && <span style={{ fontSize: "11px", color: "#98A09A", fontStyle: "italic" }}>{r.notes}</span>}
             </div>
-            <span style={{ fontSize: "13px", fontWeight: "600", color: "#C0392B", flexShrink: 0 }}>−{fmt(r.amount)}</span>
+            <span style={{ fontSize: "13px", fontWeight: "600", color: "#CE2458", flexShrink: 0 }}>−{fmt(r.amount)}</span>
             {canWrite && (
               confirmDeleteId === r.id ? (
                 <div style={{ display: "flex", gap: "6px", alignItems: "center", flexShrink: 0 }}>
@@ -1181,18 +1183,18 @@ function RefundsSummary({
                   <button
                     onClick={() => setEditingRefund(r)}
                     title="ערוך החזר"
-                    style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
-                    onMouseEnter={(el) => { el.currentTarget.style.background = "#F5F0EC"; el.currentTarget.style.color = "#6B6560"; }}
-                    onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#98A09A", display: "flex", alignItems: "center" }}
+                    onMouseEnter={(el) => { el.currentTarget.style.background = "#F5F0EC"; el.currentTarget.style.color = "#5C645F"; }}
+                    onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#98A09A"; }}
                   >
                     <Pencil size={13} />
                   </button>
                   <button
                     onClick={() => setConfirmDeleteId(r.id)}
                     title="מחק החזר"
-                    style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#98A09A", display: "flex", alignItems: "center" }}
                     onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
-                    onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                    onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#98A09A"; }}
                   >
                     <Trash2 size={13} />
                   </button>
@@ -1281,19 +1283,19 @@ function GradeRow({
   const inactiveRows = secRows.filter((r) => !r.active);
   const dash = () => <span className="num" style={{ color: DIM }}>—</span>;
   const renderSecRow = (r: (typeof secRows)[number], isInactive: boolean) => (
-    <div key={r.s.id} style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", alignItems: "center", borderTop: "1px solid rgba(107,35,86,0.07)", background: isInactive ? "#FBF8FB" : "transparent" }}>
-      <span title={r.s.name} style={{ textAlign: "right", fontWeight: 500, color: "#1A1A1A", fontSize: "12.5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.s.name}</span>
+    <div key={r.s.id} style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", alignItems: "center", borderTop: "1px solid rgba(31,36,33,0.05)", background: isInactive ? "#FBFAF7" : "transparent" }}>
+      <span title={r.s.name} style={{ textAlign: "right", fontWeight: 500, color: "#1F2421", fontSize: "12.5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.s.name}</span>
       <div style={{ textAlign: "right" }}>
         <AmountPerStudentCell gradeId={grade.id} sectionId={r.s.id} sectionName={r.s.name} current={r.aps} existingId={r.gsa?.existing_id} />
       </div>
-      <div style={{ textAlign: "right" }}>{r.planned > 0 ? <span className="num" style={{ color: "#B45309" }}>{fmt(r.planned)}</span> : dash()}</div>
-      <div style={{ textAlign: "right" }}>{r.collected > 0 ? <span className="num" style={{ color: "#2B2B2B", fontWeight: 600 }}>{fmt(r.collected)}</span> : dash()}</div>
+      <div style={{ textAlign: "right" }}>{r.planned > 0 ? <span className="num" style={{ color: "#997404" }}>{fmt(r.planned)}</span> : dash()}</div>
+      <div style={{ textAlign: "right" }}>{r.collected > 0 ? <span className="num" style={{ color: "#1F2421", fontWeight: 600 }}>{fmt(r.collected)}</span> : dash()}</div>
       <div style={{ display: "flex", alignItems: "center", gap: "3px", minWidth: 0 }}>
-        {r.spent > 0 ? <span className="num" style={{ color: "#C0392B" }}>{fmt(r.spent)}</span> : dash()}
-        {r.secProrated && <span title="כולל חלק יחסי מהוצאות כל השכבות" style={{ display: "inline-flex", color: "#C08A6A", cursor: "help", flexShrink: 0 }}><Layers size={9} /></span>}
+        {r.spent > 0 ? <span className="num" style={{ color: "#CE2458" }}>{fmt(r.spent)}</span> : dash()}
+        {r.secProrated && <span title="כולל חלק יחסי מהוצאות כל השכבות" style={{ display: "inline-flex", color: "#997404", cursor: "help", flexShrink: 0 }}><Layers size={9} /></span>}
       </div>
-      <div style={{ textAlign: "right" }}>{(r.collected > 0 || r.spent > 0) ? <span className="num" style={{ fontWeight: 600, color: (r.collected - r.spent) < 0 ? "#C0392B" : "#2D6644" }}>{fmt(r.collected - r.spent)}</span> : dash()}</div>
-      <div style={{ textAlign: "right" }}>{r.planned === 0 ? dash() : <span className="num" style={{ fontWeight: 600, color: r.secPct >= 100 ? "#2D6644" : r.secPct >= 50 ? "#8B2F6E" : "#A98FA4" }}>{r.secPct}%</span>}</div>
+      <div style={{ textAlign: "right" }}>{(r.collected > 0 || r.spent > 0) ? <span className="num" style={{ fontWeight: 600, color: (r.collected - r.spent) < 0 ? "#CE2458" : "#0B7A5C" }}>{fmt(r.collected - r.spent)}</span> : dash()}</div>
+      <div style={{ textAlign: "right" }}>{r.planned === 0 ? dash() : <span className="num" style={{ fontWeight: 600, color: r.secPct >= 100 ? "#0B7A5C" : r.secPct >= 50 ? "#0B7A5C" : "#5C645F" }}>{r.secPct}%</span>}</div>
     </div>
   );
 
@@ -1307,15 +1309,15 @@ function GradeRow({
           display: "grid",
           gridTemplateColumns: HORIM_GRID,
           padding: "16px 20px", gap: "12px", alignItems: "center",
-          borderBottom: "1px solid rgba(60,40,55,0.06)",
+          borderBottom: "1px solid rgba(31,36,33,0.05)",
           cursor: "pointer",
           animationDelay: `${Math.min(index, 12) * 40}ms`,
         }}
       >
         {/* Grade name + student count */}
         <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-          <span style={{ fontSize: "15px", fontWeight: "500", color: "#1A1A1A" }}>{grade.name}</span>
-          <span style={{ fontSize: "11px", color: "#AAA099", display: "flex", alignItems: "center", gap: "3px" }}>
+          <span style={{ fontSize: "15px", fontWeight: "500", color: "#1F2421" }}>{grade.name}</span>
+          <span style={{ fontSize: "11px", color: "#98A09A", display: "flex", alignItems: "center", gap: "3px" }}>
             <Users size={10} />{grade.student_count} תלמידים
           </span>
         </div>
@@ -1323,24 +1325,24 @@ function GradeRow({
         {/* יעד */}
         <div style={{ textAlign: "right" }}>
           {totalTarget > 0 ? (
-            <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#B45309" }}>{fmt(totalTarget)}</span>
+            <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#997404" }}>{fmt(totalTarget)}</span>
           ) : (
-            <span style={{ fontSize: "12px", color: "#C0BAB4", fontStyle: "italic" }}>לא הוגדר</span>
+            <span style={{ fontSize: "12px", color: "#98A09A", fontStyle: "italic" }}>לא הוגדר</span>
           )}
         </div>
 
         {/* נגבה */}
         <div style={{ textAlign: "right" }}>
-          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#2B2B2B" }}>{fmt(totalCollected)}</span>
+          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#1F2421" }}>{fmt(totalCollected)}</span>
         </div>
 
         {/* יצא — המספר בקצה הימני, אייקון החלק היחסי משמאלו במקום קבוע */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "3px", minWidth: 0 }}>
-          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: totalSpent > 0 ? "#C0392B" : "#C9C2CC" }}>
+          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: totalSpent > 0 ? "#CE2458" : "#98A09A" }}>
             {totalSpent > 0 ? fmt(totalSpent) : "—"}
           </span>
           {hasProrated && (
-            <span title="כולל חלק יחסי מהוצאות כל השכבות" onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", color: "#C08A6A", cursor: "help", flexShrink: 0 }}>
+            <span title="כולל חלק יחסי מהוצאות כל השכבות" onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", color: "#997404", cursor: "help", flexShrink: 0 }}>
               <Layers size={10} />
             </span>
           )}
@@ -1348,7 +1350,7 @@ function GradeRow({
 
         {/* נשאר בקופה = נגבה − יצא */}
         <div style={{ textAlign: "right" }}>
-          <span className="num" style={{ fontSize: "13px", fontWeight: "600", color: cashBalance < 0 ? "#C0392B" : "#2D6644", background: cashBalance < 0 ? "rgba(192,57,43,0.08)" : "rgba(45,102,68,0.08)", borderRadius: "99px", padding: "2px 8px", display: "inline-block" }}>
+          <span className="num" style={{ fontSize: "13px", fontWeight: "600", color: cashBalance < 0 ? "#CE2458" : "#0B7A5C", background: cashBalance < 0 ? "rgba(206,36,88,0.08)" : "rgba(11,122,92,0.09)", borderRadius: "99px", padding: "2px 8px", display: "inline-block" }}>
             {fmt(cashBalance)}
           </span>
         </div>
@@ -1357,7 +1359,7 @@ function GradeRow({
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span className="num" style={{
             fontSize: "12px", fontWeight: "600", flexShrink: 0, minWidth: "34px",
-            color: totalTarget === 0 ? "#AAA099" : pct >= 100 ? "#2D6644" : pct >= 50 ? "#8B2F6E" : "#A98FA4",
+            color: totalTarget === 0 ? "#98A09A" : pct >= 100 ? "#0B7A5C" : pct >= 50 ? "#0B7A5C" : "#5C645F",
           }}>
             {totalTarget === 0 ? "—" : `${pct}%`}
           </span>
@@ -1369,7 +1371,7 @@ function GradeRow({
           onClick={(e) => { e.stopPropagation(); setExpanded((x) => !x); }}
           className="horim-chevron-btn"
           aria-label={expanded ? "סגור פירוט" : "פתח פירוט"}
-          style={{ border: "none", cursor: "pointer", color: "#9B6A90", padding: "6px", borderRadius: "999px", display: "flex", alignItems: "center", justifyContent: "center" }}
+          style={{ border: "none", cursor: "pointer", padding: "6px", borderRadius: "999px", display: "flex", alignItems: "center", justifyContent: "center" }}
         >
           <ChevronDown className="horim-chevron" size={16} />
         </button>
@@ -1378,35 +1380,35 @@ function GradeRow({
       {/* Expanded drill-down — animated open/close (respects reduced-motion) */}
       <div className="horim-drill" data-open={expanded ? "true" : "false"}>
         <div className="horim-drill__inner">
-        <div style={{ background: "#FBF6FA", borderBottom: "1px solid rgba(60,40,55,0.08)", boxShadow: "inset 0 3px 6px -4px rgba(107,35,86,0.22)", padding: "0 20px 16px" }}>
+        <div style={{ background: "#FBFAF7", borderBottom: "1px solid rgba(31,36,33,0.08)", boxShadow: "inset 0 3px 6px -4px rgba(12,35,27,0.12)", padding: "0 20px 16px" }}>
           <div style={{ paddingTop: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
 
             {/* Per-section table — full picture for this grade */}
             <div>
-              <div style={{ fontSize: "11px", fontWeight: "600", color: "#8B2F6E", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: "600", color: "#0B7A5C", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "8px" }}>
                 פירוט לפי סעיף — {grade.name}
               </div>
-              <div style={{ border: "1px solid rgba(107,35,86,0.10)", borderRadius: "12px", overflow: "hidden" }}>
+              <div style={{ border: "1px solid rgba(31,36,33,0.09)", borderRadius: "12px", overflow: "hidden" }}>
                 <div style={{ overflowX: "auto" }}>
                   <div style={{ minWidth: "640px" }}>
                     {/* header — shares DRILL_GRID with every detail row below */}
-                    <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", background: "#F6EEF4", fontSize: "12px", fontWeight: 600, color: "#6B2356" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", background: "#FBFAF7", fontSize: "12px", fontWeight: 600, color: "#0B7A5C" }}>
                       <span style={{ textAlign: "right" }}>סעיף</span>
                       <span style={{ textAlign: "right" }}>לתלמיד</span>
-                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#B45309", flexShrink: 0 }} />יעד ({Math.round(multiplier * 100)}%)</span>
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#997404", flexShrink: 0 }} />יעד ({Math.round(multiplier * 100)}%)</span>
                       <span style={{ textAlign: "right" }}>נגבה</span>
-                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#C0392B", flexShrink: 0 }} />יצא</span>
-                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#2D6644", flexShrink: 0 }} />נשאר</span>
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#CE2458", flexShrink: 0 }} />יצא</span>
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#0B7A5C", flexShrink: 0 }} />נשאר</span>
                       <span style={{ textAlign: "right" }}>%</span>
                     </div>
                     {activeRows.length === 0 && inactiveRows.length > 0 && (
-                      <div style={{ padding: "12px 16px", fontSize: "12px", color: "#9B8FA6", borderTop: "1px solid rgba(107,35,86,0.07)", textAlign: "right" }}>אין עדיין יעד, גבייה או הוצאה לשכבה זו.</div>
+                      <div style={{ padding: "12px 16px", fontSize: "12px", color: "#98A09A", borderTop: "1px solid rgba(31,36,33,0.05)", textAlign: "right" }}>אין עדיין יעד, גבייה או הוצאה לשכבה זו.</div>
                     )}
                     {activeRows.map((r) => renderSecRow(r, false))}
                     {inactiveRows.length > 0 && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setShowInactive((x) => !x); }}
-                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "8px 16px", borderTop: "1px solid rgba(107,35,86,0.07)", background: "#FAF6F9", border: "none", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "12px", color: "#8B6FA0" }}
+                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "8px 16px", borderTop: "1px solid rgba(31,36,33,0.05)", background: "#FBFAF7", border: "none", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "12px", color: "#98A09A" }}
                       >
                         {showInactive ? "הסתר סעיפים ללא פעילות" : `עוד ${inactiveRows.length} סעיפים ללא פעילות לשכבה זו`}
                         {showInactive ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
@@ -1414,15 +1416,15 @@ function GradeRow({
                     )}
                     {showInactive && inactiveRows.map((r) => renderSecRow(r, true))}
                     {(otherSpent > 0 || unassignedCollected > 0) && (
-                      <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", alignItems: "center", borderTop: "1px solid rgba(107,35,86,0.07)", background: "#F7F3F6" }}>
-                        <span style={{ gridColumn: "span 2", textAlign: "right", fontWeight: 500, color: "#7A6E85", fontSize: "12px" }}>אחר — הוצאות ללא סעיף</span>
+                      <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", alignItems: "center", borderTop: "1px solid rgba(31,36,33,0.05)", background: "#FBFAF7" }}>
+                        <span style={{ gridColumn: "span 2", textAlign: "right", fontWeight: 500, color: "#5C645F", fontSize: "12px" }}>אחר — הוצאות ללא סעיף</span>
                         <div style={{ textAlign: "right" }}>{dash()}</div>
-                        <div style={{ textAlign: "right" }}>{unassignedCollected > 0 ? <span className="num" style={{ color: "#2B2B2B", fontWeight: 600 }}>{fmt(unassignedCollected)}</span> : dash()}</div>
+                        <div style={{ textAlign: "right" }}>{unassignedCollected > 0 ? <span className="num" style={{ color: "#1F2421", fontWeight: 600 }}>{fmt(unassignedCollected)}</span> : dash()}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: "3px", minWidth: 0 }}>
-                          {otherSpent > 0 ? <span className="num" style={{ color: "#C0392B" }}>{fmt(otherSpent)}</span> : dash()}
-                          {otherProrated && <span title="כולל חלק יחסי מהוצאות כל השכבות" style={{ display: "inline-flex", color: "#C08A6A", cursor: "help", flexShrink: 0 }}><Layers size={9} /></span>}
+                          {otherSpent > 0 ? <span className="num" style={{ color: "#CE2458" }}>{fmt(otherSpent)}</span> : dash()}
+                          {otherProrated && <span title="כולל חלק יחסי מהוצאות כל השכבות" style={{ display: "inline-flex", color: "#997404", cursor: "help", flexShrink: 0 }}><Layers size={9} /></span>}
                         </div>
-                        <div style={{ textAlign: "right" }}>{(unassignedCollected > 0 || otherSpent > 0) ? <span className="num" style={{ fontWeight: 600, color: (unassignedCollected - otherSpent) < 0 ? "#C0392B" : "#2D6644" }}>{fmt(unassignedCollected - otherSpent)}</span> : dash()}</div>
+                        <div style={{ textAlign: "right" }}>{(unassignedCollected > 0 || otherSpent > 0) ? <span className="num" style={{ fontWeight: 600, color: (unassignedCollected - otherSpent) < 0 ? "#CE2458" : "#0B7A5C" }}>{fmt(unassignedCollected - otherSpent)}</span> : dash()}</div>
                         <div style={{ textAlign: "right" }}>{dash()}</div>
                       </div>
                     )}
@@ -1433,7 +1435,7 @@ function GradeRow({
 
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-              <span style={{ fontSize: "12px", fontWeight: "600", color: "#AAA099", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+              <span style={{ fontSize: "12px", fontWeight: "600", color: "#98A09A", letterSpacing: "0.04em", textTransform: "uppercase" }}>
                 היסטוריית גבייה
               </span>
               {canWrite && (
@@ -1442,8 +1444,8 @@ function GradeRow({
                   style={{
                     display: "flex", alignItems: "center", gap: "5px",
                     padding: "5px 12px",
-                    border: "1px solid #8B2F6E", borderRadius: "7px",
-                    background: "#F4EBF2", color: "#6B2356",
+                    border: "1px solid #0B7A5C", borderRadius: "7px",
+                    background: "#F1EEE8", color: "#0B7A5C",
                     fontSize: "12px", cursor: "pointer", fontFamily: "var(--font-sans)",
                   }}
                 >
@@ -1454,39 +1456,39 @@ function GradeRow({
             </div>
 
             {gradeCollections.length === 0 ? (
-              <div style={{ fontSize: "13px", color: "#7A7470", padding: "8px 0" }}>אין גביות רשומות עדיין</div>
+              <div style={{ fontSize: "13px", color: "#5C645F", padding: "8px 0" }}>אין גביות רשומות עדיין</div>
             ) : (
               gradeCollections.map((c) => {
                 const sec = sections.find((s) => s.id === c.parent_section_id);
                 return (
                   <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#fff", borderRadius: "8px", border: "1px solid #EAE5DE" }}>
                     <div style={{ display: "flex", gap: "12px", alignItems: "center", flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: "12px", color: "#AAA099", whiteSpace: "nowrap" }}>
+                      <span style={{ fontSize: "12px", color: "#98A09A", whiteSpace: "nowrap" }}>
                         {new Date(c.collection_date).toLocaleDateString("he-IL")}
                       </span>
-                      <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "99px", background: c.parent_section_id === null ? "#FDF3DC" : "#F4EBF2", color: c.parent_section_id === null ? "#92400E" : "#6B2356", whiteSpace: "nowrap" }}>
+                      <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "99px", background: c.parent_section_id === null ? "#FDF3DC" : "#F1EEE8", color: c.parent_section_id === null ? "#92400E" : "#0B7A5C", whiteSpace: "nowrap" }}>
                         {c.parent_section_id === null ? "לא משויך" : (sec?.name ?? "—")}
                       </span>
-                      {c.notes && <span style={{ fontSize: "12px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.notes}</span>}
+                      {c.notes && <span style={{ fontSize: "12px", color: "#5C645F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.notes}</span>}
                     </div>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
-                      <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#8B2F6E" }}>{fmt(c.amount)}</span>
+                      <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#0B7A5C" }}>{fmt(c.amount)}</span>
                       {canWrite && (
                         <button
                           onClick={() => onEditCollection(c)}
                           title="ערוך"
-                          style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
-                          onMouseEnter={(el) => { el.currentTarget.style.background = "#F0E0ED"; el.currentTarget.style.color = "#8B2F6E"; }}
-                          onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#98A09A", display: "flex", alignItems: "center" }}
+                          onMouseEnter={(el) => { el.currentTarget.style.background = "#EDE8E0"; el.currentTarget.style.color = "#0B7A5C"; }}
+                          onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#98A09A"; }}
                         ><Pencil size={12} /></button>
                       )}
                       {canWrite && (
                         <button
                           onClick={() => onDeleteCollection(c.id)}
                           title="מחק"
-                          style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#AAA099", display: "flex", alignItems: "center" }}
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#98A09A", display: "flex", alignItems: "center" }}
                           onMouseEnter={(el) => { el.currentTarget.style.background = "#FEF2F2"; el.currentTarget.style.color = "#DC2626"; }}
-                          onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#AAA099"; }}
+                          onMouseLeave={(el) => { el.currentTarget.style.background = "none"; el.currentTarget.style.color = "#98A09A"; }}
                         ><Trash2 size={12} /></button>
                       )}
                     </div>
@@ -1645,7 +1647,7 @@ export default function HorimPage() {
   const showPct       = reduceMotion ? (hasTarget ? Math.min(grandPct, 100) : 0) : animPct;
   // "נשאר בקופה" is the hero's star: state colour (green positive · amber negative · grey zero),
   // tuned to read on the dark plum hero.
-  const cashColor = grandCash < 0 ? "#F4A6A0" : "#8FE3B0";
+  const cashColor = grandCash < 0 ? "#F2A0B4" : "#8FE3C0";
 
   // Auto-sync horim amounts → budget_categories once per mount
   // (ensures budget planning reflects current planned amounts even for pre-existing data)
@@ -1725,23 +1727,23 @@ export default function HorimPage() {
         {/* Header */}
         <div className="horim-actionbar" data-stuck={barStuck ? "true" : "false"} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: isMobile ? "flex-start" : "flex-start", gap: isMobile ? "12px" : "0", paddingBlock: "4px" }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1A1A1A", letterSpacing: "-0.8px" }}>גביית הורים</h1>
-            <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#AAA099" }}>
+            <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", color: "#1F2421", letterSpacing: "-0.8px" }}>גביית הורים</h1>
+            <p style={{ margin: "5px 0 0", fontSize: "13px", color: "#98A09A" }}>
               {isLoading ? "טוען..." : `${grades.length} שכבות · ${sections.length} סעיפים`}
             </p>
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
             {/* Basis toggle */}
-            <div style={{ display: "flex", background: "#F0EBE6", borderRadius: "8px", padding: "3px", gap: "2px" }}>
+            <div style={{ display: "flex", background: "#fff", borderRadius: "11px", padding: "3px", gap: "2px", boxShadow: "0 1px 2px rgba(31,36,33,0.05), 0 0 0 1px rgba(31,36,33,0.08)" }}>
               {([["year", `${yearPct}%`], ["full", "100%"]] as const).map(([mode, label]) => {
                 const active = forecastPct === null && basisMode === mode;
                 return (
                   <button key={mode} onClick={() => { setForecastPct(null); setConfirmSetPct(false); setBasisMode(mode); }} style={{
                     padding: "5px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "500",
                     border: "none", cursor: "pointer", fontFamily: "var(--font-sans)",
-                    background: active ? "#fff" : "transparent",
-                    color: active ? "#8B2F6E" : "#888079",
-                    boxShadow: active ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+                    background: active ? "#0C231B" : "transparent",
+                    color: active ? "#F2EFE8" : "#5C645F",
+                    boxShadow: "none",
                     transition: "all 0.15s",
                   }}>
                     {label}
@@ -1751,8 +1753,8 @@ export default function HorimPage() {
               <button onClick={() => { setForecastPct((p) => p === null ? yearPct : null); setConfirmSetPct(false); }} style={{
                 padding: "5px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "500",
                 border: "none", cursor: "pointer", fontFamily: "var(--font-sans)",
-                background: forecastPct !== null ? "#B8860B" : "transparent",
-                color: forecastPct !== null ? "#fff" : "#888079",
+                background: forecastPct !== null ? "#997404" : "transparent",
+                color: forecastPct !== null ? "#fff" : "#5C645F",
                 boxShadow: forecastPct !== null ? "0 1px 3px rgba(0,0,0,0.2)" : "none",
                 transition: "all 0.15s",
               }}>
@@ -1769,7 +1771,7 @@ export default function HorimPage() {
                   display: "flex", alignItems: "center", gap: "6px",
                   padding: "10px 14px",
                   border: "1px solid #E8E2D9", borderRadius: "10px",
-                  background: "#fff", color: "#6B6560",
+                  background: "#fff", color: "#5C645F",
                   fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)",
                 }}
                 title="ייבוא דוח סטטוס גביה מתוכנת כספים 2000"
@@ -1785,7 +1787,7 @@ export default function HorimPage() {
                   display: "flex", alignItems: "center", gap: "6px",
                   padding: "10px 14px",
                   border: "1px solid #E8E2D9", borderRadius: "10px",
-                  background: "#fff", color: "#6B6560",
+                  background: "#fff", color: "#5C645F",
                   fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)",
                 }}
                 title="ניהול סעיפי גבייה"
@@ -1804,8 +1806,9 @@ export default function HorimPage() {
                   display: "flex", alignItems: "center", gap: "7px",
                   padding: "10px 16px",
                   background: "#fff",
-                  border: "1.5px solid #C0392B", borderRadius: "10px",
-                  color: "#C0392B", fontSize: "14px", fontWeight: "500",
+                  border: "none", borderRadius: "11px",
+                  color: "#5C645F", fontSize: "14px", fontWeight: "500",
+                  boxShadow: "0 1px 2px rgba(31,36,33,0.05), 0 0 0 1px rgba(31,36,33,0.08)",
                   cursor: "pointer", fontFamily: "var(--font-sans)",
                 }}
               >
@@ -1819,11 +1822,11 @@ export default function HorimPage() {
                 style={{
                   display: "flex", alignItems: "center", gap: "7px",
                   padding: "10px 18px",
-                  background: "linear-gradient(135deg, #B04A90, #8B2F6E)",
-                  border: "none", borderRadius: "10px",
+                  background: "linear-gradient(135deg, #A44A61, #7A2E42)",
+                  border: "none", borderRadius: "11px",
                   color: "#fff", fontSize: "14px", fontWeight: "500",
                   cursor: "pointer", fontFamily: "var(--font-sans)",
-                  boxShadow: "0 4px 12px rgba(139,47,110,0.3)",
+                  boxShadow: "0 2px 8px rgba(122,46,66,0.28), inset 0 1px 0 rgba(255,255,255,0.15)",
                 }}
               >
                 <Plus size={16} />
@@ -1838,36 +1841,36 @@ export default function HorimPage() {
           <div style={{
             display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap",
             background: "linear-gradient(135deg, #FDF6E3, #FBF0D9)",
-            border: "1.5px solid #E8CF9C", borderRadius: "14px",
+            border: "1.5px solid #E8C97E", borderRadius: "14px",
             padding: "12px 18px",
           }}>
             <span style={{
-              fontSize: "11px", fontWeight: "700", color: "#fff", background: "#B8860B",
+              fontSize: "11px", fontWeight: "700", color: "#fff", background: "#997404",
               borderRadius: "99px", padding: "3px 10px", letterSpacing: "0.05em", whiteSpace: "nowrap",
             }}>
               מצב תחזית
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: "220px" }}>
-              <span className="num" style={{ fontSize: "20px", fontWeight: "600", color: "#8B5E0B", minWidth: "52px" }}>
+              <span className="num" style={{ fontSize: "20px", fontWeight: "600", color: "#997404", minWidth: "52px" }}>
                 {forecastPct}%
               </span>
               <input
                 type="range" min={50} max={100} step={1}
                 value={forecastPct}
                 onChange={(e) => { setForecastPct(Number(e.target.value)); setConfirmSetPct(false); }}
-                style={{ flex: 1, maxWidth: "300px", accentColor: "#B8860B", cursor: "grab" }}
+                style={{ flex: 1, maxWidth: "300px", accentColor: "#997404", cursor: "grab" }}
               />
-              <span style={{ fontSize: "11.5px", color: "#8B5E0B", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "11.5px", color: "#997404", whiteSpace: "nowrap" }}>
                 אחוז השנה הקבוע: <b>{yearPct}%</b>
               </span>
             </div>
-            <span style={{ fontSize: "11.5px", color: "#A08040" }}>
+            <span style={{ fontSize: "11.5px", color: "#997404" }}>
               תצוגה זמנית — לא נשמרת
             </span>
             {canWrite && forecastPct !== yearPct && (
               confirmSetPct ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ fontSize: "12px", color: "#8B5E0B", fontWeight: "600" }}>
+                  <span style={{ fontSize: "12px", color: "#997404", fontWeight: "600" }}>
                     לקבוע {forecastPct}% כאחוז השנה? כל היעדים במערכת יתעדכנו.
                   </span>
                   <button
@@ -1879,25 +1882,25 @@ export default function HorimPage() {
                       } catch { toast.error("שגיאה בקביעת אחוז הגבייה"); }
                     }}
                     disabled={setCollectionPct.isPending}
-                    style={{ padding: "6px 14px", borderRadius: "8px", border: "none", background: "#B8860B", color: "#fff", fontSize: "12.5px", fontWeight: "600", cursor: "pointer", fontFamily: "var(--font-sans)" }}
+                    style={{ padding: "6px 14px", borderRadius: "8px", border: "none", background: "#997404", color: "#fff", fontSize: "12.5px", fontWeight: "600", cursor: "pointer", fontFamily: "var(--font-sans)" }}
                   >
                     {setCollectionPct.isPending ? "קובע..." : "כן, קבע"}
                   </button>
                   <button onClick={() => setConfirmSetPct(false)}
-                    style={{ padding: "6px 10px", borderRadius: "8px", border: "1px solid #E8CF9C", background: "#fff", color: "#8B5E0B", fontSize: "12.5px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                    style={{ padding: "6px 10px", borderRadius: "8px", border: "1px solid #E8C97E", background: "#fff", color: "#997404", fontSize: "12.5px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
                     ביטול
                   </button>
                 </div>
               ) : (
                 <button onClick={() => setConfirmSetPct(true)}
-                  style={{ padding: "6px 14px", borderRadius: "8px", border: "1.5px solid #B8860B", background: "#fff", color: "#8B5E0B", fontSize: "12.5px", fontWeight: "600", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-sans)" }}>
+                  style={{ padding: "6px 14px", borderRadius: "8px", border: "1.5px solid #997404", background: "#fff", color: "#997404", fontSize: "12.5px", fontWeight: "600", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-sans)" }}>
                   קבע {forecastPct}% כאחוז השנה
                 </button>
               )
             )}
             <button onClick={() => { setForecastPct(null); setConfirmSetPct(false); }}
               title="חזרה לתצוגה רגילה"
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#B8A060", padding: "2px", fontSize: "15px", lineHeight: 1 }}>
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#997404", padding: "2px", fontSize: "15px", lineHeight: 1 }}>
               ✕
             </button>
           </div>
@@ -1906,49 +1909,45 @@ export default function HorimPage() {
         {/* Summary hero */}
         {isLoading ? <HeroSkeleton isMobile={isMobile} /> : (
         <div className="hk-fade-in" style={{
-          background: "linear-gradient(135deg, #9B3880 0%, #7A2760 55%, #561A43 100%)",
-          borderRadius: "16px", padding: isMobile ? "24px 16px" : "28px 32px",
-          display: "flex", justifyContent: "space-between", alignItems: "flex-end",
-          flexWrap: "wrap", gap: "20px",
-          boxShadow: "0 16px 56px rgba(86,26,67,0.35), 0 1px 0 rgba(255,255,255,0.08) inset",
+          background: "radial-gradient(120% 180% at 85% -20%, #1B4434 0%, #123126 38%, #0C231B 100%)",
+          borderRadius: "24px", padding: isMobile ? "24px" : "36px 40px",
           position: "relative", overflow: "hidden",
+          boxShadow: "0 1px 2px rgba(12,35,27,0.2), 0 20px 48px -18px rgba(12,35,27,0.45)",
         }}>
-          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse 70% 60% at 20% 10%, rgba(176,74,144,0.25) 0%, transparent 70%)" }} />
-          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse 55% 45% at 92% 108%, rgba(240,160,216,0.16) 0%, transparent 70%)" }} />
-          <div style={{ position: "relative" }}>
-            <div style={{ fontSize: "11px", color: "rgba(220,150,200,0.8)", fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px" }}>
-              סה״כ גבייה — כל השכבות
-            </div>
-            <div className="num" style={{ fontSize: isMobile ? "36px" : "48px", fontWeight: "300", color: "#fff", letterSpacing: "-0.02em", lineHeight: 1 }}>
-              {new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(showCollected)}
-              <span style={{ fontSize: "0.46em", fontWeight: 400, opacity: 0.72, marginInlineStart: "0.14em", letterSpacing: 0 }}>₪</span>
-            </div>
-            {hasTarget ? (
-              <>
-                <div style={{ marginTop: "8px", fontSize: "12px", color: "#F2C879" }}>
-                  מתוך יעד <span className="num">{fmt(showTarget)}</span> ({basis}%)
-                </div>
-                <div style={{ display: "flex", gap: isMobile ? "24px" : "40px", marginTop: "16px", flexWrap: "wrap", alignItems: "flex-end", position: "relative" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.6)", textTransform: "uppercase", letterSpacing: "0.06em" }}>יצא</div>
-                    <div className="num" style={{ fontSize: isMobile ? "18px" : "20px", fontWeight: "400", color: "#F4A6A0", lineHeight: 1 }}>{fmt(showSpent)}</div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <div style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.85)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>נשאר בקופה</div>
-                    <div className="num" style={{ fontSize: isMobile ? "30px" : "38px", fontWeight: "300", color: cashColor, lineHeight: 0.95, letterSpacing: "-0.015em", textShadow: "0 2px 18px rgba(0,0,0,0.20)" }}>{fmt(showCash)}</div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div style={{ marginTop: "12px", fontSize: "12px", color: "rgba(220,150,200,0.55)", display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ padding: "2px 8px", borderRadius: "6px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(220,150,200,0.25)" }}>
-                  לא הוגדר יעד — הגדר סכום/תלמיד בטבלה
-                </span>
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(52% 70% at 18% 105%, rgba(232,201,126,0.13), transparent 65%)" }} />
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(40% 55% at 65% -10%, rgba(143,227,192,0.08), transparent 70%)" }} />
+          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: isMobile ? "24px" : "44px", flexWrap: "wrap" }}>
+            {/* collected */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <span style={{ fontSize: "12px", color: "rgba(242,239,232,0.62)", letterSpacing: "0.02em" }}>סה״כ גבייה — כל השכבות</span>
+              <div className="num" style={{ fontSize: isMobile ? "38px" : "54px", fontWeight: "300", color: "#F7F4EC", letterSpacing: "-0.025em", lineHeight: 1.05 }}>
+                {new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(showCollected)}
+                <span style={{ fontSize: "0.44em", fontWeight: 400, opacity: 0.55, marginInlineStart: "0.12em", letterSpacing: 0 }}>₪</span>
               </div>
-            )}
-          </div>
-          <div style={{ position: "relative", display: "flex", justifyContent: isMobile ? "center" : "flex-end", width: isMobile ? "100%" : "auto" }}>
-            <HeroRing pct={hasTarget ? grandPct : 0} hasTarget={hasTarget} reduceMotion={reduceMotion} size={isMobile ? 118 : 152} />
+              {hasTarget ? (
+                <div style={{ marginTop: "8px", fontSize: "13px", color: "#E8C97E" }}>
+                  מתוך צפי שנתי <b className="num" style={{ fontWeight: 500 }}>{fmt(showTarget)}</b> ({basis}%)
+                </div>
+              ) : (
+                <div style={{ marginTop: "10px", fontSize: "12px", color: "rgba(242,239,232,0.5)" }}>
+                  <span style={{ padding: "2px 8px", borderRadius: "6px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(242,239,232,0.2)" }}>לא הוגדר צפי — הגדר סכום/תלמיד בטבלה</span>
+                </div>
+              )}
+            </div>
+            {/* divider · נשאר · יצא · divider · ring */}
+            <div style={{ marginRight: "auto", display: "flex", alignItems: "center", gap: isMobile ? "20px" : "36px", flexWrap: "wrap" }}>
+              {hasTarget && <div style={{ width: "1px", alignSelf: "stretch", background: "linear-gradient(180deg, transparent, rgba(242,239,232,0.14), transparent)" }} />}
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <span style={{ fontSize: "12px", color: "rgba(242,239,232,0.5)", letterSpacing: "0.02em" }}>נשאר בקופה</span>
+                <div className="num" style={{ fontSize: isMobile ? "28px" : "34px", fontWeight: "400", color: cashColor, lineHeight: 1.05, letterSpacing: "-0.02em" }}>{fmt(showCash)}</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                <span style={{ fontSize: "12px", color: "rgba(242,239,232,0.5)", letterSpacing: "0.02em" }}>יצא</span>
+                <div className="num" style={{ fontSize: "19px", fontWeight: "400", color: "#F2A0B4", lineHeight: 1.05 }}>{fmt(showSpent)}</div>
+              </div>
+              {hasTarget && <div style={{ width: "1px", alignSelf: "stretch", background: "linear-gradient(180deg, transparent, rgba(242,239,232,0.14), transparent)" }} />}
+              <HeroRing pct={hasTarget ? grandPct : 0} hasTarget={hasTarget} reduceMotion={reduceMotion} size={isMobile ? 104 : 132} />
+            </div>
           </div>
         </div>
         )}
@@ -1959,12 +1958,13 @@ export default function HorimPage() {
         ) : (
           <div className="hk-fade-in" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {grades.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#9B7FA0", fontSize: "12px", paddingRight: "4px" }}>
-                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "16px", height: "16px", borderRadius: "50%", background: "#F2E8F0", color: "#8B2F6E" }}><ChevronDown size={11} /></span>
-                <span>לחצו על שכבה לפירוט לפי סעיפים, יעדים והיסטוריית גבייה</span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", color: "#98A09A", fontSize: "12.5px", margin: "8px 0 2px" }}>
+                <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#997404", opacity: 0.6 }} />
+                <span>לחצו על שכבה לפירוט לפי סעיפים</span>
+                <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#997404", opacity: 0.6 }} />
               </div>
             )}
-          <div style={{ background: "#fff", border: "1px solid rgba(120,80,110,0.08)", borderRadius: "16px", overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 12px 32px -16px rgba(86,26,67,0.18)" }}>
+          <div style={{ background: "#fff", borderRadius: "20px", overflow: "hidden", boxShadow: "0 1px 2px rgba(31,36,33,0.04), 0 12px 32px -12px rgba(31,36,33,0.10)" }}>
             {/* Horizontal scroll wrapper */}
             <div style={{ overflowX: "auto" }}>
               <div style={{ minWidth: "700px" }}>
@@ -1972,22 +1972,22 @@ export default function HorimPage() {
                 <div style={{
                   display: "grid",
                   gridTemplateColumns: HORIM_GRID,
-                  padding: "12px 20px", borderBottom: "1px solid rgba(60,40,55,0.08)",
-                  fontSize: "12px", fontWeight: "600", color: "#AAA099",
+                  padding: "12px 20px", borderBottom: "1px solid rgba(31,36,33,0.08)",
+                  fontSize: "12px", fontWeight: "600", color: "#98A09A",
                   letterSpacing: "0.04em", gap: "12px", background: "#FAFAF8",
                 }}>
                   <span style={{ textAlign: "right" }}>שכבה</span>
-                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#B45309", flexShrink: 0 }} />יעד ({basis}%)</span>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#997404", flexShrink: 0 }} />יעד ({basis}%)</span>
                   <span style={{ textAlign: "right" }}>נגבה</span>
-                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#C0392B", flexShrink: 0 }} />יצא</span>
-                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#2D6644", flexShrink: 0 }} />נשאר בקופה</span>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#CE2458", flexShrink: 0 }} />יצא</span>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "4px" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#0B7A5C", flexShrink: 0 }} />נשאר בקופה</span>
                   <span style={{ textAlign: "right" }}>התקדמות</span>
                   <span />
                 </div>
 
                 {/* Grade rows */}
                 {grades.length === 0 ? (
-                  <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>אין שכבות מוגדרות</div>
+                  <div style={{ padding: "40px", textAlign: "center", color: "#98A09A", fontSize: "14px" }}>אין שכבות מוגדרות</div>
                 ) : (
                   grades.map((g, i) => (
                     <GradeRow
