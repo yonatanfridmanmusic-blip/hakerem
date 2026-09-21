@@ -232,3 +232,26 @@ body { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   .horim-row, .horim-chevron, .horim-drill, .horim-bar__fill { transition: none !important; }
 }
+
+
+/* ─── Horim screen — tech & simplicity (2.7.0 step 6) ─── */
+/* Horim screen — tech & simplicity (2.7.0 step 6) */
+/* skeleton shimmer */
+.hk-skel { background: linear-gradient(90deg, #ECE6DF 25%, #F5F1EB 37%, #ECE6DF 63%); background-size: 400% 100%; animation: hkShimmer 1.4s ease infinite; }
+@keyframes hkShimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+/* fade content in when data arrives */
+.hk-fade-in { animation: hkFadeIn 0.32s ease both; }
+
+/* staggered row entrance — plays once on mount */
+.horim-row-enter { animation: horimRowIn 0.42s ease both; }
+@keyframes horimRowIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* hero progress ring fill */
+.horim-ring__arc { transition: stroke-dashoffset 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .hk-skel { animation: none; }
+  .hk-fade-in, .horim-row-enter { animation: none; }
+  .horim-ring__arc { transition: none; }
+}

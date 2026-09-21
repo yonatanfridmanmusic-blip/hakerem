@@ -108,6 +108,76 @@ function Bar({ pct }: { pct: number }) {
   );
 }
 
+// ─── Hero progress ring (hand-built SVG donut) ────────────────────────────────
+function HeroRing({ pct, hasTarget, reduceMotion, size }: { pct: number; hasTarget: boolean; reduceMotion: boolean; size: number }) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  const pctCount = useCountUp(clamped, 900);           // synced with the ring fill
+  const shown = reduceMotion ? clamped : pctCount;
+  const stroke = size >= 140 ? 11 : 9;
+  const r = (size - stroke) / 2;
+  const C = 2 * Math.PI * r;
+  const target = C * (1 - clamped / 100);
+  const [off, setOff] = useState(C);
+  useEffect(() => {
+    if (reduceMotion) { setOff(target); return; }
+    setOff(C);
+    const id = setTimeout(() => setOff(target), 60);
+    return () => clearTimeout(id);
+  }, [target, C, reduceMotion]);
+  // Same state scale as the progress bars, tuned to read on the dark plum hero.
+  const arc = !hasTarget ? "rgba(240,200,228,0.4)" : clamped >= 100 ? "#8FE3B0" : clamped >= 50 ? "#F0A0D8" : "#D8C4D4";
+  const c = size / 2;
+  return (
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
+        <circle cx={c} cy={c} r={r} fill="none" stroke="rgba(255,255,255,0.13)" strokeWidth={stroke} />
+        <circle className="horim-ring__arc" cx={c} cy={c} r={r} fill="none" stroke={arc} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={C} strokeDashoffset={off} />
+      </svg>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <div className="num" style={{ fontSize: size >= 140 ? "34px" : "27px", fontWeight: 300, color: "#fff", lineHeight: 1, letterSpacing: "-1px" }}>{hasTarget ? `${shown}%` : "—"}</div>
+        <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.72)", marginTop: "6px", letterSpacing: "0.04em" }}>מהיעד השנתי</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Skeleton loading ─────────────────────────────────────────────────────────
+function Shimmer({ w, h, radius = 8 }: { w: number | string; h: number | string; radius?: number | string }) {
+  return <div className="hk-skel" style={{ width: w, height: h, borderRadius: radius }} />;
+}
+function HeroSkeleton({ isMobile }: { isMobile: boolean }) {
+  return (
+    <div style={{ borderRadius: "18px", padding: isMobile ? "22px 18px" : "28px 32px", background: "#F1ECE6", display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "20px", minHeight: isMobile ? "180px" : "156px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <Shimmer w={120} h={12} />
+        <Shimmer w={isMobile ? 190 : 250} h={isMobile ? 36 : 46} radius={10} />
+        <div style={{ display: "flex", gap: "28px", marginTop: "6px" }}>
+          <Shimmer w={72} h={26} />
+          <Shimmer w={120} h={34} />
+        </div>
+      </div>
+      <Shimmer w={isMobile ? 118 : 152} h={isMobile ? 118 : 152} radius="50%" />
+    </div>
+  );
+}
+function TableSkeleton() {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #F1EAE3", borderRadius: "18px", overflow: "hidden", boxShadow: "0 6px 24px -10px rgba(86,26,67,0.14), 0 1px 3px rgba(0,0,0,0.04)" }}>
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} style={{ display: "grid", gridTemplateColumns: HORIM_GRID, gap: "10px", padding: "17px 20px", borderBottom: i < 3 ? "1px solid #F5F0EA" : "none", alignItems: "center" }}>
+          <Shimmer w="70%" h={14} />
+          <Shimmer w="62%" h={12} />
+          <Shimmer w="62%" h={12} />
+          <Shimmer w="55%" h={12} />
+          <Shimmer w="66%" h={12} />
+          <Shimmer w="82%" h={6} radius={99} />
+          <Shimmer w={16} h={16} radius="50%" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Inline amount-per-student editor ─────────────────────────────────────────
 
 function AmountPerStudentCell({
@@ -1148,7 +1218,7 @@ function RefundsSummary({
 
 function GradeRow({
   grade, sections, gsaMap, collectionsMap, onAddCollection, multiplier,
-  onEditCollection, onDeleteCollection, spend,
+  onEditCollection, onDeleteCollection, spend, index,
 }: {
   grade: Grade;
   sections: ParentSection[];
@@ -1159,6 +1229,7 @@ function GradeRow({
   onEditCollection: (c: ParentCollection) => void;
   onDeleteCollection: (id: string) => void;
   spend: GradeSpend;
+  index: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
@@ -1216,13 +1287,13 @@ function GradeRow({
         <AmountPerStudentCell gradeId={grade.id} sectionId={r.s.id} sectionName={r.s.name} current={r.aps} existingId={r.gsa?.existing_id} />
       </div>
       <div style={{ textAlign: "right" }}>{r.planned > 0 ? <span className="num" style={{ color: "#555" }}>{fmt(r.planned)}</span> : dash()}</div>
-      <div style={{ textAlign: "right" }}>{r.collected > 0 ? <span className="num" style={{ color: "#2D6644", fontWeight: 600 }}>{fmt(r.collected)}</span> : dash()}</div>
+      <div style={{ textAlign: "right" }}>{r.collected > 0 ? <span className="num" style={{ color: "#2B2B2B", fontWeight: 600 }}>{fmt(r.collected)}</span> : dash()}</div>
       <div style={{ display: "flex", alignItems: "center", gap: "3px", minWidth: 0 }}>
-        {r.spent > 0 ? <span className="num" style={{ color: "#B5472A" }}>{fmt(r.spent)}</span> : dash()}
+        {r.spent > 0 ? <span className="num" style={{ color: "#6B6560" }}>{fmt(r.spent)}</span> : dash()}
         {r.secProrated && <span title="כולל חלק יחסי מהוצאות כל השכבות" style={{ display: "inline-flex", color: "#C08A6A", cursor: "help", flexShrink: 0 }}><Layers size={9} /></span>}
       </div>
-      <div style={{ textAlign: "right" }}>{(r.collected > 0 || r.spent > 0) ? <span className="num" style={{ fontWeight: 600, color: (r.collected - r.spent) < 0 ? "#B5472A" : "#2D6644" }}>{fmt(r.collected - r.spent)}</span> : dash()}</div>
-      <div style={{ textAlign: "right" }}>{r.planned === 0 ? dash() : <span className="num" style={{ fontWeight: 600, color: r.secPct >= 85 ? "#2D6644" : r.secPct >= 60 ? "#B5472A" : "#8B2F6E" }}>{r.secPct}%</span>}</div>
+      <div style={{ textAlign: "right" }}>{(r.collected > 0 || r.spent > 0) ? <span className="num" style={{ fontWeight: 600, color: (r.collected - r.spent) < 0 ? "#B0791E" : "#2D6644" }}>{fmt(r.collected - r.spent)}</span> : dash()}</div>
+      <div style={{ textAlign: "right" }}>{r.planned === 0 ? dash() : <span className="num" style={{ fontWeight: 600, color: r.secPct >= 100 ? "#2D6644" : r.secPct >= 50 ? "#8B2F6E" : "#A98FA4" }}>{r.secPct}%</span>}</div>
     </div>
   );
 
@@ -1230,14 +1301,15 @@ function GradeRow({
     <>
       <div
         onClick={() => setExpanded((x) => !x)}
-        className="horim-row"
+        className="horim-row horim-row-enter"
         data-open={expanded ? "true" : "false"}
         style={{
           display: "grid",
           gridTemplateColumns: HORIM_GRID,
-          padding: "12px 20px", gap: "10px", alignItems: "center",
-          borderBottom: "1px solid #F3EEE8",
+          padding: "14px 20px", gap: "10px", alignItems: "center",
+          borderBottom: "1px solid #F5F0EA",
           cursor: "pointer",
+          animationDelay: `${Math.min(index, 12) * 40}ms`,
         }}
       >
         {/* Grade name + student count */}
@@ -1259,12 +1331,12 @@ function GradeRow({
 
         {/* נגבה */}
         <div style={{ textAlign: "right" }}>
-          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#8B2F6E" }}>{fmt(totalCollected)}</span>
+          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#2B2B2B" }}>{fmt(totalCollected)}</span>
         </div>
 
         {/* יצא — המספר בקצה הימני, אייקון החלק היחסי משמאלו במקום קבוע */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "3px", minWidth: 0 }}>
-          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: totalSpent > 0 ? "#B5472A" : "#C0BAB4" }}>
+          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: totalSpent > 0 ? "#6B6560" : "#C9C2CC" }}>
             {totalSpent > 0 ? fmt(totalSpent) : "—"}
           </span>
           {hasProrated && (
@@ -1276,7 +1348,7 @@ function GradeRow({
 
         {/* נשאר בקופה = נגבה − יצא */}
         <div style={{ textAlign: "right" }}>
-          <span className="num" style={{ fontSize: "13px", fontWeight: "600", color: cashBalance < 0 ? "#B5472A" : "#2D6644" }}>
+          <span className="num" style={{ fontSize: "13px", fontWeight: "600", color: cashBalance < 0 ? "#B0791E" : "#2D6644" }}>
             {fmt(cashBalance)}
           </span>
         </div>
@@ -1343,12 +1415,12 @@ function GradeRow({
                       <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "7px 14px", alignItems: "center", borderTop: "1px solid #EFE6EC", background: "#F7F3F6" }}>
                         <span style={{ gridColumn: "span 2", textAlign: "right", fontWeight: 500, color: "#7A6E85", fontSize: "12px" }}>אחר — הוצאות ללא סעיף</span>
                         <div style={{ textAlign: "right" }}>{dash()}</div>
-                        <div style={{ textAlign: "right" }}>{unassignedCollected > 0 ? <span className="num" style={{ color: "#2D6644", fontWeight: 600 }}>{fmt(unassignedCollected)}</span> : dash()}</div>
+                        <div style={{ textAlign: "right" }}>{unassignedCollected > 0 ? <span className="num" style={{ color: "#2B2B2B", fontWeight: 600 }}>{fmt(unassignedCollected)}</span> : dash()}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: "3px", minWidth: 0 }}>
-                          {otherSpent > 0 ? <span className="num" style={{ color: "#B5472A" }}>{fmt(otherSpent)}</span> : dash()}
+                          {otherSpent > 0 ? <span className="num" style={{ color: "#6B6560" }}>{fmt(otherSpent)}</span> : dash()}
                           {otherProrated && <span title="כולל חלק יחסי מהוצאות כל השכבות" style={{ display: "inline-flex", color: "#C08A6A", cursor: "help", flexShrink: 0 }}><Layers size={9} /></span>}
                         </div>
-                        <div style={{ textAlign: "right" }}>{(unassignedCollected > 0 || otherSpent > 0) ? <span className="num" style={{ fontWeight: 600, color: (unassignedCollected - otherSpent) < 0 ? "#B5472A" : "#2D6644" }}>{fmt(unassignedCollected - otherSpent)}</span> : dash()}</div>
+                        <div style={{ textAlign: "right" }}>{(unassignedCollected > 0 || otherSpent > 0) ? <span className="num" style={{ fontWeight: 600, color: (unassignedCollected - otherSpent) < 0 ? "#B0791E" : "#2D6644" }}>{fmt(unassignedCollected - otherSpent)}</span> : dash()}</div>
                         <div style={{ textAlign: "right" }}>{dash()}</div>
                       </div>
                     )}
@@ -1818,9 +1890,10 @@ export default function HorimPage() {
         )}
 
         {/* Summary hero */}
-        <div style={{
+        {isLoading ? <HeroSkeleton isMobile={isMobile} /> : (
+        <div className="hk-fade-in" style={{
           background: "linear-gradient(135deg, #9B3880 0%, #7A2760 55%, #561A43 100%)",
-          borderRadius: "20px", padding: isMobile ? "22px 18px" : "28px 32px",
+          borderRadius: "18px", padding: isMobile ? "22px 18px" : "28px 32px",
           display: "flex", justifyContent: "space-between", alignItems: "flex-end",
           flexWrap: "wrap", gap: "20px",
           boxShadow: "0 16px 56px rgba(86,26,67,0.35), 0 1px 0 rgba(255,255,255,0.08) inset",
@@ -1859,45 +1932,24 @@ export default function HorimPage() {
               </div>
             )}
           </div>
-          <div style={{ textAlign: isMobile ? "right" : "left", position: "relative", width: isMobile ? "100%" : "auto" }}>
-            {hasTarget ? (
-              <>
-                <div className="num" style={{
-                  fontSize: isMobile ? "42px" : "58px", fontWeight: "200",
-                  background: "linear-gradient(135deg, #F0A0D8 0%, #D060B0 100%)",
-                  WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-                  letterSpacing: "-3px", lineHeight: 1,
-                }}>
-                  {showPct}%
-                </div>
-                <div style={{ fontSize: "11px", color: "rgba(220,150,200,0.6)", marginTop: "4px", textAlign: isMobile ? "right" : "center" }}>מהיעד נגבה</div>
-              </>
-            ) : (
-              <div style={{
-                display: "flex", flexDirection: "column", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center",
-                padding: "12px 20px", borderRadius: "12px",
-                border: "1px dashed rgba(220,150,200,0.35)",
-                background: "rgba(255,255,255,0.05)",
-              }}>
-                <span style={{ fontSize: "13px", color: "rgba(220,150,200,0.7)", fontWeight: "500" }}>אין יעד מוגדר</span>
-                <span style={{ fontSize: "11px", color: "rgba(220,150,200,0.4)", marginTop: "3px" }}>לחץ/י על סכום בטבלה להגדרה</span>
-              </div>
-            )}
+          <div style={{ position: "relative", display: "flex", justifyContent: isMobile ? "center" : "flex-end", width: isMobile ? "100%" : "auto" }}>
+            <HeroRing pct={hasTarget ? grandPct : 0} hasTarget={hasTarget} reduceMotion={reduceMotion} size={isMobile ? 118 : 152} />
           </div>
         </div>
+        )}
 
         {/* Table */}
         {isLoading ? (
-          <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>טוען...</div>
+          <TableSkeleton />
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+          <div className="hk-fade-in" style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
             {grades.length > 0 && (
               <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#9B7FA0", fontSize: "11.5px", paddingRight: "2px" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "18px", height: "18px", borderRadius: "50%", background: "#F2E8F0", color: "#8B2F6E" }}><ChevronDown size={11} /></span>
                 <span>לחצו על שכבה לפירוט לפי סעיפים, יעדים והיסטוריית גבייה</span>
               </div>
             )}
-          <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden", boxShadow: "0 6px 24px -10px rgba(86,26,67,0.18), 0 1px 3px rgba(0,0,0,0.04)" }}>
+          <div style={{ background: "#fff", border: "1px solid #F1EAE3", borderRadius: "18px", overflow: "hidden", boxShadow: "0 6px 24px -10px rgba(86,26,67,0.18), 0 1px 3px rgba(0,0,0,0.04)" }}>
             {/* Horizontal scroll wrapper */}
             <div style={{ overflowX: "auto" }}>
               <div style={{ minWidth: "700px" }}>
@@ -1922,7 +1974,7 @@ export default function HorimPage() {
                 {grades.length === 0 ? (
                   <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>אין שכבות מוגדרות</div>
                 ) : (
-                  grades.map((g) => (
+                  grades.map((g, i) => (
                     <GradeRow
                       key={g.id}
                       grade={g}
@@ -1930,6 +1982,7 @@ export default function HorimPage() {
                       gsaMap={gsaMap}
                       collectionsMap={collectionsMap}
                       spend={spendByGrade.get(g.id)!}
+                      index={i}
                       onAddCollection={openAddCollection}
                       multiplier={multiplier}
                       onEditCollection={setEditingCollection}
