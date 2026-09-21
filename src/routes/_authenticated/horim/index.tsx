@@ -74,6 +74,11 @@ type GradeSpend = {
   otherProratedAg: number;
 };
 
+// 2.7.0: ONE shared column template for the parent grades table — the header row and every data
+// row reference this single constant, so the columns can never drift apart.
+// Order: שכבה · יעד · נגבה · יצא · נשאר בקופה · התקדמות · שברון.
+const HORIM_GRID = "1.6fr 1fr 1fr 1.1fr 1.1fr 1.4fr 36px";
+
 // ─── Mini progress bar ────────────────────────────────────────────────────────
 
 function Bar({ pct }: { pct: number }) {
@@ -1195,8 +1200,8 @@ function GradeRow({
         onClick={() => setExpanded((x) => !x)}
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(150px,1.5fr) 100px 100px 100px 120px minmax(110px,1fr) 40px",
-          padding: "13px 20px", gap: "8px", alignItems: "center",
+          gridTemplateColumns: HORIM_GRID,
+          padding: "12px 20px", gap: "10px", alignItems: "center",
           borderBottom: "1px solid #F3EEE8",
           transition: "background 0.1s",
           cursor: "pointer",
@@ -1213,7 +1218,7 @@ function GradeRow({
         </div>
 
         {/* יעד */}
-        <div>
+        <div style={{ textAlign: "right" }}>
           {totalTarget > 0 ? (
             <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#1A1A1A" }}>{fmt(totalTarget)}</span>
           ) : (
@@ -1222,10 +1227,12 @@ function GradeRow({
         </div>
 
         {/* נגבה */}
-        <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#8B2F6E" }}>{fmt(totalCollected)}</span>
+        <div style={{ textAlign: "right" }}>
+          <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: "#8B2F6E" }}>{fmt(totalCollected)}</span>
+        </div>
 
-        {/* יצא (כולל חלק יחסי מהוצאות כל-השכבות) */}
-        <div style={{ display: "flex", alignItems: "center", gap: "3px", minWidth: 0 }}>
+        {/* יצא — המספר בקצה הימני, אייקון החלק היחסי משמאלו במקום קבוע */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "3px", minWidth: 0 }}>
           <span className="num" style={{ fontSize: "13px", fontWeight: "500", color: totalSpent > 0 ? "#B5472A" : "#C0BAB4" }}>
             {totalSpent > 0 ? fmt(totalSpent) : "—"}
           </span>
@@ -1236,20 +1243,22 @@ function GradeRow({
           )}
         </div>
 
-        {/* נשאר בקופה = נגבה − הוצא */}
-        <span className="num" style={{ fontSize: "13px", fontWeight: "600", color: cashBalance < 0 ? "#B5472A" : "#2D6644" }}>
-          {fmt(cashBalance)}
-        </span>
+        {/* נשאר בקופה = נגבה − יצא */}
+        <div style={{ textAlign: "right" }}>
+          <span className="num" style={{ fontSize: "13px", fontWeight: "600", color: cashBalance < 0 ? "#B5472A" : "#2D6644" }}>
+            {fmt(cashBalance)}
+          </span>
+        </div>
 
-        {/* התקדמות (נגבה מתוך יעד) */}
+        {/* התקדמות (נגבה מתוך יעד) — אחוז בקצה הימני מתחת לכותרת, פס דק משמאלו */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <div style={{ flex: 1, minWidth: 0 }}><Bar pct={pct} /></div>
           <span className="num" style={{
-            fontSize: "12px", fontWeight: "600", flexShrink: 0,
+            fontSize: "12px", fontWeight: "600", flexShrink: 0, minWidth: "34px",
             color: totalTarget === 0 ? "#AAA099" : pct >= 85 ? "#2D6644" : pct >= 60 ? "#B5472A" : "#8B2F6E",
           }}>
             {totalTarget === 0 ? "—" : `${pct}%`}
           </span>
+          <div style={{ flex: 1, minWidth: 0 }}><Bar pct={pct} /></div>
         </div>
 
         {/* Expand toggle */}
@@ -1801,29 +1810,25 @@ export default function HorimPage() {
               {fmt(animCollected)}
             </div>
             {hasTarget ? (
-              <div style={{ marginTop: "10px", fontSize: "13px", color: "rgba(220,150,200,0.7)" }}>
-                <span>מתוך יעד </span>
-                <span className="num">{fmt(animTarget)}</span>
-                <span style={{ marginRight: "6px" }}> ({basis}%)</span>
+              <div style={{ display: "flex", gap: isMobile ? "22px" : "34px", marginTop: "16px", flexWrap: "wrap", alignItems: "flex-end", position: "relative" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.65)", textTransform: "uppercase", letterSpacing: "0.05em" }}>מתוך יעד ({basis}%)</div>
+                  <div className="num" style={{ fontSize: isMobile ? "18px" : "21px", fontWeight: "400", color: "rgba(255,255,255,0.92)", lineHeight: 1 }}>{fmt(animTarget)}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.65)", textTransform: "uppercase", letterSpacing: "0.05em" }}>יצא</div>
+                  <div className="num" style={{ fontSize: isMobile ? "18px" : "21px", fontWeight: "400", color: "#F0C0E0", lineHeight: 1 }}>{fmt(animSpent)}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.65)", textTransform: "uppercase", letterSpacing: "0.05em" }}>נשאר בקופה</div>
+                  <div className="num" style={{ fontSize: isMobile ? "18px" : "21px", fontWeight: "400", color: grandCash < 0 ? "#FFB0A8" : "#fff", lineHeight: 1 }}>{fmt(animCash)}</div>
+                </div>
               </div>
             ) : (
-              <div style={{ marginTop: "10px", fontSize: "12px", color: "rgba(220,150,200,0.55)", display: "flex", alignItems: "center", gap: "6px" }}>
+              <div style={{ marginTop: "12px", fontSize: "12px", color: "rgba(220,150,200,0.55)", display: "flex", alignItems: "center", gap: "6px" }}>
                 <span style={{ padding: "2px 8px", borderRadius: "6px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(220,150,200,0.25)" }}>
                   לא הוגדר יעד — הגדר סכום/תלמיד בטבלה
                 </span>
-              </div>
-            )}
-            {grandSpent > 0 && (
-              <div style={{ display: "flex", gap: "22px", marginTop: "18px", flexWrap: "wrap", position: "relative" }}>
-                <div>
-                  <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.6)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "3px" }}>יצא</div>
-                  <div className="num" style={{ fontSize: "19px", fontWeight: "400", color: "#F0C0E0" }}>{fmt(animSpent)}</div>
-                </div>
-                <div style={{ width: "1px", alignSelf: "stretch", background: "rgba(220,150,200,0.22)" }} />
-                <div>
-                  <div style={{ fontSize: "10px", color: "rgba(220,150,200,0.6)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "3px" }}>נשאר בקופה</div>
-                  <div className="num" style={{ fontSize: "19px", fontWeight: "400", color: grandCash < 0 ? "#FFB0A8" : "#fff" }}>{fmt(animCash)}</div>
-                </div>
               </div>
             )}
           </div>
@@ -1854,18 +1859,17 @@ export default function HorimPage() {
           </div>
         </div>
 
-        {/* 2.7.0: click affordance hint */}
-        {!isLoading && grades.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#9B8FA6", fontSize: "12px" }}>
-            <ChevronDown size={13} />
-            <span>לחצו על שכבה לפירוט לפי סעיפים, יעדים והיסטוריית גבייה</span>
-          </div>
-        )}
-
         {/* Table */}
         {isLoading ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#AAA099", fontSize: "14px" }}>טוען...</div>
         ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+            {grades.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "#A99FB0", fontSize: "11.5px", paddingRight: "2px" }}>
+                <ChevronDown size={12} />
+                <span>לחצו על שכבה לפירוט לפי סעיפים</span>
+              </div>
+            )}
           <div style={{ background: "#fff", border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
             {/* Horizontal scroll wrapper */}
             <div style={{ overflowX: "auto" }}>
@@ -1873,17 +1877,17 @@ export default function HorimPage() {
                 {/* Table header */}
                 <div style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(150px,1.5fr) 100px 100px 100px 120px minmax(110px,1fr) 40px",
-                  padding: "10px 20px", borderBottom: "1px solid #EAE5DE",
+                  gridTemplateColumns: HORIM_GRID,
+                  padding: "12px 20px", borderBottom: "1px solid #EAE5DE",
                   fontSize: "11px", fontWeight: "600", color: "#AAA099",
-                  letterSpacing: "0.04em", gap: "8px", background: "#FAFAF8",
+                  letterSpacing: "0.04em", gap: "10px", background: "#FAFAF8",
                 }}>
-                  <span>שכבה</span>
-                  <span>יעד ({basis}%)</span>
-                  <span>נגבה</span>
-                  <span>יצא</span>
-                  <span>נשאר בקופה</span>
-                  <span>התקדמות</span>
+                  <span style={{ textAlign: "right" }}>שכבה</span>
+                  <span style={{ textAlign: "right" }}>יעד ({basis}%)</span>
+                  <span style={{ textAlign: "right" }}>נגבה</span>
+                  <span style={{ textAlign: "right" }}>יצא</span>
+                  <span style={{ textAlign: "right" }}>נשאר בקופה</span>
+                  <span style={{ textAlign: "right" }}>התקדמות</span>
                   <span />
                 </div>
 
@@ -1909,8 +1913,8 @@ export default function HorimPage() {
               </div>
             </div>
           </div>
+          </div>
         )}
-
 
         {/* Unassigned collections summary — money collected but not tied to a section */}
         {!isLoading && (() => {
