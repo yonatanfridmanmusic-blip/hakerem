@@ -10,11 +10,15 @@ import { computeTarget, type Grade, type GradeSectionAmount } from "@/hooks/use-
  * Regular sources: one row per budget category —
  *   planned = category planned_amount, income/used by category linkage,
  *   plus an "לא משויך" bucket for unlinked income/expenses.
+ *   The dashboard renders these through buildCategoryView (lib/category-breakdown):
+ *   per category it shows planned − used ("נשאר"), and lists income once at
+ *   source level — tranches belong to the source, not to a category.
  * horim: one row per active parent section —
  *   planned = derived collection target (basis-aware, same computeTarget
  *   as the horim screen), income = collections, used = refunds,
  *   plus "לא משויך" (null-section collections/refunds + horim income rows).
- * Iron rule everywhere: balance = income − used.
+ * Iron rule: balance = income − used — at SOURCE level (and horim sections).
+ * It is not shown per category for regular sources (2.7.1).
  */
 export interface GradeBreakdownRow {
   id: string;

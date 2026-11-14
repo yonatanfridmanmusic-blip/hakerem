@@ -3,7 +3,8 @@ import { AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowDownLeft, Users } 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDashboardSummary, type SourceSummary } from "@/hooks/use-dashboard-summary";
-import { useSourceBreakdown } from "@/hooks/use-source-breakdown";
+import { useSourceBreakdown, type BreakdownRow } from "@/hooks/use-source-breakdown";
+import { buildCategoryView, type CategorySpendRow } from "@/lib/category-breakdown";
 import { useOrganization, usePendingMembersCount } from "@/hooks/use-organization";
 import { useCountUp, useAnimatedPct } from "@/hooks/use-count-up";
 import { supabase } from "@/integrations/supabase/client";
@@ -116,6 +117,126 @@ function Bar({ pct, gradient }: { pct: number; gradient: string }) {
         boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
       }} />
     </div>
+  );
+}
+
+// ─── Category breakdown (regular sources) ────────────────────────────────────
+// Category level answers "how much of the PLAN is left" (planned − used).
+// Money arrives per source (tranches), so income is listed once, below the table —
+// never subtracted per category. The actual cash balance stays on the source card.
+function CategoryBreakdown({ rows, hero, isMobile }: {
+  rows: BreakdownRow[];
+  hero: { subtleText: string; secondaryText: string; tertiaryText: string };
+  isMobile: boolean;
+}) {
+  const view = buildCategoryView(rows);
+  const cols = isMobile ? "1fr 76px 76px" : "1fr 100px 100px 100px";
+
+  const remainingCell = (r: CategorySpendRow) => {
+    if (r.state === "unplanned") {
+      return <span style={{ fontSize: "11.5px", color: hero.subtleText, textAlign: "left" }}>לא תוכנן</span>;
+    }
+    if (r.remaining === null) {
+      return <span className="num" style={{ fontSize: "12.5px", color: hero.tertiaryText, textAlign: "left" }}>—</span>;
+    }
+    return (
+      <span className="num" title={r.state === "over" ? "חריגה מהתכנון" : undefined} style={{
+        fontSize: "12.5px", fontWeight: "600", textAlign: "left",
+        color: r.state === "over" ? "#FCA5A5" : r.remaining > 0 ? "#86EFAC" : hero.tertiaryText,
+      }}>
+        {fmt(r.remaining)}
+      </span>
+    );
+  };
+
+  return (
+    <>
+      {view.spend.length > 0 && (
+        <>
+          <div style={{
+            display: "grid", gridTemplateColumns: cols,
+            gap: "8px", padding: "0 4px 8px",
+            borderBottom: "1px solid rgba(255,255,255,0.14)",
+            fontSize: "10.5px", fontWeight: "600", color: hero.tertiaryText,
+            letterSpacing: "0.04em",
+          }}>
+            <span>סעיף</span>
+            {!isMobile && <span style={{ textAlign: "left" }}>מתוכנן</span>}
+            <span style={{ textAlign: "left" }}>יצא</span>
+            <span style={{ textAlign: "left" }}>נשאר</span>
+          </div>
+          {view.spend.map((row) => (
+            <div key={row.id} style={{
+              display: "grid", gridTemplateColumns: cols,
+              gap: "8px", padding: "9px 4px",
+              borderBottom: "1px solid rgba(255,255,255,0.08)",
+              alignItems: "center",
+            }}>
+              <span style={{
+                fontSize: "13px", fontWeight: "500",
+                color: row.unassigned ? "#FCD34D" : "#fff",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
+                {row.name}
+              </span>
+              {!isMobile && (
+                <span className="num" style={{ fontSize: "12.5px", color: hero.secondaryText, textAlign: "left" }}>
+                  {row.planned > 0 ? fmt(row.planned) : "—"}
+                </span>
+              )}
+              <span className="num" style={{ fontSize: "12.5px", color: row.used > 0 ? "rgba(255,255,255,0.92)" : hero.tertiaryText, textAlign: "left" }}>
+                {row.used > 0 ? fmt(row.used) : "—"}
+              </span>
+              {remainingCell(row)}
+            </div>
+          ))}
+          <div style={{
+            display: "grid", gridTemplateColumns: cols,
+            gap: "8px", padding: "10px 4px 2px", alignItems: "center",
+          }}>
+            <span style={{ fontSize: "13px", fontWeight: "700", color: "#fff" }}>סה״כ לפי התכנון</span>
+            {!isMobile && (
+              <span className="num" style={{ fontSize: "12.5px", fontWeight: "700", color: hero.secondaryText, textAlign: "left" }}>
+                {fmt(view.totals.planned)}
+              </span>
+            )}
+            <span className="num" style={{ fontSize: "12.5px", fontWeight: "700", color: "#fff", textAlign: "left" }}>
+              {fmt(view.totals.used)}
+            </span>
+            <span className="num" style={{
+              fontSize: "12.5px", fontWeight: "700", textAlign: "left",
+              color: view.totals.remaining < 0 ? "#FCA5A5" : view.totals.remaining > 0 ? "#86EFAC" : hero.tertiaryText,
+            }}>
+              {fmt(view.totals.remaining)}
+            </span>
+          </div>
+        </>
+      )}
+
+      {view.incomeLines.length > 0 && (
+        <div style={{
+          marginTop: view.spend.length > 0 ? "14px" : 0,
+          paddingTop: view.spend.length > 0 ? "12px" : 0,
+          borderTop: view.spend.length > 0 ? "1px dashed rgba(255,255,255,0.18)" : "none",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8px", padding: "0 4px 6px" }}>
+            <span style={{ fontSize: "10.5px", fontWeight: "600", color: hero.tertiaryText, letterSpacing: "0.04em" }}>מה נכנס השנה</span>
+            <span className="num" style={{ fontSize: "12.5px", fontWeight: "600", color: "#86EFAC" }}>{fmt(view.totals.income)}</span>
+          </div>
+          {view.incomeLines.map((l) => (
+            <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px", padding: "5px 4px" }}>
+              <span style={{
+                fontSize: "12px", color: l.unassigned ? "#FCD34D" : "rgba(255,255,255,0.8)",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0,
+              }}>
+                {l.name}
+              </span>
+              <span className="num" style={{ fontSize: "12px", color: hero.secondaryText, flexShrink: 0 }}>{fmt(l.amount)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -356,6 +477,10 @@ function SourceCard({ s, collectionPct = 85, onEditPlans }: { s: SourceSummary; 
             </div>
           ) : (
             <>
+              {s.source !== "horim" ? (
+                <CategoryBreakdown rows={breakdown} hero={hero} isMobile={isMobile} />
+              ) : (
+              <>
               <div style={{
                 display: "grid",
                 gridTemplateColumns: isMobile ? "1fr 76px 76px" : "1fr 100px 100px 100px 100px",
@@ -460,6 +585,8 @@ function SourceCard({ s, collectionPct = 85, onEditPlans }: { s: SourceSummary; 
                   </div>
                 );
               })}
+              </>
+              )}
               <div style={{ display: "flex", justifyContent: "flex-start", marginTop: "10px" }}>
                 <Link to={detailTo}
                   style={{
