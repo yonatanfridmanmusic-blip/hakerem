@@ -261,6 +261,46 @@ export async function syncHorimBudgetCategory(
  * Call this on page load to ensure budget planning always reflects current amounts
  * even if data was entered before the per-section sync was introduced.
  */
+/**
+ * 2.8.0: מחיקת קטגוריות הורים שנלוות לסעיפים — רק אם אין עליהן נתוני משתמש.
+ * קטגוריה שיש עליה הוצאות, הכנסות או תת-קטגוריות — וגם קטגוריה ידנית — לא נמחקת:
+ * מחיקה מנתקת את ההוצאות מהקטגוריה (FK SET NULL) ומוחקת את תת-הקטגוריות שלה
+ * (CASCADE). קטגוריה עם נתונים נשארת כקטגוריה ידנית בלי תכנון.
+ * נמצא בבדיקת dev 15.11: ביטול ייבוא ניתק 5 הוצאות מהקטגוריה ומחק תת-קטגוריה.
+ */
+export async function deleteHorimCategoriesSafely(yearId: string, names: string[]): Promise<{ deleted: number; kept: string[] }> {
+  if (names.length === 0) return { deleted: 0, kept: [] };
+  const { data: cats, error } = await supabase.from("budget_categories")
+    .select("id, name, origin").eq("school_year_id", yearId).eq("source", "horim").in("name", names);
+  if (error) throw new Error(`קריאת קטגוריות נכשלה: ${error.message}`);
+  const ids = (cats ?? []).map((c) => c.id);
+  if (ids.length === 0) return { deleted: 0, kept: [] };
+
+  const [expR, incR, actR] = await Promise.all([
+    supabase.from("expenses").select("budget_category_id").in("budget_category_id", ids),
+    supabase.from("income").select("budget_category_id").in("budget_category_id", ids),
+    supabase.from("budget_activities").select("budget_category_id").in("budget_category_id", ids),
+  ]);
+  if (expR.error) throw new Error(`בדיקת הוצאות נכשלה: ${expR.error.message}`);
+  if (incR.error) throw new Error(`בדיקת הכנסות נכשלה: ${incR.error.message}`);
+  if (actR.error) throw new Error(`בדיקת תת-קטגוריות נכשלה: ${actR.error.message}`);
+  const used = new Set<string>();
+  [...(expR.data ?? []), ...(incR.data ?? []), ...(actR.data ?? [])].forEach((r) => { if (r.budget_category_id) used.add(r.budget_category_id); });
+
+  const deletable = (cats ?? []).filter((c) => c.origin !== "manual" && !used.has(c.id));
+  const keep = (cats ?? []).filter((c) => c.origin !== "manual" && used.has(c.id));
+  if (deletable.length > 0) {
+    const { error: delErr } = await supabase.from("budget_categories").delete().in("id", deletable.map((c) => c.id));
+    if (delErr) throw new Error(`מחיקת קטגוריות נכשלה: ${delErr.message}`);
+  }
+  if (keep.length > 0) {
+    const { error: updErr } = await supabase.from("budget_categories")
+      .update({ origin: "manual", planned_amount: 0 }).in("id", keep.map((c) => c.id));
+    if (updErr) throw new Error(`עדכון קטגוריות נכשל: ${updErr.message}`);
+  }
+  return { deleted: deletable.length, kept: keep.map((c) => c.name) };
+}
+
 export async function syncAllHorimBudgetCategories(
   sections: ParentSection[],
 ): Promise<void> {

@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/use-organization";
 import { getActiveYearId } from "@/lib/active-year";
-import type { Grade, ParentSection } from "@/hooks/use-horim";
+import { deleteHorimCategoriesSafely, type Grade, type ParentSection } from "@/hooks/use-horim";
 import { mergeCells, findMergedTargets, resolveSuggestions } from "@/lib/kesafim-merge";
 import { useOrgBudgetSources } from "@/hooks/use-budget-sources";
 
@@ -924,6 +924,7 @@ export function KesafimImportModal({
 
       // 2. ניקוי מה שהייבוא יצר ואין עליו שום נתון אחר (תיקון 3, בדיקת 8.8)
       let deletedSections = 0, deletedGsa = 0, deletedCats = 0, deletedMaps = 0;
+      let keptCats: string[] = [];
       if (createdInfo) {
         const candidateIds = createdInfo.section_ids ?? [];
         let safeIds: string[] = [];
@@ -959,10 +960,10 @@ export function KesafimImportModal({
           deletedGsa += (gsaDel ?? []).length;
 
           if (names.length > 0) {
-            const { data: catDel, error: catErr } = await supabase.from("budget_categories")
-              .delete().eq("school_year_id", yearId).eq("source", "horim").in("name", names).select("id");
-            if (catErr) throw new Error(`מחיקת קטגוריות נכשלה: ${catErr.message}`);
-            deletedCats = (catDel ?? []).length;
+            // 2.8.0: קטגוריה שיש עליה הוצאות/הכנסות/תת-קטגוריות (או ידנית) לא נמחקת
+            const catRes = await deleteHorimCategoriesSafely(yearId, names);
+            deletedCats = catRes.deleted;
+            keptCats = catRes.kept;
           }
 
           const { data: secDel, error: sdErr } = await supabase.from("parent_sections")
@@ -1021,7 +1022,8 @@ export function KesafimImportModal({
       if (deletedGsa > 0) parts.push(`${deletedGsa} יעדים`);
       if (deletedCats > 0) parts.push(`${deletedCats} קטגוריות תקציב`);
       if (deletedMaps > 0) parts.push(`${deletedMaps} מיפויים`);
-      toast.success(`הייבוא בוטל — נמחקו: ${parts.join(" · ")}`);
+      toast.success(`הייבוא בוטל — נמחקו: ${parts.join(" · ")}`
+        + (keptCats.length > 0 ? `. נשמרו ${keptCats.length} קטגוריות שרשומות עליהן הוצאות: ${keptCats.join(", ")}` : ""));
       setCancelConfirm(null);
       await loadLog();
     } catch (e) {

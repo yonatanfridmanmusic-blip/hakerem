@@ -36,6 +36,7 @@ import {
   type ParentSection,
   type ParentCollection,
   type ParentRefund,
+  deleteHorimCategoriesSafely,
 } from "@/hooks/use-horim";
 
 export const Route = createFileRoute("/_authenticated/horim/")({
@@ -335,16 +336,17 @@ function ManageSectionsModal({ sections, onClose }: { sections: ParentSection[];
       if (gsaErr) throw new Error(`מחיקת היעדים נכשלה: ${gsaErr.message}`);
       const { error: mapErr } = await supabase.from("kesafim_section_map").delete().eq("parent_section_id", s.id);
       if (mapErr) throw new Error(`מחיקת המיפויים נכשלה: ${mapErr.message}`);
-      const { error: catErr } = await supabase.from("budget_categories")
-        .delete().eq("school_year_id", yearId).eq("source", "horim").eq("name", s.name);
-      if (catErr) throw new Error(`מחיקת קטגוריית התקציב נכשלה: ${catErr.message}`);
+      // 2.8.0: קטגוריה שיש עליה הוצאות/הכנסות/תת-קטגוריות לא נמחקת — נשארת כקטגוריה ידנית
+      const catRes = await deleteHorimCategoriesSafely(yearId, [s.name]);
       const { error: secErr } = await supabase.from("parent_sections").delete().eq("id", s.id);
       if (secErr) throw new Error(`מחיקת הסעיף נכשלה: ${secErr.message}`);
 
       ["parent-sections", "parent-sections-all", "grade-section-amounts", "budget-categories",
         "budget-plan", "dashboard", "source-breakdown", "sections-context",
       ].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-      toast.success(`הסעיף "${s.name}" נמחק`);
+      toast.success(catRes.kept.length > 0
+        ? `הסעיף "${s.name}" נמחק. הקטגוריה נשמרה כי רשומות עליה הוצאות`
+        : `הסעיף "${s.name}" נמחק`);
       setDeleteConfirm(null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "שגיאה במחיקת הסעיף");
