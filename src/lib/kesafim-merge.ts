@@ -32,6 +32,8 @@ export interface MergedCell {
   norms: string[];
   per: number | null;
   paid: number;
+  /** what each report section contributed to this cell (for the collection note) */
+  parts: { norm: string; paid: number }[];
 }
 
 export function mergeCells(rows: WrittenLike[]): MergedCell[] {
@@ -40,10 +42,11 @@ export function mergeCells(rows: WrittenLike[]): MergedCell[] {
     const key = `${w.gradeId}:${w.targetKey}`;
     const c = cells.get(key);
     if (!c) {
-      cells.set(key, { gradeId: w.gradeId, targetKey: w.targetKey, norms: [w.norm], per: w.per === null ? null : r2(w.per), paid: r2(w.paid) });
+      cells.set(key, { gradeId: w.gradeId, targetKey: w.targetKey, norms: [w.norm], per: w.per === null ? null : r2(w.per), paid: r2(w.paid), parts: [{ norm: w.norm, paid: r2(w.paid) }] });
       continue;
     }
     if (!c.norms.includes(w.norm)) c.norms.push(w.norm);
+    c.parts.push({ norm: w.norm, paid: r2(w.paid) });
     c.per = c.per === null && w.per === null ? null : r2((c.per ?? 0) + (w.per ?? 0));
     c.paid = r2(c.paid + w.paid);
   }

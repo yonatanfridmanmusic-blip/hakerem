@@ -16,6 +16,8 @@ import { useOrgBudgetSources } from "@/hooks/use-budget-sources";
 
 // 2.8.0: שם הקטגוריה שאליה נרשמת הכנסה שנותבה מהדוח למקור תקציב אחר (נוצרת אוטומטית)
 const ROUTED_CATEGORY_NAME = "גביית הורים (כספים 2000)";
+// 2.8.0: "דלג" נזכר בזיכרון המיפויים כ-target_source מיוחד (אין לו סעיף ואין לו מקור)
+const SKIP_MARK = "__skip__";
 
 // ─── טיפוסי תוצאת הפענוח (מראה של פלט ה-edge function) ───────────────────────
 
@@ -338,6 +340,12 @@ export function KesafimImportModal({
       if (maps[r.norm] || unresolved.includes(r.norm)) return;
       // 2.8.0: זיכרון ניתוב למקור תקציב אחר (למשל "חוגים" → בית התלמיד)
       const rememberedSource = memorySource[r.norm];
+      if (rememberedSource === SKIP_MARK) {
+        // דילוג שנבחר בייבוא קודם (למשל סעיף מיותר בדוח) — נשאר מדולג, גלוי וניתן לשינוי
+        maps[r.norm] = { mode: "skip", sectionId: "", newName: r.norm, fromMemory: true };
+        choices[r.norm] = "update";
+        return;
+      }
       if (rememberedSource && (routeSources.length === 0 || routeSources.some((s) => s.slug === rememberedSource))) {
         maps[r.norm] = { mode: "source", sectionId: "", newName: r.norm, fromMemory: true, sourceSlug: rememberedSource };
         choices[r.norm] = "update";
@@ -466,6 +474,34 @@ export function KesafimImportModal({
     const existing = sections.find((s) => normalizeReportName(s.name) === nn);
     return existing ? `id:${existing.id}` : `new:${nn}`;
   }
+
+  /** 2.8.0: שורות באותה שכבה שנכתבות לאותו סעיף יעד (כולל השורה עצמה). */
+  function siblingsOf(gi: number, g: ViewGrade, r: ViewRow): { x: ViewRow; xi: number }[] {
+    const tk = targetKeyOf(r.norm);
+    return g.rows.map((x, xi) => ({ x, xi })).filter(({ x, xi }) => rowIsWritten(gi, xi, g, x) && targetKeyOf(x.norm) === tk);
+  }
+  /** 2.8.0: דלתא (בעדכון) לתא כולו — כשכמה שורות מתכנסות לתא, סך הזכות שלהן מול הקיים. */
+  function mergedCellDelta(gi: number, ri: number, g: ViewGrade, r: ViewRow): { existing: number; target: number; delta: number; merged: boolean } {
+    const sibs = rowIsWritten(gi, ri, g, r) ? siblingsOf(gi, g, r) : [];
+    if (sibs.length <= 1) return { ...cellDelta(r, g.label), merged: false };
+    const tk = targetKeyOf(r.norm);
+    const existing = tk.startsWith("id:") ? (cellSums[`${gradeMatch[g.label]}:${tk.slice(3)}`] ?? 0) : 0;
+    const target = Math.round(sibs.reduce((s, { x }) => s + x.paid, 0) * 100) / 100;
+    const d = target - existing;
+    return { existing, target, delta: Math.abs(d) < 0.005 ? 0 : d, merged: true };
+  }
+  // 2.8.0: סעיף שמדולג לפי זיכרון, אבל בדוח הנוכחי יש בו כסף — חייב להיות גלוי.
+  const skippedWithMoney = useMemo(() => {
+    const sums = new Map<string, { charged: number; paid: number }>();
+    viewGrades.forEach((g) => g.rows.forEach((r) => {
+      const m = mappings[r.norm];
+      if (m?.mode !== "skip" || !m.fromMemory) return;
+      const cur = sums.get(r.norm) ?? { charged: 0, paid: 0 };
+      cur.charged += r.charged; cur.paid += r.paid;
+      sums.set(r.norm, cur);
+    }));
+    return [...sums.entries()].filter(([, v]) => Math.abs(v.charged) >= 0.005 || Math.abs(v.paid) >= 0.005).map(([norm, v]) => ({ norm, ...v }));
+  }, [viewGrades, mappings]);
 
   // 2.8.0: סעיפי יעד שמקבלים יותר מסעיף אחד מהדוח — מוצגים באזהרה במסך האישור.
   const mergedTargets = useMemo(() => {
@@ -612,6 +648,10 @@ export function KesafimImportModal({
       const mapRows = [
         ...usedNorms.map((norm) => ({ organization_id: orgId, report_name_normalized: norm, parent_section_id: sectionIdByNorm[norm] as string | null, target_source: null as string | null })),
         ...routedNorms.map((norm) => ({ organization_id: orgId, report_name_normalized: norm, parent_section_id: null as string | null, target_source: mappings[norm].sourceSlug as string | null })),
+        // "דלג" ברמת הסעיף נזכר גם הוא — סעיף מיותר בדוח לא יחזור כהצעה בכל ייבוא
+        ...[...new Set(viewGrades.flatMap((g) => g.rows.map((r) => r.norm)))]
+          .filter((norm) => mappings[norm]?.mode === "skip")
+          .map((norm) => ({ organization_id: orgId, report_name_normalized: norm, parent_section_id: null as string | null, target_source: SKIP_MARK as string | null })),
       ];
       if (mapRows.length > 0) {
         const { error: mapErr } = await supabase.from("kesafim_section_map").upsert(
@@ -742,10 +782,14 @@ export function KesafimImportModal({
         // סכום 0 לא נכתב באף מצב: בעדכון — דלתא אפס; בייבוא ראשון — זכות 0
         // (היעדים כבר נרשמו בשלב 3). תיקון קדם-מיזוג 2.2.0.
         if (amount === 0) continue;
+        // כמה סעיפים מהדוח בתא אחד — ההערה מפרטת ממה הסכום מורכב
+        const cellNotes = c.parts.length <= 1 ? notes
+          : mode === "update" ? `${notes} · ${c.norms.join(" + ")}`
+          : `${notes} · ${c.parts.map((pt) => `${pt.norm}: ${fmt(pt.paid)} ₪`).join(" + ")}`;
         collectionRows.push({
           school_year_id: yearId, grade_id: c.gradeId, parent_section_id: secId,
           amount, collection_date: parsed.report.report_date ?? new Date().toISOString().slice(0, 10),
-          notes, import_id: importId, created_by: user?.id,
+          notes: cellNotes, import_id: importId, created_by: user?.id,
         });
       }
       if (collectionRows.length > 0) {
@@ -1105,6 +1149,16 @@ export function KesafimImportModal({
                 </div>
               ))}
 
+              {skippedWithMoney.length > 0 && (
+                <div style={{ background: "#FDEBEA", border: "1.5px solid #E5B5B0", borderRadius: "12px", padding: "10px 14px", fontSize: "13px", color: "#A93226", lineHeight: 1.7 }}>
+                  <b>שימו לב:</b> סעיפים שמדולגים לפי בחירה מייבוא קודם, אבל בדוח הזה יש בהם סכומים:
+                  {skippedWithMoney.map((sk) => (
+                    <div key={sk.norm}><b>{sk.norm}</b> — חובה <span className="num">{fmt(sk.charged)} ₪</span> · זכות <span className="num">{fmt(sk.paid)} ₪</span></div>
+                  ))}
+                  אם הכסף הזה צריך להיכנס — שנו את השיוך בטבלה למטה.
+                </div>
+              )}
+
               {mergedTargets.length > 0 && (
                 <div style={{ background: "#FDF6E3", border: "1.5px solid #E8CF9C", borderRadius: "12px", padding: "10px 14px", fontSize: "13px", color: "#8B5E0B", lineHeight: 1.7 }}>
                   <b>שימו לב:</b> כמה סעיפים מהדוח משויכים לאותו סעיף בכרם, והסכומים שלהם יחוברו:
@@ -1173,11 +1227,11 @@ export function KesafimImportModal({
               {viewGrades.map((g, gi) => {
                 const gid = gradeMatch[g.label];
                 const zeroCells = mode === "update"
-                  ? g.rows.filter((r, ri) => rowIsWritten(gi, ri, g, r) && cellDelta(r, g.label).delta === 0).length
+                  ? g.rows.filter((r, ri) => rowIsWritten(gi, ri, g, r) && mergedCellDelta(gi, ri, g, r).delta === 0).length
                   : 0;
                 const visibleRows = g.rows
                   .map((r, ri) => ({ r, ri }))
-                  .filter(({ r, ri }) => mode === "first" || !rowIsWritten(gi, ri, g, r) || cellDelta(r, g.label).delta !== 0);
+                  .filter(({ r, ri }) => mode === "first" || !rowIsWritten(gi, ri, g, r) || mergedCellDelta(gi, ri, g, r).delta !== 0);
                 return (
                   <div key={gi} style={{ border: "1px solid #EAE5DE", borderRadius: "14px", overflow: "hidden" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", padding: "10px 14px", background: "#FAF8F5", borderBottom: "1px solid #EAE5DE" }}>
@@ -1227,8 +1281,21 @@ export function KesafimImportModal({
                           const m = mappings[r.norm];
                           const skipped = rowSkip[key] || m?.mode === "skip";
                           const perDefault = defaultPerStudent(r, g.label);
-                          const conflict = !skipped && mode === "first" ? targetConflict(r, g.label) : null;
-                          const dc = mode === "update" ? cellDelta(r, g.label) : null;
+                          // 2.8.0: שורות שמתכנסות לאותו סעיף — היעד והדלתא מוצגים לתא כולו
+                          const sibs = skipped ? [] : siblingsOf(gi, g, r);
+                          const mergedHere = sibs.length > 1;
+                          const mergedPer = mergedHere
+                            ? Math.round(sibs.reduce((sm, { x, xi }) => sm + (Number(perStudentOverride[rowKey(gi, xi)] ?? defaultPerStudent(x, g.label)) || 0), 0) * 100) / 100
+                            : 0;
+                          const exCell = mergedHere ? existingGsaFor(r, g.label) : undefined;
+                          const conflict = skipped || mode !== "first" ? null
+                            : mergedHere
+                              ? (exCell && Math.abs(Number(exCell.amount_per_student) - mergedPer) > 0.005
+                                ? { existing: Number(exCell.amount_per_student), fromReport: mergedPer } : null)
+                              : targetConflict(r, g.label);
+                          const setChoiceForCell = (v: "keep" | "update") =>
+                            setTargetChoice({ ...targetChoice, ...Object.fromEntries((mergedHere ? sibs.map(({ x }) => x.norm) : [r.norm]).map((n) => [n, v])) });
+                          const dc = mode === "update" ? mergedCellDelta(gi, ri, g, r) : null;
                           return (
                             <tr key={ri} style={{
                               borderTop: "1px solid #F3EFE9",
@@ -1242,6 +1309,11 @@ export function KesafimImportModal({
                                     ⇄ מוזג מ-{r.names.length} שורות: {r.names.join(" · ")}
                                   </div>
                                 )}
+                                {mergedHere && (
+                                  <div style={{ fontSize: "10.5px", color: "#8B5E0B", marginTop: "2px" }}>
+                                    ⇄ מאוחד בסעיף אחד עם: {sibs.filter(({ x }) => x.norm !== r.norm).map(({ x }) => x.norm).join(", ")}
+                                  </div>
+                                )}
                                 {r.charged <= 0 && (
                                   <div style={{ fontSize: "11px", color: "#AAA099", marginTop: "2px" }}>רישום גבייה בלבד (ללא יעד)</div>
                                 )}
@@ -1252,6 +1324,12 @@ export function KesafimImportModal({
                                     value={m?.mode === "create" ? "__create" : m?.mode === "skip" ? "__skip" : m?.mode === "source" ? `__src:${m.sourceSlug}` : m?.sectionId ?? "__create"}
                                     onChange={(e) => {
                                       const v = e.target.value;
+                                      // 2.8.0: שיוך ידני לסעיף קיים — ברירת המחדל היא "השאר את היעד שלי",
+                                      // ואם סעיף אחר מהדוח כבר משויך לאותו סעיף — אותה בחירה כמו שלו.
+                                      if (!v.startsWith("__")) {
+                                        const peer = Object.keys(mappings).find((n) => n !== r.norm && mappings[n].mode === "map" && mappings[n].sectionId === v);
+                                        setTargetChoice({ ...targetChoice, [r.norm]: peer ? (targetChoice[peer] ?? "keep") : "keep" });
+                                      }
                                       setMappings({
                                         ...mappings,
                                         [r.norm]: v === "__create"
@@ -1321,16 +1399,16 @@ export function KesafimImportModal({
                                       conflict ? (
                                         <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "flex-start" }}>
                                           <div style={{ display: "flex", gap: "5px" }}>
-                                            <button type="button" onClick={() => setTargetChoice({ ...targetChoice, [r.norm]: "keep" })}
+                                            <button type="button" onClick={() => setChoiceForCell("keep")}
                                               style={chipStyle(targetChoice[r.norm] === "keep")} className="num">
                                               היעד שהגדרתי ({fmt(conflict.existing)} ₪)
                                             </button>
-                                            <button type="button" onClick={() => setTargetChoice({ ...targetChoice, [r.norm]: "update" })}
+                                            <button type="button" onClick={() => setChoiceForCell("update")}
                                               style={chipStyle(targetChoice[r.norm] === "update")} className="num">
                                               היעד מתוך כספים 2000 ({fmt(conflict.fromReport)} ₪)
                                             </button>
                                           </div>
-                                          <span style={{ fontSize: "10px", color: "#AAA099" }}>הבחירה חלה על כל שכבות הסעיף</span>
+                                          <span style={{ fontSize: "10px", color: "#AAA099" }}>{mergedHere ? "היעד מהדוח = סך הסעיפים המאוחדים · " : ""}הבחירה חלה על כל שכבות הסעיף</span>
                                         </div>
                                       ) : (
                                         <input
