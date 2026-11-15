@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/use-organization";
 import { getActiveYearId } from "@/lib/active-year";
 import type { Grade, ParentSection } from "@/hooks/use-horim";
+import { mergeCells, findMergedTargets, resolveSuggestions } from "@/lib/kesafim-merge";
 
 // ─── טיפוסי תוצאת הפענוח (מראה של פלט ה-edge function) ───────────────────────
 
@@ -307,41 +308,50 @@ export function KesafimImportModal({
     // מיפוי סעיפים: זיכרון → התאמת שם → יצירה
     const maps: Record<string, Mapping> = {};
     const choices: Record<string, "keep" | "update"> = {};
+    // מעבר 1: התאמות ודאיות — זיכרון מייבוא קודם, או שם זהה אחרי נרמול.
+    const unresolved: string[] = [];
     vgs.forEach((g) => g.rows.forEach((r) => {
-      if (maps[r.norm]) return;
+      if (maps[r.norm] || unresolved.includes(r.norm)) return;
       const remembered = memoryMap[r.norm];
       if (remembered && sections.some((s) => s.id === remembered)) {
         maps[r.norm] = { mode: "map", sectionId: remembered, newName: r.norm, fromMemory: true };
         // סעיף מנוהל-ייבוא (יש לו זיכרון) — ברירת מחדל: עדכן יעד לפי הדוח
         choices[r.norm] = "update";
-      } else {
-        // נרמול דו-צדדי (תיקון 1, בדיקת 8.8): גם שמות הסעיפים הקיימים עוברים
-        // נרמול מלא (גרשיים/גרש, רווחים, אות שכבה סופית) — "תל\"ן" הקיים
-        // חייב להתאים ל"תל״ן" מהדוח.
-        const byName = sections.find((s) => normalizeReportName(s.name) === r.norm);
-        if (byName) {
-          maps[r.norm] = { mode: "map", sectionId: byName.id, newName: r.norm, fromMemory: false };
-          // סעיף שנוצר ידנית — ברירת מחדל: השאר את היעד שלי
-          choices[r.norm] = "keep";
-        } else {
-          // שכבת ההצעות החכמה (תיקון 2): אין התאמה מדויקת אבל יש סעיף קיים
-          // דומה — ברירת המחדל היא הסעיף הקיים, עם חיווי בולט לאישור.
-          // יצירת סעיף חדש נשארת זמינה בבחירה מפורשת.
-          let best: { id: string; score: number } | null = null;
-          for (const s of sections) {
-            const score = nameSimilarity(normalizeReportName(s.name), r.norm);
-            if (score >= SUGGEST_THRESHOLD && (!best || score > best.score)) best = { id: s.id, score };
-          }
-          if (best) {
-            maps[r.norm] = { mode: "map", sectionId: best.id, newName: r.norm, fromMemory: false, suggested: true };
-            choices[r.norm] = "keep";
-          } else {
-            maps[r.norm] = { mode: "create", sectionId: "", newName: r.norm, fromMemory: false };
-            choices[r.norm] = "update";
-          }
-        }
+        return;
       }
+      // נרמול דו-צדדי (תיקון 1, בדיקת 8.8): גם שמות הסעיפים הקיימים עוברים
+      // נרמול מלא (גרשיים/גרש, רווחים, אות שכבה סופית) — "תל\"ן" הקיים
+      // חייב להתאים ל"תל״ן" מהדוח.
+      const byName = sections.find((s) => normalizeReportName(s.name) === r.norm);
+      if (byName) {
+        maps[r.norm] = { mode: "map", sectionId: byName.id, newName: r.norm, fromMemory: false };
+        // סעיף שנוצר ידנית — ברירת מחדל: השאר את היעד שלי
+        choices[r.norm] = "keep";
+        return;
+      }
+      unresolved.push(r.norm);
     }));
+    // מעבר 2 — שכבת ההצעות החכמה (תיקון 2), בלי ניחושים (2.8.0, תקלת כרמים 15.11):
+    // מציעים סעיף קיים דומה רק כשההצעה חד-משמעית. סעיף שכבר נתפס בהתאמה ודאית
+    // לא מוצע שוב, ואותו סעיף קיים לעולם לא מוצע לשני סעיפים שונים מהדוח —
+    // בתיקו אף אחד לא מקבל אותו, והמשתמשת בוחרת. יצירת סעיף חדש היא ברירת המחדל.
+    const claimed = new Set(Object.values(maps).map((m) => m.sectionId));
+    const suggestions = resolveSuggestions(
+      unresolved,
+      sections.filter((s) => !claimed.has(s.id)).map((s) => ({ id: s.id, normName: normalizeReportName(s.name) })),
+      nameSimilarity,
+      SUGGEST_THRESHOLD,
+    );
+    unresolved.forEach((norm) => {
+      const sugId = suggestions[norm];
+      if (sugId) {
+        maps[norm] = { mode: "map", sectionId: sugId, newName: norm, fromMemory: false, suggested: true };
+        choices[norm] = "keep";
+      } else {
+        maps[norm] = { mode: "create", sectionId: "", newName: norm, fromMemory: false };
+        choices[norm] = "update";
+      }
+    });
     setMappings(maps);
     setTargetChoice(choices);
     setRowSkip({});
@@ -412,27 +422,64 @@ export function KesafimImportModal({
     return { existing, target: row.paid, delta: Math.abs(delta) < 0.005 ? 0 : delta };
   }
 
+  /** 2.8.0: מפתח יציב לסעיף היעד של שם מהדוח — סעיף קיים לפי id; סעיף חדש לפי שמו
+   *  (ואם השם החדש זהה לסעיף קיים — הסעיף הקיים, כמו ב-commit). */
+  function targetKeyOf(norm: string): string {
+    const m = mappings[norm];
+    if (!m) return `new:${norm}`;
+    if (m.mode === "map") return `id:${m.sectionId}`;
+    const nn = normalizeReportName(m.newName);
+    const existing = sections.find((s) => normalizeReportName(s.name) === nn);
+    return existing ? `id:${existing.id}` : `new:${nn}`;
+  }
+
+  // 2.8.0: סעיפי יעד שמקבלים יותר מסעיף אחד מהדוח — מוצגים באזהרה במסך האישור.
+  const mergedTargets = useMemo(() => {
+    const pairs: { norm: string; targetKey: string }[] = [];
+    viewGrades.forEach((g, gi) => g.rows.forEach((r, ri) => {
+      if (rowIsWritten(gi, ri, g, r)) pairs.push({ norm: r.norm, targetKey: targetKeyOf(r.norm) });
+    }));
+    return findMergedTargets(pairs).map((t) => ({
+      name: t.targetKey.startsWith("id:")
+        ? (sections.find((s) => s.id === t.targetKey.slice(3))?.name ?? "")
+        : t.targetKey.slice(4),
+      norms: t.norms,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewGrades, mappings, rowSkip, gradeMatch, sections]);
+
   const plan = useMemo(() => {
     const newSections = new Set<string>();
     const mappedIds = new Set<string>();
     let rows = 0, total = 0, unchanged = 0, writable = 0;
+    // 2.8.0: כמה סעיפים מהדוח שממופים לאותו סעיף מתכנסים לתא אחד (שכבה × סעיף) —
+    // התצוגה המקדימה סופרת תאים, בדיוק כמו הכתיבה ב-commit.
+    const cellAgg = new Map<string, { paid: number; existing: number }>();
     viewGrades.forEach((g, gi) => g.rows.forEach((r, ri) => {
       if (!rowIsWritten(gi, ri, g, r)) return;
       writable++;
       const m = mappings[r.norm];
       if (m?.mode === "create") newSections.add(m.newName.trim());
       if (m?.mode === "map" && m.sectionId) mappedIds.add(m.sectionId);
+      const gid = gradeMatch[g.label];
+      const tk = targetKeyOf(r.norm);
+      const key = `${gid}:${tk}`;
+      const cur = cellAgg.get(key);
+      if (cur) cur.paid += r.paid;
+      else cellAgg.set(key, { paid: r.paid, existing: tk.startsWith("id:") ? (cellSums[`${gid}:${tk.slice(3)}`] ?? 0) : 0 });
+    }));
+    cellAgg.forEach((c) => {
       if (mode === "update") {
-        const { delta } = cellDelta(r, g.label);
-        if (delta === 0) { unchanged++; return; }
+        const delta = c.paid - c.existing;
+        if (Math.abs(delta) < 0.005) { unchanged++; return; }
         rows++; total += delta;
       } else {
-        // תיקון קדם-מיזוג 2.2.0: שורת זכות בסכום 0 לא נכתבת כשורת גבייה —
+        // תיקון קדם-מיזוג 2.2.0: זכות בסכום 0 לא נכתבת כשורת גבייה —
         // היעדים (מהחובה) נרשמים ממילא. בדוח אפס: 0 שורות גבייה.
-        if (r.paid === 0) return;
-        rows++; total += r.paid;
+        if (Math.abs(c.paid) < 0.005) return;
+        rows++; total += c.paid;
       }
-    }));
+    });
     return { rows, total, unchanged, writable, newSections: [...newSections], mappedSectionIds: [...mappedIds] };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewGrades, mappings, rowSkip, gradeMatch, mode, cellSums]);
@@ -513,19 +560,26 @@ export function KesafimImportModal({
 
       // 3. יעדים — upsert אחד על UNIQUE(grade_id, parent_section_id).
       //    בחירת "השאר את היעד שלי" מדלגת; ערך זהה לקיים מדולג.
+      //    2.8.0: כמה סעיפים מהדוח שממופים לאותו סעיף בכרם מתכנסים לתא אחד
+      //    (שכבה × סעיף) — היעד והגבייה מסוכמים. שורה אחת לתא, אחרת ה-upsert נדחה
+      //    ("ON CONFLICT DO UPDATE command cannot affect row a second time").
+      const cells = mergeCells(written.map((w) => ({
+        gradeId: w.gradeId, targetKey: sectionIdByNorm[w.row.norm], norm: w.row.norm, per: w.per, paid: w.row.paid,
+      })));
       const gsaRows: { school_year_id: string; grade_id: string; parent_section_id: string; amount_per_student: number }[] = [];
-      for (const w of written) {
-        if (w.per === null) continue;
-        const secId = sectionIdByNorm[w.row.norm];
-        const ex = existingGsa.find((g) => g.grade_id === w.gradeId && g.parent_section_id === secId);
+      for (const c of cells) {
+        if (c.per === null) continue;
+        const secId = c.targetKey;
+        const ex = existingGsa.find((g) => g.grade_id === c.gradeId && g.parent_section_id === secId);
         if (ex) {
-          if (targetChoice[w.row.norm] === "keep") continue;
-          if (Math.abs(Number(ex.amount_per_student) - w.per) <= 0.005) continue;
-        } else if (!createdGsaCells.some((c) => c.grade_id === w.gradeId && c.parent_section_id === secId)) {
+          // "השאר את היעד שלי" מדלג רק אם כל הסעיפים שמתכנסים לתא בחרו בו
+          if (c.norms.every((n) => targetChoice[n] === "keep")) continue;
+          if (Math.abs(Number(ex.amount_per_student) - c.per) <= 0.005) continue;
+        } else {
           // תא יעד שלא היה קיים לפני הייבוא — נרשם למעקב הביטול
-          createdGsaCells.push({ grade_id: w.gradeId, parent_section_id: secId });
+          createdGsaCells.push({ grade_id: c.gradeId, parent_section_id: secId });
         }
-        gsaRows.push({ school_year_id: yearId, grade_id: w.gradeId, parent_section_id: secId, amount_per_student: w.per });
+        gsaRows.push({ school_year_id: yearId, grade_id: c.gradeId, parent_section_id: secId, amount_per_student: c.per });
       }
       if (gsaRows.length > 0) {
         const { error } = await supabase.from("grade_section_amounts")
@@ -616,14 +670,18 @@ export function KesafimImportModal({
         ? `עדכון מדוח כספים 2000 מ-${dateHe}`
         : `ייבוא מדוח כספים 2000 (${parsed.report.report_number ?? "0637"}) מ-${dateHe}`;
       const collectionRows: { school_year_id: string; grade_id: string; parent_section_id: string; amount: number; collection_date: string; notes: string; import_id: string; created_by?: string }[] = [];
-      for (const w of written) {
-        const secId = sectionIdByNorm[w.row.norm];
-        const amount = mode === "update" ? cellDelta(w.row, w.gradeLabel).delta : w.row.paid;
+      for (const c of cells) {
+        const secId = c.targetKey;
+        // בעדכון: דלתא לתא = סך הזכות שמתכנסת לתא − מה שכבר רשום בו בכרם
+        const rawDelta = c.paid - (cellSums[`${c.gradeId}:${secId}`] ?? 0);
+        const amount = mode === "update"
+          ? (Math.abs(rawDelta) < 0.005 ? 0 : Math.round(rawDelta * 100) / 100)
+          : c.paid;
         // סכום 0 לא נכתב באף מצב: בעדכון — דלתא אפס; בייבוא ראשון — זכות 0
         // (היעדים כבר נרשמו בשלב 3). תיקון קדם-מיזוג 2.2.0.
         if (amount === 0) continue;
         collectionRows.push({
-          school_year_id: yearId, grade_id: w.gradeId, parent_section_id: secId,
+          school_year_id: yearId, grade_id: c.gradeId, parent_section_id: secId,
           amount, collection_date: parsed.report.report_date ?? new Date().toISOString().slice(0, 10),
           notes, import_id: importId, created_by: user?.id,
         });
@@ -927,6 +985,18 @@ export function KesafimImportModal({
                 <div style={{ background: "#FDF6E3", border: "1.5px solid #E8CF9C", borderRadius: "12px", padding: "10px 14px", fontSize: "13px", color: "#8B5E0B", lineHeight: 1.6 }}>
                   <b>שימו לב:</b> בסעיפים שמופו כבר רשומות גביות ידניות בסך <b className="num">{fmt(manualOverlap)} ₪</b>.
                   הייבוא <b>יתווסף</b> עליהן ולא יחליף אותן.
+                </div>
+              )}
+
+              {mergedTargets.length > 0 && (
+                <div style={{ background: "#FDF6E3", border: "1.5px solid #E8CF9C", borderRadius: "12px", padding: "10px 14px", fontSize: "13px", color: "#8B5E0B", lineHeight: 1.7 }}>
+                  <b>שימו לב:</b> כמה סעיפים מהדוח משויכים לאותו סעיף בכרם, והסכומים שלהם יחוברו:
+                  {mergedTargets.map((t) => (
+                    <div key={t.name}>
+                      <b>{t.name}</b> ← {t.norms.join(" + ")}
+                    </div>
+                  ))}
+                  אם זו לא הכוונה — שנו את השיוך בטבלה למטה לפני האישור.
                 </div>
               )}
 
