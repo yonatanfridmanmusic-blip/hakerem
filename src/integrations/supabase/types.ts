@@ -701,6 +701,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: string
+          import_id: string | null
           income_date: string
           notes: string | null
           payer: string | null
@@ -719,6 +720,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          import_id?: string | null
           income_date: string
           notes?: string | null
           payer?: string | null
@@ -737,6 +739,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          import_id?: string | null
           income_date?: string
           notes?: string | null
           payer?: string | null
@@ -815,20 +818,23 @@ export type Database = {
         Row: {
           id: string
           organization_id: string
-          parent_section_id: string
+          parent_section_id: string | null
           report_name_normalized: string
+          target_source: string | null
         }
         Insert: {
           id?: string
           organization_id: string
-          parent_section_id: string
+          parent_section_id?: string | null
           report_name_normalized: string
+          target_source?: string | null
         }
         Update: {
           id?: string
           organization_id?: string
-          parent_section_id?: string
+          parent_section_id?: string | null
           report_name_normalized?: string
+          target_source?: string | null
         }
         Relationships: [
           {

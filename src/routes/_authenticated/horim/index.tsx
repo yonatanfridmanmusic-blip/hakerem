@@ -6,6 +6,7 @@ import { Plus, X, Check, ChevronDown, ChevronUp, Users, Settings2, Pencil, Trash
 import { KesafimImportModal, normalizeReportName } from "@/components/kesafim-import";
 import { useCanWrite, useOrganization } from "@/hooks/use-organization";
 import { useExpenses, type Expense } from "@/hooks/use-expenses";
+import { useOrgBudgetSources } from "@/hooks/use-budget-sources";
 import { supabase } from "@/integrations/supabase/client";
 import { getActiveYearId } from "@/lib/active-year";
 import { DateInput } from "@/components/ui/date-input";
@@ -1611,6 +1612,23 @@ export default function HorimPage() {
   const { data: collections = [] } = useParentCollections();
   const { data: refunds = [] } = useParentRefunds();
   const { data: horimExpenses = [] } = useExpenses("horim"); // 2.7.0: הוצאות הורים — הוצא/נשאר בקופה בטבלה ובהירו
+  // 2.8.0: כסף שנגבה דרך ההורים אבל שייך למקור תקציב אחר (ניתוב בייבוא כספים 2000,
+  // למשל "חוגים" → בית התלמיד). לא נספר בשום מספר במסך הזה — שורת מידע בלבד.
+  const { data: orgSources } = useOrgBudgetSources();
+  const { data: routedBySource = [] } = useQuery({
+    queryKey: ["income", "routed-from-kesafim"],
+    staleTime: 1000 * 60,
+    queryFn: async () => {
+      const yearId = await getActiveYearId();
+      if (!yearId) return [];
+      const { data, error } = await supabase.from("income")
+        .select("source, amount").eq("school_year_id", yearId).neq("source", "horim").not("import_id", "is", null);
+      if (error) throw error;
+      const sums = new Map<string, number>();
+      (data ?? []).forEach((r) => sums.set(r.source, (sums.get(r.source) ?? 0) + Number(r.amount)));
+      return [...sums.entries()].map(([source, total]) => ({ source, total }));
+    },
+  });
 
   const isLoading = gradesLoading || sectionsLoading;
 
@@ -2100,6 +2118,18 @@ export default function HorimPage() {
             </div>
           );
         })()}
+
+        {/* 2.8.0: collected through the parents' report but belongs to another budget source */}
+        {!isLoading && routedBySource.filter((r) => Math.abs(r.total) >= 0.005).map((r) => {
+          const label = orgSources?.find((s) => s.slug === r.source)?.label ?? r.source.replace(/_/g, " ");
+          return (
+            <div key={r.source} style={{ display: "flex", alignItems: "center", gap: "8px", background: "#EAF2FA", border: "1px solid #C5DAEE", borderRadius: "10px", padding: "10px 16px" }}>
+              <span style={{ fontSize: "12.5px", color: "#2D5F8A" }}>
+                נגבו <b className="num">₪{r.total.toLocaleString("he-IL")}</b> עבור <b>{label}</b> לפי דוח כספים 2000. הסכום נרשם כהכנסה ב{label} ולא נספר במסך ההורים.
+              </span>
+            </div>
+          );
+        })}
 
         {/* Refunds summary */}
         {!isLoading && (

@@ -12,6 +12,10 @@ import { useOrganization } from "@/hooks/use-organization";
 import { getActiveYearId } from "@/lib/active-year";
 import type { Grade, ParentSection } from "@/hooks/use-horim";
 import { mergeCells, findMergedTargets, resolveSuggestions } from "@/lib/kesafim-merge";
+import { useOrgBudgetSources } from "@/hooks/use-budget-sources";
+
+// 2.8.0: שם הקטגוריה שאליה נרשמת הכנסה שנותבה מהדוח למקור תקציב אחר (נוצרת אוטומטית)
+const ROUTED_CATEGORY_NAME = "גביית הורים (כספים 2000)";
 
 // ─── טיפוסי תוצאת הפענוח (מראה של פלט ה-edge function) ───────────────────────
 
@@ -100,8 +104,10 @@ function formatDateHe(iso: string | null): string {
 
 // ─── סטייט המיפוי ─────────────────────────────────────────────────────────────
 
-type MappingMode = "map" | "create" | "skip";
-interface Mapping { mode: MappingMode; sectionId: string; newName: string; fromMemory: boolean; suggested?: boolean }
+// "source" (2.8.0): הסעיף מהדוח שייך למקור תקציב אחר (למשל "חוגים" → בית התלמיד) —
+// לא נכנס למסך ההורים; מה שנגבה נרשם כהכנסה באותו מקור.
+type MappingMode = "map" | "create" | "skip" | "source";
+interface Mapping { mode: MappingMode; sectionId: string; newName: string; fromMemory: boolean; suggested?: boolean; sourceSlug?: string }
 
 type Phase = "pick" | "processing" | "review" | "committing" | "done" | "log";
 type ImportMode = "first" | "update";
@@ -150,6 +156,13 @@ export function KesafimImportModal({
   const [viewGrades, setViewGrades] = useState<ViewGrade[]>([]);
   const [importId, setImportId] = useState<string | null>(null);
   const [memoryMap, setMemoryMap] = useState<Record<string, string>>({});
+  // 2.8.0: ניתוב סעיף מהדוח למקור תקציב אחר
+  const [memorySource, setMemorySource] = useState<Record<string, string>>({}); // norm → slug (זיכרון)
+  const [importedIncomeBySource, setImportedIncomeBySource] = useState<Record<string, number>>({}); // סך הכנסות שנרשמו מייבואים קודמים
+  const [manualIncomeBySource, setManualIncomeBySource] = useState<Record<string, number>>({}); // סך הכנסות ידניות במקור
+  const { data: orgSources } = useOrgBudgetSources();
+  const routeSources = useMemo(() => (orgSources ?? []).filter((s) => s.slug !== "horim"), [orgSources]);
+  const sourceLabel = (slug: string | undefined) => routeSources.find((s) => s.slug === slug)?.label ?? (slug ?? "").replace(/_/g, " ");
   const [manualBySection, setManualBySection] = useState<Record<string, number>>({});
   const [cellSums, setCellSums] = useState<Record<string, number>>({}); // `${gradeId}:${sectionId}` → סך גביות בתא
   const [existingGsa, setExistingGsa] = useState<GsaRow[]>([]);
@@ -160,7 +173,7 @@ export function KesafimImportModal({
   const [targetChoice, setTargetChoice] = useState<Record<string, "keep" | "update">>({});
   const [manualCats, setManualCats] = useState<ManualCat[]>([]); // 2.5.0 (3.ג): קטגוריות הורים ידניות בשנה
   const [manualMerge, setManualMerge] = useState<Record<string, string>>({}); // catId → norm יעד ("" = השאר נפרדת)
-  const [doneSummary, setDoneSummary] = useState<{ rows: number; total: number; newSections: number; seconds: number; merges: { from: string; to: string; movedExp: number; movedInc: number }[] } | null>(null);
+  const [doneSummary, setDoneSummary] = useState<{ rows: number; total: number; newSections: number; seconds: number; merges: { from: string; to: string; movedExp: number; movedInc: number }[]; routed: { slug: string; label: string; amount: number }[] } | null>(null);
   const [logRows, setLogRows] = useState<LogRow[] | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -172,16 +185,27 @@ export function KesafimImportModal({
     (async () => {
       const yearId = await getActiveYearId();
       if (!yearId) return;
-      const [memR, colR, gsaR] = await Promise.all([
+      const [memR, colR, gsaR, incR] = await Promise.all([
         supabase.from("kesafim_section_map")
-          .select("report_name_normalized, parent_section_id").eq("organization_id", orgId),
+          .select("report_name_normalized, parent_section_id, target_source").eq("organization_id", orgId),
         supabase.from("parent_collections")
           .select("grade_id, parent_section_id, amount, import_id").eq("school_year_id", yearId),
         supabase.from("grade_section_amounts")
           .select("id, grade_id, parent_section_id, amount_per_student").eq("school_year_id", yearId),
+        supabase.from("income")
+          .select("source, amount, import_id").eq("school_year_id", yearId).neq("source", "horim"),
       ]);
-      if (memR.error || colR.error || gsaR.error) { toast.error("שגיאה בטעינת נתוני הייבוא"); return; }
-      setMemoryMap(Object.fromEntries((memR.data ?? []).map((r) => [r.report_name_normalized, r.parent_section_id])));
+      if (memR.error || colR.error || gsaR.error || incR.error) { toast.error("שגיאה בטעינת נתוני הייבוא"); return; }
+      setMemoryMap(Object.fromEntries((memR.data ?? []).filter((r) => r.parent_section_id).map((r) => [r.report_name_normalized, r.parent_section_id as string])));
+      setMemorySource(Object.fromEntries((memR.data ?? []).filter((r) => r.target_source).map((r) => [r.report_name_normalized, r.target_source as string])));
+      const impInc: Record<string, number> = {};
+      const manInc: Record<string, number> = {};
+      (incR.data ?? []).forEach((i) => {
+        const bucket = i.import_id !== null ? impInc : manInc;
+        bucket[i.source] = (bucket[i.source] ?? 0) + Number(i.amount);
+      });
+      setImportedIncomeBySource(impInc);
+      setManualIncomeBySource(manInc);
       setExistingGsa((gsaR.data ?? []) as GsaRow[]);
       const hasImported = (colR.data ?? []).some((c) => c.import_id !== null);
       setMode(hasImported ? "update" : "first");
@@ -312,6 +336,13 @@ export function KesafimImportModal({
     const unresolved: string[] = [];
     vgs.forEach((g) => g.rows.forEach((r) => {
       if (maps[r.norm] || unresolved.includes(r.norm)) return;
+      // 2.8.0: זיכרון ניתוב למקור תקציב אחר (למשל "חוגים" → בית התלמיד)
+      const rememberedSource = memorySource[r.norm];
+      if (rememberedSource && (routeSources.length === 0 || routeSources.some((s) => s.slug === rememberedSource))) {
+        maps[r.norm] = { mode: "source", sectionId: "", newName: r.norm, fromMemory: true, sourceSlug: rememberedSource };
+        choices[r.norm] = "update";
+        return;
+      }
       const remembered = memoryMap[r.norm];
       if (remembered && sections.some((s) => s.id === remembered)) {
         maps[r.norm] = { mode: "map", sectionId: remembered, newName: r.norm, fromMemory: true };
@@ -335,7 +366,7 @@ export function KesafimImportModal({
     // מציעים סעיף קיים דומה רק כשההצעה חד-משמעית. סעיף שכבר נתפס בהתאמה ודאית
     // לא מוצע שוב, ואותו סעיף קיים לעולם לא מוצע לשני סעיפים שונים מהדוח —
     // בתיקו אף אחד לא מקבל אותו, והמשתמשת בוחרת. יצירת סעיף חדש היא ברירת המחדל.
-    const claimed = new Set(Object.values(maps).map((m) => m.sectionId));
+    const claimed = new Set(Object.values(maps).filter((m) => m.mode === "map").map((m) => m.sectionId));
     const suggestions = resolveSuggestions(
       unresolved,
       sections.filter((s) => !claimed.has(s.id)).map((s) => ({ id: s.id, normName: normalizeReportName(s.name) })),
@@ -411,7 +442,10 @@ export function KesafimImportModal({
 
   const rowKey = (gi: number, ri: number) => `${gi}-${ri}`;
   const rowIsWritten = (gi: number, ri: number, g: ViewGrade, r: ViewRow) =>
-    !rowSkip[rowKey(gi, ri)] && !!gradeMatch[g.label] && mappings[r.norm]?.mode !== "skip";
+    !rowSkip[rowKey(gi, ri)] && !!gradeMatch[g.label] && mappings[r.norm]?.mode !== "skip" && mappings[r.norm]?.mode !== "source";
+  // 2.8.0: שורה שמנותבת למקור תקציב אחר — לא נכתבת כסעיף/יעד/גבייה של הורים
+  const rowIsRouted = (gi: number, ri: number, g: ViewGrade, r: ViewRow) =>
+    !rowSkip[rowKey(gi, ri)] && !!gradeMatch[g.label] && mappings[r.norm]?.mode === "source" && !!mappings[r.norm]?.sourceSlug;
 
   /** דלתא במצב עדכון לתא (סעיף ממופה בלבד; סעיף חדש — הקיים 0). */
   function cellDelta(row: ViewRow, gradeLabel: string): { existing: number; target: number; delta: number } {
@@ -480,16 +514,36 @@ export function KesafimImportModal({
         rows++; total += c.paid;
       }
     });
-    return { rows, total, unchanged, writable, newSections: [...newSections], mappedSectionIds: [...mappedIds] };
+    // 2.8.0: סעיפים שמנותבים למקור תקציב אחר — סך הזכות מהדוח לכל מקור, ודלתא מול
+    // מה שכבר נרשם מייבואים קודמים (הדוח מצטבר, ולכן הדלתא תמיד מול הסך הקודם).
+    const routedAgg = new Map<string, { paid: number; charged: number; norms: string[] }>();
+    viewGrades.forEach((g, gi) => g.rows.forEach((r, ri) => {
+      if (!rowIsRouted(gi, ri, g, r)) return;
+      const slug = mappings[r.norm].sourceSlug as string;
+      const cur = routedAgg.get(slug) ?? { paid: 0, charged: 0, norms: [] };
+      cur.paid += r.paid; cur.charged += r.charged;
+      if (!cur.norms.includes(r.norm)) cur.norms.push(r.norm);
+      routedAgg.set(slug, cur);
+    }));
+    const routed = [...routedAgg.entries()].map(([slug, v]) => {
+      const existing = importedIncomeBySource[slug] ?? 0;
+      const raw = v.paid - existing;
+      return {
+        slug, norms: v.norms,
+        paid: Math.round(v.paid * 100) / 100, charged: Math.round(v.charged * 100) / 100, existing,
+        delta: Math.abs(raw) < 0.005 ? 0 : Math.round(raw * 100) / 100,
+      };
+    });
+    return { rows, total, unchanged, writable, newSections: [...newSections], mappedSectionIds: [...mappedIds], routed };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewGrades, mappings, rowSkip, gradeMatch, mode, cellSums]);
+  }, [viewGrades, mappings, rowSkip, gradeMatch, mode, cellSums, importedIncomeBySource]);
 
   const manualOverlap = mode === "first"
     ? plan.mappedSectionIds.reduce((s, id) => s + (manualBySection[id] ?? 0), 0) : 0;
   const unmatchedGrades = viewGrades.filter((g) => !gradeMatch[g.label]);
   // דוח אפס עדיין ניתן לאישור — היעדים נרשמים גם בלי שורות גבייה
   const canCommit = parsed !== null && unmatchedGrades.length === 0 && phase === "review" &&
-    (mode === "update" ? true : plan.writable > 0);
+    (mode === "update" ? true : plan.writable > 0 || plan.routed.length > 0);
 
   // ─── כתיבה באישור — batched, הכל await מפורש ───────────────────────────────
   async function commit() {
@@ -552,11 +606,19 @@ export function KesafimImportModal({
         sections.find((s) => s.id === id)?.name ?? mappings[usedNorms.find((n) => sectionIdByNorm[n] === id) ?? ""]?.newName ?? "";
 
       // 2. זיכרון מיפויים — upsert אחד
-      const { error: mapErr } = await supabase.from("kesafim_section_map").upsert(
-        usedNorms.map((norm) => ({ organization_id: orgId, report_name_normalized: norm, parent_section_id: sectionIdByNorm[norm] })),
-        { onConflict: "organization_id,report_name_normalized" },
-      );
-      if (mapErr) throw new Error(`שמירת מיפויים נכשלה: ${mapErr.message}`);
+      //    2.8.0: כולל ניתוב למקור תקציב אחר (target_source). בכל שורה נכתבים שני
+      //    השדות, כדי ששינוי שיוך בין סעיף למקור יתהפך נקי.
+      const routedNorms = [...new Set(plan.routed.flatMap((r) => r.norms))];
+      const mapRows = [
+        ...usedNorms.map((norm) => ({ organization_id: orgId, report_name_normalized: norm, parent_section_id: sectionIdByNorm[norm] as string | null, target_source: null as string | null })),
+        ...routedNorms.map((norm) => ({ organization_id: orgId, report_name_normalized: norm, parent_section_id: null as string | null, target_source: mappings[norm].sourceSlug as string | null })),
+      ];
+      if (mapRows.length > 0) {
+        const { error: mapErr } = await supabase.from("kesafim_section_map").upsert(
+          mapRows, { onConflict: "organization_id,report_name_normalized" },
+        );
+        if (mapErr) throw new Error(`שמירת מיפויים נכשלה: ${mapErr.message}`);
+      }
 
       // 3. יעדים — upsert אחד על UNIQUE(grade_id, parent_section_id).
       //    בחירת "השאר את היעד שלי" מדלגת; ערך זהה לקיים מדולג.
@@ -691,8 +753,39 @@ export function KesafimImportModal({
         if (error) throw new Error(`רישום הגבייה נכשל: ${error.message}`);
       }
 
+      // 5ב. (2.8.0) סעיפים שמנותבים למקור תקציב אחר — שורת הכנסה אחת למקור, בגובה
+      //     הדלתא מול מה שכבר נרשם מייבואים קודמים. לא נוגע במסך ההורים.
+      const routedWritten: { slug: string; label: string; amount: number }[] = [];
+      for (const rt of plan.routed) {
+        if (rt.delta === 0) continue;
+        const { data: catRow, error: catErr } = await supabase.from("budget_categories")
+          .select("id").eq("school_year_id", yearId).eq("source", rt.slug).eq("name", ROUTED_CATEGORY_NAME).maybeSingle();
+        if (catErr) throw new Error(`איתור קטגוריית ההכנסה נכשל: ${catErr.message}`);
+        let catId = catRow?.id ?? null;
+        if (!catId) {
+          const { data: maxCat, error: maxErr } = await supabase.from("budget_categories")
+            .select("order_index").eq("school_year_id", yearId).eq("source", rt.slug)
+            .order("order_index", { ascending: false }).limit(1).maybeSingle();
+          if (maxErr) throw new Error(`קריאת קטגוריות נכשלה: ${maxErr.message}`);
+          const { data: newCat, error: newCatErr } = await supabase.from("budget_categories")
+            .insert({ school_year_id: yearId, source: rt.slug, name: ROUTED_CATEGORY_NAME, planned_amount: 0, order_index: (maxCat?.order_index ?? 0) + 1, origin: "manual" })
+            .select("id").single();
+          if (newCatErr) throw new Error(`יצירת קטגוריית ההכנסה נכשלה: ${newCatErr.message}`);
+          catId = newCat.id;
+        }
+        const { error: incErr } = await supabase.from("income").insert({
+          school_year_id: yearId,
+          income_date: parsed.report.report_date ?? new Date().toISOString().slice(0, 10),
+          amount: rt.delta, bank_account: "parents", source: rt.slug,
+          budget_category_id: catId, import_id: importId, created_by: user?.id,
+          description: `גביית הורים — ${rt.norms.join(", ")} (${mode === "update" || rt.existing !== 0 ? "עדכון מדוח" : "דוח"} כספים 2000 מ-${dateHe})`,
+        });
+        if (incErr) throw new Error(`רישום ההכנסה ב${sourceLabel(rt.slug)} נכשל: ${incErr.message}`);
+        routedWritten.push({ slug: rt.slug, label: sourceLabel(rt.slug), amount: rt.delta });
+      }
+
       // 6. סגירת הייבוא + רישום מה נוצר (לניקוי מלא בביטול — תיקון 3)
-      const newMapNorms = usedNorms.filter((n) => !memoryMap[n]);
+      const newMapNorms = [...usedNorms, ...routedNorms].filter((n) => !memoryMap[n] && !memorySource[n]);
       const { error: cmtErr } = await supabase.from("kesafim_imports")
         .update({
           status: "committed", committed_at: new Date().toISOString(),
@@ -714,6 +807,7 @@ export function KesafimImportModal({
         newSections: plan.newSections.length,
         seconds: Math.round((performance.now() - t0) / 100) / 10,
         merges: mergeSummary,
+        routed: routedWritten,
       });
       setPhase("done");
       onCommitted?.();
@@ -729,16 +823,19 @@ export function KesafimImportModal({
     setLogRows(null);
     const yearId = await getActiveYearId();
     if (!yearId) return;
-    const [impR, colR] = await Promise.all([
+    const [impR, colR, incLogR] = await Promise.all([
       supabase.from("kesafim_imports")
         .select("id, report_date, created_at, committed_at, status, created_by")
         .eq("school_year_id", yearId).order("created_at", { ascending: false }),
       supabase.from("parent_collections")
         .select("import_id, amount").eq("school_year_id", yearId).not("import_id", "is", null),
+      // 2.8.0: גם הכנסות שנותבו מהייבוא למקור תקציב אחר
+      supabase.from("income")
+        .select("import_id, amount").eq("school_year_id", yearId).not("import_id", "is", null),
     ]);
-    if (impR.error || colR.error) { toast.error("שגיאה בטעינת היומן"); return; }
+    if (impR.error || colR.error || incLogR.error) { toast.error("שגיאה בטעינת היומן"); return; }
     const byImport: Record<string, { total: number; rows: number }> = {};
-    (colR.data ?? []).forEach((c) => {
+    [...(colR.data ?? []), ...(incLogR.data ?? [])].forEach((c) => {
       const k = c.import_id as string;
       byImport[k] = { total: (byImport[k]?.total ?? 0) + Number(c.amount), rows: (byImport[k]?.rows ?? 0) + 1 };
     });
@@ -775,7 +872,11 @@ export function KesafimImportModal({
       const { data: delRows, error: delErr } = await supabase.from("parent_collections")
         .delete().eq("import_id", id).select("id");
       if (delErr) throw new Error(`מחיקת שורות הייבוא נכשלה: ${delErr.message}`);
-      const deletedRows = (delRows ?? []).length;
+      // 2.8.0: גם ההכנסות שהייבוא רשם במקור תקציב אחר (ניתוב סעיף למקור)
+      const { data: delInc, error: delIncErr } = await supabase.from("income")
+        .delete().eq("import_id", id).select("id");
+      if (delIncErr) throw new Error(`מחיקת הכנסות הייבוא נכשלה: ${delIncErr.message}`);
+      const deletedRows = (delRows ?? []).length + (delInc ?? []).length;
 
       // 2. ניקוי מה שהייבוא יצר ואין עליו שום נתון אחר (תיקון 3, בדיקת 8.8)
       let deletedSections = 0, deletedGsa = 0, deletedCats = 0, deletedMaps = 0;
@@ -867,10 +968,11 @@ export function KesafimImportModal({
 
       ["parent-collections", "dashboard", "source-breakdown", "budget-plan",
         "parent-sections", "parent-sections-all", "grade-section-amounts", "budget-categories",
+        "income", // 2.8.0: ביטול מוחק גם הכנסות שנותבו למקור תקציב אחר
       ].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
 
       // סיכום הביטול — מה נמחק בפועל
-      const parts = [`${deletedRows} שורות גבייה`];
+      const parts = [`${deletedRows} שורות גבייה/הכנסה`];
       if (deletedSections > 0) parts.push(`${deletedSections} סעיפים`);
       if (deletedGsa > 0) parts.push(`${deletedGsa} יעדים`);
       if (deletedCats > 0) parts.push(`${deletedCats} קטגוריות תקציב`);
@@ -987,6 +1089,21 @@ export function KesafimImportModal({
                   הייבוא <b>יתווסף</b> עליהן ולא יחליף אותן.
                 </div>
               )}
+
+              {plan.routed.map((rt) => (
+                <div key={rt.slug} style={{ background: "#EAF2FA", border: "1.5px solid #C5DAEE", borderRadius: "12px", padding: "10px 14px", fontSize: "13px", color: "#2D5F8A", lineHeight: 1.7 }}>
+                  <b>{sourceLabel(rt.slug)}:</b> {rt.norms.join(", ")} — נגבו <b className="num">{fmt(rt.paid)} ₪</b> לפי הדוח.
+                  הסכום הזה <b>לא ייכנס למסך ההורים</b>; {rt.delta === 0
+                    ? <>כבר רשום במלואו ב{sourceLabel(rt.slug)} — לא ייכתב דבר.</>
+                    : <>יירשם כהכנסה ב{sourceLabel(rt.slug)}: <b className="num">{rt.delta > 0 ? "+" : ""}{fmt(rt.delta)} ₪</b>{rt.existing !== 0 && <> (כבר רשום מייבוא קודם: <span className="num">{fmt(rt.existing)} ₪</span>)</>}.</>}
+                  {(manualIncomeBySource[rt.slug] ?? 0) > 0 && (
+                    <div style={{ marginTop: "6px", color: "#8B5E0B" }}>
+                      <b>שימו לב:</b> ב{sourceLabel(rt.slug)} כבר רשומות הכנסות ידניות בסך <b className="num">{fmt(manualIncomeBySource[rt.slug])} ₪</b>.
+                      אם חלק מהן הוא אותו כסף שנגבה מההורים — מחקו אותן אחרי הייבוא, כדי שלא ייספר פעמיים.
+                    </div>
+                  )}
+                </div>
+              ))}
 
               {mergedTargets.length > 0 && (
                 <div style={{ background: "#FDF6E3", border: "1.5px solid #E8CF9C", borderRadius: "12px", padding: "10px 14px", fontSize: "13px", color: "#8B5E0B", lineHeight: 1.7 }}>
@@ -1132,7 +1249,7 @@ export function KesafimImportModal({
                               <td style={{ padding: "8px 6px" }}>
                                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                                   <select
-                                    value={m?.mode === "create" ? "__create" : m?.mode === "skip" ? "__skip" : m?.sectionId ?? "__create"}
+                                    value={m?.mode === "create" ? "__create" : m?.mode === "skip" ? "__skip" : m?.mode === "source" ? `__src:${m.sourceSlug}` : m?.sectionId ?? "__create"}
                                     onChange={(e) => {
                                       const v = e.target.value;
                                       setMappings({
@@ -1141,15 +1258,27 @@ export function KesafimImportModal({
                                           ? { mode: "create", sectionId: "", newName: m?.newName || r.norm, fromMemory: false }
                                           : v === "__skip"
                                             ? { ...m, mode: "skip", fromMemory: false, suggested: false }
-                                            : { mode: "map", sectionId: v, newName: m?.newName || r.norm, fromMemory: false },
+                                            : v.startsWith("__src:")
+                                              ? { mode: "source", sectionId: "", newName: m?.newName || r.norm, fromMemory: false, sourceSlug: v.slice(6) }
+                                              : { mode: "map", sectionId: v, newName: m?.newName || r.norm, fromMemory: false },
                                       });
                                     }}
                                     style={selectStyle}
                                   >
                                     <option value="__create">➕ צור סעיף חדש</option>
                                     {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    {routeSources.length > 0 && (
+                                      <optgroup label="לא שייך להורים — מקור תקציב אחר">
+                                        {routeSources.map((s) => <option key={s.slug} value={`__src:${s.slug}`}>→ {s.label}</option>)}
+                                      </optgroup>
+                                    )}
                                     <option value="__skip">דלג — לא לייבא</option>
                                   </select>
+                                  {m?.mode === "source" && (
+                                    <span style={{ fontSize: "10.5px", fontWeight: "600", color: "#2D5F8A", background: "#EAF2FA", border: "1px solid #C5DAEE", borderRadius: "6px", padding: "2px 7px", alignSelf: "flex-start" }}>
+                                      לא ייכנס למסך ההורים — יירשם כהכנסה ב{sourceLabel(m.sourceSlug)}
+                                    </span>
+                                  )}
                                   {m?.mode === "create" && (
                                     <input value={m.newName}
                                       onChange={(e) => setMappings({ ...mappings, [r.norm]: { ...m, newName: e.target.value } })}
@@ -1165,7 +1294,13 @@ export function KesafimImportModal({
                                   )}
                                 </div>
                               </td>
-                              {mode === "update" && dc ? (
+                              {mode === "update" && m?.mode === "source" ? (
+                                <>
+                                  <td style={{ padding: "8px 6px", textAlign: "left", color: "#AAA099" }}>—</td>
+                                  <td className="num" style={{ padding: "8px 6px", textAlign: "left", whiteSpace: "nowrap", color: "#1A1A1A" }}>{fmt(r.paid)}</td>
+                                  <td style={{ padding: "8px 14px", textAlign: "left", fontSize: "11.5px", color: "#2D5F8A" }}>→ {sourceLabel(m.sourceSlug)}</td>
+                                </>
+                              ) : mode === "update" && dc ? (
                                 <>
                                   <td className="num" style={{ padding: "8px 6px", textAlign: "left", whiteSpace: "nowrap", color: "#1A1A1A" }}>{fmt(dc.existing)}</td>
                                   <td className="num" style={{ padding: "8px 6px", textAlign: "left", whiteSpace: "nowrap", color: "#1A1A1A" }}>{fmt(dc.target)}</td>
@@ -1182,7 +1317,7 @@ export function KesafimImportModal({
                                   <td className="num" style={{ padding: "8px 6px", textAlign: "left", color: r.charged < 0 ? "#A93226" : "#1A1A1A", whiteSpace: "nowrap" }}>{fmt(r.charged)}</td>
                                   <td className="num" style={{ padding: "8px 6px", textAlign: "left", color: r.paid < 0 ? "#A93226" : "#1A1A1A", whiteSpace: "nowrap" }}>{fmt(r.paid)}</td>
                                   <td style={{ padding: "8px 14px", textAlign: "left" }}>
-                                    {!skipped && r.charged > 0 && gid ? (
+                                    {!skipped && r.charged > 0 && gid && m?.mode !== "source" ? (
                                       conflict ? (
                                         <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "flex-start" }}>
                                           <div style={{ display: "flex", gap: "5px" }}>
@@ -1250,13 +1385,20 @@ export function KesafimImportModal({
                 {mode === "update" ? "העדכון הושלם" : "הייבוא הושלם"}
               </div>
               <div style={{ fontSize: "13.5px", color: "#4A453F", lineHeight: 1.8 }}>
-                {doneSummary.rows === 0 ? (
+                {doneSummary.rows === 0 && doneSummary.routed.length === 0 ? (
                   <>הדוח תואם את הנתונים הקיימים — לא נדרש שינוי.</>
+                ) : doneSummary.rows === 0 ? (
+                  <>במסך ההורים לא נדרש שינוי.</>
                 ) : (
                   <>נרשמו <b className="num">{doneSummary.rows}</b> שורות בסך <b className="num">{fmt(doneSummary.total)} ₪</b>
                     {doneSummary.newSections > 0 && <> · נוצרו <b className="num">{doneSummary.newSections}</b> סעיפים חדשים</>}
                     <br />היעדים והתכנון התקציבי עודכנו בהתאם.</>
                 )}
+                {doneSummary.routed.map((rt) => (
+                  <div key={rt.slug} style={{ marginTop: "10px", fontSize: "12.5px", color: "#2D5F8A", background: "#EAF2FA", border: "1px solid #C5DAEE", borderRadius: "10px", padding: "8px 12px", textAlign: "right", lineHeight: 1.7 }}>
+                    נרשמה הכנסה ב<b>{rt.label}</b>: <b className="num">{rt.amount > 0 ? "+" : ""}{fmt(rt.amount)} ₪</b> (לא נספר במסך ההורים)
+                  </div>
+                ))}
                 {doneSummary.merges.length > 0 && (
                   <div style={{ marginTop: "10px", fontSize: "12.5px", color: "#7A2E63", background: "#F7EEF5", border: "1px solid #E6D9EC", borderRadius: "10px", padding: "8px 12px", textAlign: "right", lineHeight: 1.7 }}>
                     <b>מיזוג קטגוריות ידניות:</b>
@@ -1354,6 +1496,9 @@ export function KesafimImportModal({
               {mode === "update"
                 ? <>ייכתבו {plan.rows} שורות עדכון · {plan.total > 0 ? "+" : ""}{fmt(plan.total)} ₪ · {plan.unchanged} תאים ללא שינוי</>
                 : <>ייכתבו {plan.rows} שורות גבייה · {fmt(plan.total)} ₪{plan.newSections.length > 0 && ` · ${plan.newSections.length} סעיפים חדשים`}</>}
+              {plan.routed.filter((rt) => rt.delta !== 0).map((rt) => (
+                <span key={rt.slug}> · {sourceLabel(rt.slug)}: <bdi>{rt.delta > 0 ? "+" : ""}{fmt(rt.delta)} ₪</bdi></span>
+              ))}
             </span>
             <div style={{ marginRight: "auto", display: "flex", gap: "10px" }}>
               <button onClick={onClose} style={{ padding: "10px 18px", border: "1px solid #E8E2D9", borderRadius: "10px", background: "#fff", color: "#6B6560", fontSize: "14px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
