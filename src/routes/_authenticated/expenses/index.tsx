@@ -21,6 +21,7 @@ import {
 import { useOrgBudgetSources, getSourceStyle, getSourceLabel, FALLBACK_SOURCES, type OrgBudgetSource } from "@/hooks/use-budget-sources";
 import { useAddBudgetCategory, useCreateFlowThroughPair } from "@/hooks/use-budget-plan";
 import { useGrades } from "@/hooks/use-horim";
+import { useSubCategories, useAddSubCategory } from "@/hooks/use-sub-categories";
 
 export const Route = createFileRoute("/_authenticated/expenses/")({
   component: ExpensesPage,
@@ -223,6 +224,50 @@ const labelStyle: React.CSSProperties = {
 
 // 2.4.0 (נושא 3.א): הוספת קטגוריה חדשה inline מתוך מסך ההעלאה — כל מקור כולל
 // הורים. נוצרת עם planned=0 ו-origin='manual' (מוגנת מדריסת סנכרון/כספים2000).
+// 2.8.0: תת-קטגוריה נשמרת רק בהוצאות הורים; "" / "__new__" = ללא.
+const subCategoryIdOf = (f: { source: string; budget_activity_id: string }) =>
+  f.source === "horim" && f.budget_activity_id && f.budget_activity_id !== "__new__" ? f.budget_activity_id : null;
+
+// 2.8.0: יצירת תת-קטגוריה חדשה תוך כדי הזנת הוצאה (מתחת לקטגוריה שנבחרה)
+function NewSubCategoryRow({ budgetCategoryId, onCreated, onCancel }: {
+  budgetCategoryId: string;
+  onCreated: (id: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const addSub = useAddSubCategory();
+  const submit = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) { toast.error("יש להזין שם לתת-הקטגוריה"); return; }
+    try {
+      const res = await addSub.mutateAsync({ name: trimmed, budgetCategoryId });
+      toast.success(res.existed ? "תת-הקטגוריה כבר קיימת — נבחרה" : "תת-הקטגוריה נוספה");
+      onCreated(res.id);
+    } catch {
+      toast.error("שגיאה בהוספת תת-הקטגוריה");
+    }
+  };
+  return (
+    <div style={{ display: "flex", gap: "6px", marginTop: "6px", alignItems: "center" }}>
+      <input autoFocus type="text" value={name} placeholder="שם תת-הקטגוריה החדשה"
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); void submit(); }
+          if (e.key === "Escape") onCancel();
+        }}
+        style={{ ...inputStyle, padding: "8px 10px", fontSize: "13px", flex: 1 }} />
+      <button type="button" disabled={addSub.isPending} onClick={() => void submit()}
+        style={{ padding: "8px 12px", borderRadius: "7px", border: "none", background: addSub.isPending ? "#888" : "#2D6644", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: addSub.isPending ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}>
+        {addSub.isPending ? "מוסיף..." : "הוסף"}
+      </button>
+      <button type="button" onClick={onCancel}
+        style={{ padding: "8px 8px", borderRadius: "7px", border: "1px solid #E8E2D9", background: "#fff", color: "#AAA099", fontSize: "12px", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+        ביטול
+      </button>
+    </div>
+  );
+}
+
 function NewCategoryRow({ source, targetYearId, onCreated, onCancel }: {
   source: BudgetSource;
   targetYearId?: string | null;
@@ -322,6 +367,7 @@ type ExpenseFormState = {
   source: BudgetSource;
   budget_category_id: string;
   grade_id: string; // 2.7.0: שיוך שכבה (הורים בלבד; "" = כל השכבות)
+  budget_activity_id: string; // 2.8.0: תת-קטגוריה (הורים בלבד; "" = ללא)
   supplier: string;
   description: string;
   bank_account: "school" | "parents";
@@ -366,6 +412,10 @@ function ExpenseForm({
   const { data: categories } = useBudgetCategories(form.source);
   const { data: gradesData } = useGrades(); // 2.7.0: שכבות השנה לבורר שכבה (הורים)
   const isHorimSrc = form.source === "horim";
+  // 2.8.0: תת-קטגוריות של הקטגוריה שנבחרה (הורים בלבד)
+  const { data: subCats } = useSubCategories(form.source, isHorimSrc);
+  const hasRealCategory = Boolean(form.budget_category_id) && form.budget_category_id !== "__new__";
+  const catSubs = hasRealCategory ? (subCats ?? []).filter((a) => a.budget_category_id === form.budget_category_id) : [];
   const { data: orgSources } = useOrgBudgetSources();
   const sources = orgSources?.length ? orgSources : FALLBACK_SOURCES;
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -472,7 +522,7 @@ function ExpenseForm({
             const active = form.source === src.slug;
             return (
               <button key={src.slug} type="button"
-                onClick={() => { set("source", src.slug); set("budget_category_id", ""); set("grade_id", ""); }}
+                onClick={() => { set("source", src.slug); set("budget_category_id", ""); set("grade_id", ""); set("budget_activity_id", ""); }}
                 style={{
                   flex: "1 1 auto", minWidth: "80px", padding: "8px 12px", borderRadius: "8px",
                   border: `1.5px solid ${active ? src.color : "#E8E2D9"}`,
@@ -492,7 +542,7 @@ function ExpenseForm({
         <label style={labelStyle}>קטגוריה</label>
         <CategorySearchSelect
           value={form.budget_category_id}
-          onChange={(id) => set("budget_category_id", id)}
+          onChange={(id) => { set("budget_category_id", id); set("budget_activity_id", ""); }}
           categories={categories ?? []}
           sourceColor={activeSourceColor}
           allowAddNew
@@ -503,6 +553,23 @@ function ExpenseForm({
             onCancel={() => set("budget_category_id", "")} />
         )}
       </div>
+
+      {/* 2.8.0: תת-קטגוריה — הורים בלבד, אופציונלי; אפשר ליצור חדשה במקום */}
+      {isHorimSrc && hasRealCategory && (
+        <div>
+          <label style={labelStyle}>תת-קטגוריה (אופציונלי)</label>
+          <select value={form.budget_activity_id} onChange={(e) => set("budget_activity_id", e.target.value)} style={inputStyle}>
+            <option value="">ללא</option>
+            {catSubs.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            <option value="__new__">+ תת-קטגוריה חדשה…</option>
+          </select>
+          {form.budget_activity_id === "__new__" && (
+            <NewSubCategoryRow budgetCategoryId={form.budget_category_id}
+              onCreated={(id) => set("budget_activity_id", id)}
+              onCancel={() => set("budget_activity_id", "")} />
+          )}
+        </div>
+      )}
 
       {/* 2.7.0: שיוך שכבה — הורים בלבד, אופציונלי (ברירת מחדל: כל השכבות) */}
       {isHorimSrc && (
@@ -908,7 +975,7 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
   const createPair = useCreateFlowThroughPair();
   const initial: ExpenseFormState = {
     expense_date: today(), amount: "", source: defaultSource,
-    budget_category_id: "", grade_id: "", supplier: "", description: "", bank_account: "school",
+    budget_category_id: "", grade_id: "", budget_activity_id: "", supplier: "", description: "", bank_account: "school",
   };
   const handleSubmit = async (form: ExpenseFormState, receiptFile: File | null) => {
     try {
@@ -919,6 +986,7 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
         source: form.source, bank_account: form.bank_account,
         budget_category_id: form.budget_category_id || null,
         grade_id: form.source === "horim" ? (form.grade_id || null) : null,
+        budget_activity_id: subCategoryIdOf(form),
         supplier: form.supplier || null, description: form.description || null,
         receipt_url,
       } as NewExpense);
@@ -967,6 +1035,12 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
           await supabase.from("expenses").update({ receipt_url: url }).eq("id", res.expense_id);
         } catch { toast.warning("הזוג נשמר, אך צירוף הקבלה נכשל — ניתן לצרף בעריכת ההוצאה"); }
       }
+      // 2.8.0: ה-RPC של הזוג לא מקבל תת-קטגוריה — מצורפת להוצאה אחרי היצירה (best-effort).
+      const subId = subCategoryIdOf(form);
+      if (subId && res?.expense_id) {
+        const { error: subErr } = await supabase.from("expenses").update({ budget_activity_id: subId }).eq("id", res.expense_id);
+        if (subErr) toast.warning("הזוג נשמר, אך שיוך תת-הקטגוריה נכשל — ניתן לשייך בעריכת ההוצאה");
+      }
       toast.success("נרשמו הכנסה והוצאה תואמות (תקציב צבוע)");
       onClose();
     } catch { toast.error("שגיאה ברישום הזוג הצבוע"); }
@@ -989,6 +1063,7 @@ function EditExpenseModal({ expense, onClose }: { expense: Expense; onClose: () 
     source: expense.source,
     budget_category_id: expense.budget_category_id ?? "",
     grade_id: expense.grade_id ?? "",
+    budget_activity_id: expense.budget_activity_id ?? "",
     supplier: expense.supplier ?? "",
     description: expense.description ?? "",
     bank_account: expense.bank_account ?? "school",
@@ -1003,6 +1078,7 @@ function EditExpenseModal({ expense, onClose }: { expense: Expense; onClose: () 
         source: form.source, bank_account: form.bank_account,
         budget_category_id: form.budget_category_id || null,
         grade_id: form.source === "horim" ? (form.grade_id || null) : null,
+        budget_activity_id: subCategoryIdOf(form),
         supplier: form.supplier || null, description: form.description || null,
         receipt_url,
       });
@@ -1145,7 +1221,7 @@ function ExpenseMobileCard({
             background: style.bg_color, color: style.color,
           }}>{label}</span>
           {e.budget_categories?.name && (
-            <span style={{ fontSize: "11px", color: "#AAA099" }}>· {e.budget_categories.name}</span>
+            <span style={{ fontSize: "11px", color: "#AAA099" }}>· {e.budget_categories.name}{e.budget_activities?.name ? ` / ${e.budget_activities.name}` : ""}</span>
           )}
           {e.grades?.name && (
             <span style={{ fontSize: "10px", fontWeight: 600, color: "#2D6644", background: "#EAF3EB", border: "1px solid #CDE8D3", borderRadius: "99px", padding: "1px 7px" }}>{e.grades.name}</span>
@@ -1931,7 +2007,7 @@ export default function ExpensesPage() {
   const q = search.trim().toLowerCase();
   const visibleExpenses = q
     ? filteredBySource.filter((e) =>
-        [e.supplier, e.description, e.budget_categories?.name]
+        [e.supplier, e.description, e.budget_categories?.name, e.budget_activities?.name]
           .some((f) => f?.toLowerCase().includes(q))
       )
     : filteredBySource;
@@ -2173,7 +2249,7 @@ export default function ExpensesPage() {
                       {label}
                     </span>
                     <span style={{ fontSize: "13px", color: "#6B6560", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.budget_categories?.name ?? "—"}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.budget_categories?.name ?? "—"}{e.budget_activities?.name ? ` / ${e.budget_activities.name}` : ""}</span>
                       {e.grades?.name && (
                         <span title="שכבה" style={{ flexShrink: 0, padding: "1px 7px", borderRadius: "99px", fontSize: "10px", fontWeight: 600, background: "#EAF3EB", color: "#2D6644", border: "1px solid #CDE8D3" }}>{e.grades.name}</span>
                       )}

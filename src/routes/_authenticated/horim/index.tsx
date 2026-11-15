@@ -72,7 +72,15 @@ type GradeSpend = {
   bySectionProratedAg: Map<string, number>;
   otherAg: number;
   otherProratedAg: number;
+  // 2.8.0: sub-category breakdown (display-only), same agorot as above.
+  subsBySection: Map<string, Map<string, SubAgg>>; // section id → sub-category → spend
+  otherByCat: Map<string, { name: string; ag: number; subs: Map<string, SubAgg> }>; // categories with no matching section
 };
+type SubAgg = { name: string; ag: number };
+const NO_SUB = "__none__"; // spend with no sub-category
+const hasRealSubs = (m?: Map<string, SubAgg>) => !!m && [...m.keys()].some((k) => k !== NO_SUB);
+const sortedSubs = (m: Map<string, SubAgg>) =>
+  [...m.entries()].sort(([ka, a], [kb, b]) => (ka === NO_SUB ? 1 : 0) - (kb === NO_SUB ? 1 : 0) || b.ag - a.ag);
 
 // 2.7.0: ONE shared column template for the parent grades table — the header row and every data
 // row reference this single constant, so the columns can never drift apart.
@@ -1282,9 +1290,44 @@ function GradeRow({
   const activeRows = secRows.filter((r) => r.active);
   const inactiveRows = secRows.filter((r) => !r.active);
   const dash = () => <span className="num" style={{ color: DIM }}>—</span>;
-  const renderSecRow = (r: (typeof secRows)[number], isInactive: boolean) => (
-    <div key={r.s.id} style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", alignItems: "center", borderTop: "1px solid rgba(31,36,33,0.05)", background: isInactive ? "#FBFAF7" : "transparent" }}>
-      <span title={r.s.name} style={{ textAlign: "right", fontWeight: 500, color: "#1F2421", fontSize: "12.5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.s.name}</span>
+  // 2.8.0: sub-category rows under a section — collapsed by default, opened per row.
+  const [openSubs, setOpenSubs] = useState<Set<string>>(new Set());
+  const toggleSubs = (id: string) =>
+    setOpenSubs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  const subToggleProps = (id: string) => ({
+    role: "button" as const, tabIndex: 0,
+    onClick: (ev: React.MouseEvent) => { ev.stopPropagation(); toggleSubs(id); },
+    onKeyDown: (ev: React.KeyboardEvent) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.stopPropagation(); toggleSubs(id); } },
+  });
+  const subChevron = (open: boolean) => (
+    <span style={{ display: "inline-flex", verticalAlign: "middle", marginRight: "4px", color: "#997404" }}>
+      {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+    </span>
+  );
+  // A sub row shares DRILL_GRID: the name spans the first four columns, the amount sits under "יצא".
+  const subRow = (key: string, name: string, ag: number, depth: number, strong = false) => (
+    <div key={key} style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "6px 16px", alignItems: "center", borderTop: "1px solid rgba(31,36,33,0.04)", background: "#FBFAF7" }}>
+      <span title={name} style={{ gridColumn: "span 4", textAlign: "right", paddingRight: `${depth * 16}px`, fontSize: "12px", fontWeight: strong ? 500 : 400, color: strong ? "#1F2421" : "#5C645F", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+      <div style={{ textAlign: "right" }}><span className="num" style={{ fontSize: "12px", color: "#CE2458" }}>{fmt(ag / 100)}</span></div>
+      <span /><span />
+    </div>
+  );
+  const subRowsOf = (m: Map<string, SubAgg>, depth: number, prefix: string) =>
+    sortedSubs(m).map(([k, a]) => subRow(`${prefix}:${k}`, a.name, a.ag, depth));
+  const otherCats = [...spend.otherByCat.entries()].sort(([, a], [, b]) => b.ag - a.ag);
+  const otherOpen = otherCats.length > 0 && openSubs.has("__other__");
+  const renderSecRow = (r: (typeof secRows)[number], isInactive: boolean) => {
+    const subs = spend.subsBySection.get(r.s.id);
+    const hasSubs = hasRealSubs(subs);
+    const subsOpen = hasSubs && openSubs.has(r.s.id);
+    return (
+    <div key={r.s.id}>
+    <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", alignItems: "center", borderTop: "1px solid rgba(31,36,33,0.05)", background: isInactive ? "#FBFAF7" : "transparent" }}>
+      <span title={hasSubs ? `${r.s.name} — לחיצה מציגה פירוט לפי תת-קטגוריה` : r.s.name} {...(hasSubs ? subToggleProps(r.s.id) : {})} style={{ textAlign: "right", fontWeight: 500, color: "#1F2421", fontSize: "12.5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: hasSubs ? "pointer" : "default" }}>{r.s.name}{hasSubs && subChevron(subsOpen)}</span>
       <div style={{ textAlign: "right" }}>
         <AmountPerStudentCell gradeId={grade.id} sectionId={r.s.id} sectionName={r.s.name} current={r.aps} existingId={r.gsa?.existing_id} />
       </div>
@@ -1297,7 +1340,10 @@ function GradeRow({
       <div style={{ textAlign: "right" }}>{(r.collected > 0 || r.spent > 0) ? <span className="num" style={{ fontWeight: 600, color: (r.collected - r.spent) < 0 ? "#CE2458" : "#0B7A5C" }}>{fmt(r.collected - r.spent)}</span> : dash()}</div>
       <div style={{ textAlign: "right" }}>{r.planned === 0 ? dash() : <span className="num" style={{ fontWeight: 600, color: r.secPct >= 100 ? "#0B7A5C" : r.secPct >= 50 ? "#0B7A5C" : "#5C645F" }}>{r.secPct}%</span>}</div>
     </div>
-  );
+    {subsOpen && subs && subRowsOf(subs, 1, r.s.id)}
+    </div>
+    );
+  };
 
   return (
     <>
@@ -1416,8 +1462,9 @@ function GradeRow({
                     )}
                     {showInactive && inactiveRows.map((r) => renderSecRow(r, true))}
                     {(otherSpent > 0 || unassignedCollected > 0) && (
+                      <>
                       <div style={{ display: "grid", gridTemplateColumns: DRILL_GRID, gap: "8px", padding: "8px 16px", alignItems: "center", borderTop: "1px solid rgba(31,36,33,0.05)", background: "#FBFAF7" }}>
-                        <span style={{ gridColumn: "span 2", textAlign: "right", fontWeight: 500, color: "#5C645F", fontSize: "12px" }}>אחר — הוצאות ללא סעיף</span>
+                        <span title={otherCats.length > 0 ? "לחיצה מציגה פירוט לפי קטגוריה" : undefined} {...(otherCats.length > 0 ? subToggleProps("__other__") : {})} style={{ gridColumn: "span 2", textAlign: "right", fontWeight: 500, color: "#5C645F", fontSize: "12px", cursor: otherCats.length > 0 ? "pointer" : "default" }}>אחר — הוצאות ללא סעיף{otherCats.length > 0 && subChevron(otherOpen)}</span>
                         <div style={{ textAlign: "right" }}>{dash()}</div>
                         <div style={{ textAlign: "right" }}>{unassignedCollected > 0 ? <span className="num" style={{ color: "#1F2421", fontWeight: 600 }}>{fmt(unassignedCollected)}</span> : dash()}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: "3px", minWidth: 0 }}>
@@ -1427,6 +1474,13 @@ function GradeRow({
                         <div style={{ textAlign: "right" }}>{(unassignedCollected > 0 || otherSpent > 0) ? <span className="num" style={{ fontWeight: 600, color: (unassignedCollected - otherSpent) < 0 ? "#CE2458" : "#0B7A5C" }}>{fmt(unassignedCollected - otherSpent)}</span> : dash()}</div>
                         <div style={{ textAlign: "right" }}>{dash()}</div>
                       </div>
+                      {otherOpen && otherCats.map(([ck, c]) => (
+                        <div key={ck}>
+                          {subRow(`oc:${ck}`, c.name, c.ag, 1, true)}
+                          {hasRealSubs(c.subs) && subRowsOf(c.subs, 2, `oc:${ck}`)}
+                        </div>
+                      ))}
+                      </>
                     )}
                   </div>
                 </div>
@@ -1602,6 +1656,7 @@ export default function HorimPage() {
   const spendByGrade = new Map<string, GradeSpend>();
   grades.forEach((g) => spendByGrade.set(g.id, {
     spentAg: 0, proratedAg: 0, bySectionAg: new Map(), bySectionProratedAg: new Map(), otherAg: 0, otherProratedAg: 0,
+    subsBySection: new Map(), otherByCat: new Map(),
   }));
   horimExpenses.forEach((e) => {
     const cents = Math.round(e.amount * 100);
@@ -1613,12 +1668,27 @@ export default function HorimPage() {
       if (!gs || ag <= 0) return;
       gs.spentAg += ag;
       if (prorated) gs.proratedAg += ag;
+      // 2.8.0: the same agorot, also bucketed by sub-category
+      const subKey = e.budget_activity_id ?? NO_SUB;
+      const subName = e.budget_activities?.name ?? "ללא תת-קטגוריה";
+      const bump = (m: Map<string, SubAgg>) => {
+        const cur = m.get(subKey);
+        if (cur) cur.ag += ag; else m.set(subKey, { name: subName, ag });
+      };
       if (sec) {
         gs.bySectionAg.set(sec.id, (gs.bySectionAg.get(sec.id) ?? 0) + ag);
         if (prorated) gs.bySectionProratedAg.set(sec.id, (gs.bySectionProratedAg.get(sec.id) ?? 0) + ag);
+        let m = gs.subsBySection.get(sec.id);
+        if (!m) { m = new Map(); gs.subsBySection.set(sec.id, m); }
+        bump(m);
       } else {
         gs.otherAg += ag;
         if (prorated) gs.otherProratedAg += ag;
+        const catKey = e.budget_category_id ?? "__nocat__";
+        let c = gs.otherByCat.get(catKey);
+        if (!c) { c = { name: catName ?? "ללא קטגוריה", ag: 0, subs: new Map() }; gs.otherByCat.set(catKey, c); }
+        c.ag += ag;
+        bump(c.subs);
       }
     };
     if (e.grade_id && spendByGrade.has(e.grade_id)) {
