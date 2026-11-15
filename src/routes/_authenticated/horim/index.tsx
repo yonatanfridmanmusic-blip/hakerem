@@ -1694,8 +1694,12 @@ export default function HorimPage() {
     if (e.grade_id && spendByGrade.has(e.grade_id)) {
       apply(e.grade_id, cents, false);
     } else {
-      const alloc = splitByWeights(cents, grades.map((g) => g.student_count));
-      grades.forEach((g, i) => apply(g.id, alloc[i], true));
+      // 2.8.0: כמה שכבות (target_grade_ids) — מתחלק רק ביניהן; אחרת בין כל השכבות.
+      // אותה חלוקה לפי מספר תלמידים, באגורות שלמות.
+      const targets = (e.target_grade_ids ?? []).filter((id) => spendByGrade.has(id));
+      const pool = targets.length > 0 ? grades.filter((g) => targets.includes(g.id)) : grades;
+      const alloc = splitByWeights(cents, pool.map((g) => g.student_count));
+      pool.forEach((g, i) => apply(g.id, alloc[i], true));
     }
   });
 

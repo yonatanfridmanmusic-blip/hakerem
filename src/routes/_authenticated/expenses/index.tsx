@@ -224,6 +224,34 @@ const labelStyle: React.CSSProperties = {
 
 // 2.4.0 (נושא 3.א): הוספת קטגוריה חדשה inline מתוך מסך ההעלאה — כל מקור כולל
 // הורים. נוצרת עם planned=0 ו-origin='manual' (מוגנת מדריסת סנכרון/כספים2000).
+// 2.8.0: שיוך שכבות להוצאת הורים. אף שכבה או כולן = כלל בית-ספרי (כמו 2.7.0);
+// שכבה אחת = grade_id (כמו 2.7.0); כמה שכבות = target_grade_ids — במסך ההורים
+// ההוצאה מתחלקת ביניהן לפי מספר התלמידים.
+const gradeFieldsOf = (f: { source: string; grade_ids: string[] }, allGradeCount: number): { grade_id: string | null; target_grade_ids: string[] } => {
+  if (f.source !== "horim") return { grade_id: null, target_grade_ids: [] };
+  const ids = f.grade_ids;
+  if (ids.length === 0 || (allGradeCount > 0 && ids.length >= allGradeCount)) return { grade_id: null, target_grade_ids: [] };
+  if (ids.length === 1) return { grade_id: ids[0], target_grade_ids: [] };
+  return { grade_id: null, target_grade_ids: ids };
+};
+
+const gradeChipStyle = (active: boolean): React.CSSProperties => ({
+  padding: "7px 12px", borderRadius: "99px",
+  border: `1.5px solid ${active ? "#8B2F6E" : "#E8E2D9"}`,
+  background: active ? "#F7EEF4" : "#fff", color: active ? "#8B2F6E" : "#888079",
+  fontSize: "13px", fontWeight: active ? 600 : 400,
+  cursor: "pointer", fontFamily: "var(--font-sans)", transition: "all 0.12s",
+});
+
+// 2.8.0: תג "שכבות ג׳ + ד׳" להוצאה שמשויכת לכמה שכבות (רשימת ההוצאות)
+function MultiGradeChip({ ids, style }: { ids: string[] | null | undefined; style: React.CSSProperties }) {
+  const { data: grades } = useGrades();
+  if (!ids || ids.length < 2) return null;
+  const names = (grades ?? []).filter((g) => ids.includes(g.id)).map((g) => g.name.replace(/^שכבה\s+/, ""));
+  if (names.length === 0) return null;
+  return <span title="ההוצאה מתחלקת בין השכבות לפי מספר התלמידים" style={style}>שכבות {names.join(" + ")}</span>;
+}
+
 // 2.8.0: תת-קטגוריה נשמרת רק בהוצאות הורים; "" / "__new__" = ללא.
 const subCategoryIdOf = (f: { source: string; budget_activity_id: string }) =>
   f.source === "horim" && f.budget_activity_id && f.budget_activity_id !== "__new__" ? f.budget_activity_id : null;
@@ -366,7 +394,7 @@ type ExpenseFormState = {
   amount: string;
   source: BudgetSource;
   budget_category_id: string;
-  grade_id: string; // 2.7.0: שיוך שכבה (הורים בלבד; "" = כל השכבות)
+  grade_ids: string[]; // 2.7.0/2.8.0: שיוך שכבות (הורים בלבד; [] = כל השכבות, אחת, או כמה)
   budget_activity_id: string; // 2.8.0: תת-קטגוריה (הורים בלבד; "" = ללא)
   supplier: string;
   description: string;
@@ -522,7 +550,7 @@ function ExpenseForm({
             const active = form.source === src.slug;
             return (
               <button key={src.slug} type="button"
-                onClick={() => { set("source", src.slug); set("budget_category_id", ""); set("grade_id", ""); set("budget_activity_id", ""); }}
+                onClick={() => { set("source", src.slug); set("budget_category_id", ""); setForm((f) => ({ ...f, grade_ids: [] })); set("budget_activity_id", ""); }}
                 style={{
                   flex: "1 1 auto", minWidth: "80px", padding: "8px 12px", borderRadius: "8px",
                   border: `1.5px solid ${active ? src.color : "#E8E2D9"}`,
@@ -574,11 +602,29 @@ function ExpenseForm({
       {/* 2.7.0: שיוך שכבה — הורים בלבד, אופציונלי (ברירת מחדל: כל השכבות) */}
       {isHorimSrc && (
         <div>
-          <label style={labelStyle}>שכבה (אופציונלי)</label>
-          <select value={form.grade_id} onChange={(e) => set("grade_id", e.target.value)} style={inputStyle}>
-            <option value="">כל השכבות</option>
-            {(gradesData ?? []).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
+          <label style={labelStyle}>שכבות (אופציונלי)</label>
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            <button type="button" aria-pressed={form.grade_ids.length === 0}
+              onClick={() => setForm((f) => ({ ...f, grade_ids: [] }))}
+              style={gradeChipStyle(form.grade_ids.length === 0)}>
+              כל השכבות
+            </button>
+            {(gradesData ?? []).map((g) => {
+              const on = form.grade_ids.includes(g.id);
+              return (
+                <button key={g.id} type="button" aria-pressed={on}
+                  onClick={() => setForm((f) => ({ ...f, grade_ids: on ? f.grade_ids.filter((x) => x !== g.id) : [...f.grade_ids, g.id] }))}
+                  style={gradeChipStyle(on)}>
+                  {g.name}
+                </button>
+              );
+            })}
+          </div>
+          {form.grade_ids.length > 1 && (
+            <div style={{ fontSize: "11.5px", color: "#888079", marginTop: "6px" }}>
+              ההוצאה תתחלק בין {form.grade_ids.length} השכבות שנבחרו, לפי מספר התלמידים בכל שכבה.
+            </div>
+          )}
         </div>
       )}
 
@@ -972,10 +1018,12 @@ function Modal({ title, subtitle, onClose, children }: {
 
 function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defaultSource: string }) {
   const addExpense = useAddExpense();
+  const { data: allGrades } = useGrades();
+  const gradeCount = (allGrades ?? []).length;
   const createPair = useCreateFlowThroughPair();
   const initial: ExpenseFormState = {
     expense_date: today(), amount: "", source: defaultSource,
-    budget_category_id: "", grade_id: "", budget_activity_id: "", supplier: "", description: "", bank_account: "school",
+    budget_category_id: "", grade_ids: [], budget_activity_id: "", supplier: "", description: "", bank_account: "school",
   };
   const handleSubmit = async (form: ExpenseFormState, receiptFile: File | null) => {
     try {
@@ -985,7 +1033,7 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
         expense_date: form.expense_date, amount: Math.round(Number(form.amount) * 100) / 100,
         source: form.source, bank_account: form.bank_account,
         budget_category_id: form.budget_category_id || null,
-        grade_id: form.source === "horim" ? (form.grade_id || null) : null,
+        ...gradeFieldsOf(form, gradeCount),
         budget_activity_id: subCategoryIdOf(form),
         supplier: form.supplier || null, description: form.description || null,
         receipt_url,
@@ -1024,7 +1072,7 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
         date: form.expense_date,
         bankAccount: form.bank_account,
         budgetCategoryId: form.budget_category_id || null,
-        gradeId: form.source === "horim" ? (form.grade_id || null) : null,
+        gradeId: gradeFieldsOf(form, gradeCount).grade_id,
         supplier: form.supplier || null,
         payer: form.supplier || null,
         description: form.description || null,
@@ -1037,9 +1085,13 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
       }
       // 2.8.0: ה-RPC של הזוג לא מקבל תת-קטגוריה — מצורפת להוצאה אחרי היצירה (best-effort).
       const subId = subCategoryIdOf(form);
-      if (subId && res?.expense_id) {
-        const { error: subErr } = await supabase.from("expenses").update({ budget_activity_id: subId }).eq("id", res.expense_id);
-        if (subErr) toast.warning("הזוג נשמר, אך שיוך תת-הקטגוריה נכשל — ניתן לשייך בעריכת ההוצאה");
+      const multiGrades = gradeFieldsOf(form, gradeCount).target_grade_ids;
+      if ((subId || multiGrades.length > 0) && res?.expense_id) {
+        const patch: { budget_activity_id?: string; target_grade_ids?: string[] } = {};
+        if (subId) patch.budget_activity_id = subId;
+        if (multiGrades.length > 0) patch.target_grade_ids = multiGrades;
+        const { error: subErr } = await supabase.from("expenses").update(patch).eq("id", res.expense_id);
+        if (subErr) toast.warning("הזוג נשמר, אך שיוך תת-הקטגוריה/השכבות נכשל — ניתן לשייך בעריכת ההוצאה");
       }
       toast.success("נרשמו הכנסה והוצאה תואמות (תקציב צבוע)");
       onClose();
@@ -1057,12 +1109,14 @@ function AddExpenseModal({ onClose, defaultSource }: { onClose: () => void; defa
 
 function EditExpenseModal({ expense, onClose }: { expense: Expense; onClose: () => void }) {
   const updateExpense = useUpdateExpense();
+  const { data: allGrades } = useGrades();
+  const gradeCount = (allGrades ?? []).length;
   const initial: ExpenseFormState = {
     expense_date: expense.expense_date,
     amount: String(expense.amount),
     source: expense.source,
     budget_category_id: expense.budget_category_id ?? "",
-    grade_id: expense.grade_id ?? "",
+    grade_ids: expense.target_grade_ids?.length ? expense.target_grade_ids : (expense.grade_id ? [expense.grade_id] : []),
     budget_activity_id: expense.budget_activity_id ?? "",
     supplier: expense.supplier ?? "",
     description: expense.description ?? "",
@@ -1077,7 +1131,7 @@ function EditExpenseModal({ expense, onClose }: { expense: Expense; onClose: () 
         expense_date: form.expense_date, amount: Math.round(Number(form.amount) * 100) / 100,
         source: form.source, bank_account: form.bank_account,
         budget_category_id: form.budget_category_id || null,
-        grade_id: form.source === "horim" ? (form.grade_id || null) : null,
+        ...gradeFieldsOf(form, gradeCount),
         budget_activity_id: subCategoryIdOf(form),
         supplier: form.supplier || null, description: form.description || null,
         receipt_url,
@@ -1226,6 +1280,7 @@ function ExpenseMobileCard({
           {e.grades?.name && (
             <span style={{ fontSize: "10px", fontWeight: 600, color: "#2D6644", background: "#EAF3EB", border: "1px solid #CDE8D3", borderRadius: "99px", padding: "1px 7px" }}>{e.grades.name}</span>
           )}
+          <MultiGradeChip ids={e.target_grade_ids} style={{ fontSize: "10px", fontWeight: 600, color: "#2D6644", background: "#EAF3EB", border: "1px solid #CDE8D3", borderRadius: "99px", padding: "1px 7px" }} />
           {e.linked_income_id && (
             <span title="תקציב צבוע — מקושר להכנסה תואמת" style={{
               padding: "2px 8px", borderRadius: "99px", fontSize: "10px", fontWeight: 700,
@@ -2253,6 +2308,7 @@ export default function ExpensesPage() {
                       {e.grades?.name && (
                         <span title="שכבה" style={{ flexShrink: 0, padding: "1px 7px", borderRadius: "99px", fontSize: "10px", fontWeight: 600, background: "#EAF3EB", color: "#2D6644", border: "1px solid #CDE8D3" }}>{e.grades.name}</span>
                       )}
+                      <MultiGradeChip ids={e.target_grade_ids} style={{ flexShrink: 0, padding: "1px 7px", borderRadius: "99px", fontSize: "10px", fontWeight: 600, background: "#EAF3EB", color: "#2D6644", border: "1px solid #CDE8D3" }} />
                       {e.linked_income_id && (
                         <span title="תקציב צבוע — מקושר להכנסה תואמת" style={{
                           flexShrink: 0, padding: "1px 7px", borderRadius: "99px", fontSize: "10px", fontWeight: 700,
