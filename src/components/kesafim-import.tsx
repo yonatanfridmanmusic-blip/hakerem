@@ -1570,7 +1570,7 @@ export function KesafimImportModal({
         {/* Footer — רק במסך האישור */}
         {phase === "review" && parsed && (
           <div style={{ padding: "14px 24px", borderTop: "1px solid #EAE5DE", display: "flex", alignItems: "center", gap: "12px", flexShrink: 0, flexWrap: "wrap" }}>
-            <span style={{ fontSize: "12.5px", color: "#6B6560" }} className="num">
+            <span dir="rtl" style={{ fontSize: "12.5px", color: "#6B6560", fontVariantNumeric: "tabular-nums", minWidth: 0 }}>
               {mode === "update"
                 ? <>ייכתבו {plan.rows} שורות עדכון · {plan.total > 0 ? "+" : ""}{fmt(plan.total)} ₪ · {plan.unchanged} תאים ללא שינוי</>
                 : <>ייכתבו {plan.rows} שורות גבייה · {fmt(plan.total)} ₪{plan.newSections.length > 0 && ` · ${plan.newSections.length} סעיפים חדשים`}</>}
