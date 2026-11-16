@@ -327,6 +327,7 @@ export type Database = {
       budget_activities: {
         Row: {
           budget_category_id: string
+          components: Json
           created_at: string
           grade_id: string | null
           id: string
@@ -341,6 +342,7 @@ export type Database = {
         }
         Insert: {
           budget_category_id: string
+          components?: Json
           created_at?: string
           grade_id?: string | null
           id?: string
@@ -355,6 +357,7 @@ export type Database = {
         }
         Update: {
           budget_category_id?: string
+          components?: Json
           created_at?: string
           grade_id?: string | null
           id?: string

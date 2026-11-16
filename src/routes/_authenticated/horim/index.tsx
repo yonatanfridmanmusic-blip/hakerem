@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { Plus, X, Check, ChevronDown, ChevronUp, Users, Settings2, Pencil, Trash2, FileUp, Layers } from "lucide-react";
 import { KesafimImportModal, normalizeReportName } from "@/components/kesafim-import";
+import { HorimPlanning } from "@/components/horim-planning";
 import { useCanWrite, useOrganization } from "@/hooks/use-organization";
 import { useExpenses, type Expense } from "@/hooks/use-expenses";
 import { useOrgBudgetSources } from "@/hooks/use-budget-sources";
@@ -1588,6 +1589,8 @@ export default function HorimPage() {
     io.observe(el);
     return () => io.disconnect();
   }, []);
+  // 2.9.0: שתי לשוניות במסך — "גבייה" (המסך הקיים, ללא שינוי) ו"תכנון" (פעילויות מול הקופה).
+  const [view, setView] = useState<"collect" | "plan">("collect");
   const [showModal, setShowModal] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [showSectionsModal, setShowSectionsModal] = useState(false);
@@ -1930,6 +1933,32 @@ export default function HorimPage() {
           </div>
         </div>
 
+        {/* 2.9.0: גבייה | תכנון */}
+        <div role="tablist" aria-label="תצוגת מסך ההורים" style={{ display: "flex", alignSelf: isMobile ? "stretch" : "flex-start", background: "#fff", borderRadius: "12px", padding: "3px", gap: "2px", boxShadow: "0 1px 2px rgba(31,36,33,0.05), 0 0 0 1px rgba(31,36,33,0.08)" }}>
+          {([["collect", "גבייה"], ["plan", "תכנון"]] as const).map(([v, label]) => (
+            <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)} style={{
+              flex: isMobile ? 1 : "none", padding: "7px 22px", borderRadius: "9px", fontSize: "14px", fontWeight: 500,
+              border: "none", cursor: "pointer", fontFamily: "var(--font-sans)",
+              background: view === v ? "#0C231B" : "transparent", color: view === v ? "#F2EFE8" : "#5C645F",
+              transition: "all 0.15s",
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {view === "plan" ? (
+          <HorimPlanning
+            grades={grades}
+            sections={sections}
+            gsaMap={gsaMap}
+            collectionsMap={collectionsMap}
+            spendByGrade={spendByGrade}
+            multiplier={multiplier}
+            basis={basis}
+            canWrite={canWrite}
+            isMobile={isMobile}
+            isLoading={isLoading}
+          />
+        ) : (<>
         {/* ── Forecast strip — temporary what-if view, never persisted ── */}
         {forecastPct !== null && (
           <div style={{
@@ -2142,6 +2171,7 @@ export default function HorimPage() {
             canWrite={canWrite}
           />
         )}
+        </>)}
 
       </div>
     </>
