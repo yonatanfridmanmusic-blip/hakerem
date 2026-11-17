@@ -6,7 +6,7 @@
 // עיקרון ניסוח מחייב: לעולם לא "תוקן באג". תמיד שיפור והתקדמות,
 // בשפת הלקוחות. הפירוט הטכני נשאר ב-commits ובתדריך.
 
-export const APP_VERSION = "2.9.0";
+export const APP_VERSION = "2.9.1";
 
 export interface ChangelogEntry {
   version: string;
@@ -16,6 +16,14 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "2.9.1",
+    date: "נובמבר 2026",
+    title: "נטען חלק",
+    items: [
+      "אחרי עדכון גרסה האתר נטען חלק - ואם משהו לא נטען, הדף מרענן את עצמו לבד.",
+    ],
+  },
   {
     version: "2.9.0",
     date: "נובמבר 2026",

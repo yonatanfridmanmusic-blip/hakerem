@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { Toaster } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { ASSET_HEAL_SCRIPT } from "@/lib/asset-heal";
 
 import appCss from "../styles.css?url";
 
@@ -56,6 +57,8 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <html lang="he" dir="rtl">
         <head>
+          {/* 2.9.1: רץ לפני כל קוד אחר — אם קובץ מ-/assets/ לא נטען, מושך אותו מחדש ומרענן. */}
+          <script dangerouslySetInnerHTML={{ __html: ASSET_HEAL_SCRIPT }} />
           <HeadContent />
         </head>
         <body>
